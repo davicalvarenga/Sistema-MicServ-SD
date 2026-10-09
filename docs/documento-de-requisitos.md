@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.1 (rascunho para revisão interna)
+**Versão:** 0.2 (rascunho para revisão interna)
 **Data:** 09/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O time de QA deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
@@ -27,7 +27,7 @@ Conforme o diagrama "Arquitetura do Portal B2B Distribuído" fornecido pelo prof
 
 Os dois serviços se comunicam com os demais módulos por eventos no Kafka.
 
-O enunciado cita "conversa com o time de mercado e negociação, logística, frete e transportadoras". Neste documento isso é interpretado como **integração** com os módulos 5 (Mercado), 6 (Negociação/Leilão), 7 (Pedidos), 8 (Logística/Frete) e 9 (Transportadoras), e não como implementação desses módulos. Interpretação pendente de confirmação (P-01).
+A lista de responsabilidades do grupo (F1) diz "conversar com o time de mercado e negociação, logística frete e transportadoras". O texto fala em conversar com outros times, e o diagrama (F2) mostra esses módulos como serviços próprios (blocos 5, 6, 8 e 9). O papel do grupo em relação a eles é de **integração** por eventos, e não de implementação.
 
 ### 1.3 Fora do escopo
 
@@ -43,16 +43,17 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 
 | ID | Fonte |
 |---|---|
-| F1 | Enunciado do trabalho, escopo do grupo Fornecimento e Produtos |
+| F1 | Lista de responsabilidades do grupo (arquivo "FORNECIMENTO E PRODUTOS - MEMBROS"): gestão de estoque, conversa com os times de mercado e negociação, logística, frete e transportadoras, fornecimento e produtos, estoque, tipo de transporte, cadastro de produtos, categoria de produto, quantidade e origem de produtos, preço, relação entre fornecedor e produto, criação de relação de fornecimento pelos fornecedores |
 | F2 | Diagrama "Arquitetura do Portal B2B Distribuído", elaborado pelo professor |
 | F3 | Requisitos gerais do professor: autenticação obrigatória e token temporário |
 | F4 | Decisões do grupo, justificadas no Relatório Técnico |
+| F5 | Orientações de integração via Kafka (tecnologia definida pela turma): o módulo produz e consome tópicos para atualizar o estoque, publica e consome eventos de criação, alteração e exclusão de produtos e eventos de pedido de fornecimento entre fornecedor e grupo |
 
 ### 1.5 Convenções
 
 **Identificadores:** RF (requisito funcional), RNF (requisito não funcional), RD (requisito de dados), RN (regra de negócio), UC (caso de uso), CA (critério de aceitação), P (pendência).
 
-**Origem:** Professor, Enunciado, Diagrama ou Grupo.
+**Origem:** identificador da fonte (F1 a F5, seção 1.4). F4 indica decisão do grupo.
 
 **Status:**
 
@@ -73,7 +74,7 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 | Fornecedor | Empresa (CNPJ) com perfil de fornecedor, cadastrada no módulo Usuários/Acesso (F2, bloco 1) |
 | Fornecimento | Registro em que um fornecedor oferece um produto, com preço, quantidade e origem (F2, bloco 3). Corresponde ao passo 1 do fluxo do diagrama: "Fornecedor publica fornecimento" |
 | Estoque | Interpretação adotada: quantidade disponível de um fornecimento. Pendente de confirmação (P-03) |
-| Origem | Significado em aberto (P-05) |
+| Origem | Significado em aberto (P-05). F1 a associa ao produto ("quantidade e origem de produtos") e F2 a coloca no bloco Fornecimentos |
 | Evento | Mensagem publicada no Kafka que informa algo que já aconteceu |
 | Token | Credencial temporária de acesso. O diagrama cita JWT/OAuth2 (F2, infraestrutura) |
 
@@ -115,31 +116,31 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 
 | ID | Requisito | Origem | Status |
 |---|---|---|---|
-| RF-01 | O sistema deve permitir cadastrar produto com categoria, unidade e tipo de transporte | Enunciado, Diagrama | Confirmado (atributos completos: P-06) |
-| RF-02 | O sistema deve permitir consultar produtos, em lista e por identificador | Grupo | Proposto |
-| RF-03 | O sistema deve permitir alterar um produto cadastrado | Enunciado | Confirmado |
-| RF-04 | O sistema deve permitir excluir um produto | Enunciado | Confirmado (regra de exclusão: P-09) |
-| RF-05 | O sistema deve permitir gerenciar as categorias de produto | Enunciado, Diagrama | Pendente (P-10) |
-| RF-06 | Ao cadastrar um produto, o serviço deve publicar o evento `produto_cadastrado` | Enunciado, Diagrama | Confirmado |
-| RF-07 | Ao alterar um produto, o serviço deve publicar o evento `produto_atualizado` | Enunciado | Confirmado (nome do evento: Proposto) |
-| RF-08 | Ao excluir um produto, o serviço deve publicar o evento `produto_excluido` | Enunciado | Confirmado (nome do evento: Proposto) |
+| RF-01 | O sistema deve permitir cadastrar produto com categoria, unidade e tipo de transporte | F1, F2 | Confirmado (atributos completos: P-06) |
+| RF-02 | O sistema deve permitir consultar produtos, em lista e por identificador | F4 | Proposto |
+| RF-03 | O sistema deve permitir alterar um produto cadastrado | F5 | Confirmado |
+| RF-04 | O sistema deve permitir excluir um produto | F5 | Confirmado (regra de exclusão: P-09) |
+| RF-05 | O sistema deve permitir gerenciar as categorias de produto | F1, F2 | Pendente (P-10) |
+| RF-06 | Ao cadastrar um produto, o serviço deve publicar o evento `produto_cadastrado` | F2, F5 | Confirmado |
+| RF-07 | Ao alterar um produto, o serviço deve publicar o evento `produto_atualizado` | F5 | Confirmado (nome do evento: Proposto) |
+| RF-08 | Ao excluir um produto, o serviço deve publicar o evento `produto_excluido` | F5 | Confirmado (nome do evento: Proposto) |
 
 ### 3.2 Serviço de Fornecimentos
 
 | ID | Requisito | Origem | Status |
 |---|---|---|---|
-| RF-09 | O fornecedor deve poder criar um fornecimento informando produto, preço, quantidade e origem | Enunciado, Diagrama | Confirmado |
-| RF-10 | O sistema deve permitir consultar fornecimentos, em lista e por identificador | Grupo | Proposto |
-| RF-11 | O sistema deve permitir alterar ou encerrar um fornecimento | Grupo | Pendente (P-11) |
-| RF-12 | Ao criar um fornecimento, o serviço deve publicar o evento `fornecimento_criado` | Diagrama | Confirmado |
-| RF-13 | O serviço deve manter a quantidade disponível (estoque) de cada fornecimento | Enunciado, Diagrama | Pendente (P-03) |
-| RF-14 | O serviço deve atualizar o estoque ao consumir eventos de outros módulos | Enunciado | Pendente (P-02) |
-| RF-15 | Sempre que o estoque mudar, o serviço deve publicar o evento `estoque_atualizado` | Diagrama | Confirmado |
-| RF-16 | O serviço de Fornecimentos deve consumir os eventos de produto (criação, alteração e exclusão) para manter uma referência local dos produtos válidos | Enunciado, Grupo | Proposto |
-| RF-17 | O serviço de Fornecimentos deve consumir o evento `empresa_cadastrada` para reconhecer as empresas com perfil de fornecedor | Diagrama, Grupo | Pendente (P-12) |
-| RF-18 | O sistema deve publicar e consumir eventos de pedido de fornecimento entre fornecedor e grupo | Enunciado | Pendente (P-13) |
+| RF-09 | O fornecedor deve poder criar um fornecimento (relação de fornecimento) informando produto, preço, quantidade e origem | F1, F2 | Confirmado |
+| RF-10 | O sistema deve permitir consultar fornecimentos, em lista e por identificador, incluindo a quantidade disponível | F4 | Proposto |
+| RF-11 | O sistema deve permitir alterar ou encerrar um fornecimento | F4 | Pendente (P-11) |
+| RF-12 | Ao criar um fornecimento, o serviço deve publicar o evento `fornecimento_criado` | F2 | Confirmado |
+| RF-13 | O serviço deve manter a quantidade disponível (estoque) de cada fornecimento | F1, F2 | Pendente (P-03) |
+| RF-14 | O serviço deve atualizar o estoque ao consumir eventos de outros módulos | F5 | Pendente (P-02) |
+| RF-15 | Sempre que o estoque mudar, o serviço deve publicar o evento `estoque_atualizado` | F2, F5 | Confirmado |
+| RF-16 | O serviço de Fornecimentos deve consumir os eventos de produto (criação, alteração e exclusão) para manter uma referência local dos produtos válidos | F5, F4 | Proposto |
+| RF-17 | O serviço de Fornecimentos deve consumir o evento `empresa_cadastrada` para reconhecer as empresas com perfil de fornecedor | F2, F4 | Pendente (P-12) |
+| RF-18 | O sistema deve publicar e consumir eventos de pedido de fornecimento entre fornecedor e grupo | F5 | Pendente (P-13) |
 
-**Justificativa do RF-16:** o enunciado exige que o módulo consuma eventos de produto. Com Produtos e Fornecimentos em serviços separados e com bancos separados (F2), o serviço de Fornecimentos precisa saber quais produtos existem sem acessar o banco de Produtos. Consumir os eventos de produto atende às duas exigências.
+**Justificativa do RF-16:** as orientações de integração (F5) exigem que o módulo consuma eventos de produto. Com Produtos e Fornecimentos em serviços separados e com bancos separados (F2), o serviço de Fornecimentos precisa saber quais produtos existem sem acessar o banco de Produtos. Consumir os eventos de produto atende às duas exigências.
 
 ---
 
@@ -147,19 +148,19 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 
 | ID | Requisito | Categoria | Origem | Status |
 |---|---|---|---|---|
-| RNF-01 | Todos os endpoints dos dois serviços exigem autenticação. Requisição sem token é recusada | Segurança | Professor | Confirmado |
-| RNF-02 | Requisição com token expirado ou inválido é recusada com HTTP 401, e o cliente precisa se autenticar novamente | Segurança | Professor | Confirmado (formato da resposta: P-04) |
-| RNF-03 | Requisição autenticada sem o perfil necessário é recusada com HTTP 403 | Segurança | Grupo | Proposto (perfis: P-07) |
-| RNF-04 | A comunicação entre módulos é feita por eventos Kafka | Interoperabilidade | Professor, Diagrama | Confirmado |
-| RNF-05 | Cada serviço tem banco próprio, inacessível diretamente por outros serviços | Manutenibilidade | Diagrama | Confirmado |
-| RNF-06 | O processamento de eventos consumidos é idempotente: o mesmo evento recebido mais de uma vez produz o mesmo resultado que uma única vez | Confiabilidade | Grupo | Proposto |
-| RNF-07 | Eventos de uma mesma entidade são publicados com o identificador da entidade como chave da mensagem | Confiabilidade | Grupo | Proposto |
-| RNF-08 | Os produtores Kafka são configurados com `acks=all` e `enable.idempotence=true` | Confiabilidade | Grupo | Proposto |
-| RNF-09 | Nenhum evento publicado contém token de acesso | Segurança | Grupo | Proposto |
-| RNF-10 | Um evento que falha no processamento depois de esgotadas as tentativas é enviado a um tópico de erro, sem bloquear o consumo dos demais | Confiabilidade | Grupo | Proposto |
-| RNF-11 | Os serviços registram logs com identificador de correlação por requisição e por evento | Manutenibilidade | Grupo | Proposto (integração com ELK/Loki: P-14) |
-| RNF-12 | Os serviços são executáveis em contêiner Docker | Portabilidade | Diagrama | Pendente (P-14) |
-| RNF-13 | Os esquemas dos eventos são registrados no Schema Registry | Interoperabilidade | Diagrama | Pendente (P-08) |
+| RNF-01 | Todos os endpoints dos dois serviços exigem autenticação. Requisição sem token é recusada | Segurança | F3 | Confirmado |
+| RNF-02 | Requisição com token expirado ou inválido é recusada com HTTP 401, e o cliente precisa se autenticar novamente | Segurança | F3 | Confirmado (formato da resposta: P-04) |
+| RNF-03 | Requisição autenticada sem o perfil necessário é recusada com HTTP 403 | Segurança | F4 | Proposto (perfis: P-07) |
+| RNF-04 | A comunicação entre módulos é feita por eventos Kafka | Interoperabilidade | F2, F5 | Confirmado |
+| RNF-05 | Cada serviço tem banco próprio, inacessível diretamente por outros serviços | Manutenibilidade | F2 | Confirmado |
+| RNF-06 | O processamento de eventos consumidos é idempotente: o mesmo evento recebido mais de uma vez produz o mesmo resultado que uma única vez | Confiabilidade | F4 | Proposto |
+| RNF-07 | Eventos de uma mesma entidade são publicados com o identificador da entidade como chave da mensagem | Confiabilidade | F4 | Proposto |
+| RNF-08 | Os produtores Kafka são configurados com `acks=all` e `enable.idempotence=true` | Confiabilidade | F4 | Proposto |
+| RNF-09 | Nenhum evento publicado contém token de acesso | Segurança | F4 | Proposto |
+| RNF-10 | Um evento que falha no processamento depois de esgotadas as tentativas é enviado a um tópico de erro, sem bloquear o consumo dos demais | Confiabilidade | F4 | Proposto |
+| RNF-11 | Os serviços registram logs com identificador de correlação por requisição e por evento | Manutenibilidade | F4 | Proposto (integração com ELK/Loki: P-14) |
+| RNF-12 | Os serviços são executáveis em contêiner Docker | Portabilidade | F2 | Pendente (P-14) |
+| RNF-13 | Os esquemas dos eventos são registrados no Schema Registry | Interoperabilidade | F2 | Pendente (P-08) |
 
 **Justificativas técnicas:**
 
@@ -176,11 +177,11 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 
 | ID | Entidade | Atributos | Origem | Status |
 |---|---|---|---|---|
-| RD-01 | Produto | Identificador, categoria, unidade, tipo de transporte | Diagrama | Confirmado |
-| RD-02 | Produto | Nome e descrição | Grupo | Proposto (P-06) |
-| RD-03 | Fornecimento | Identificador, fornecedor (empresa), produto, preço, quantidade, origem | Diagrama | Confirmado |
-| RD-04 | Fornecimento | Formato do preço (moeda e precisão) | Grupo | Pendente (P-15) |
-| RD-05 | Categoria | Estrutura (lista fixa, cadastro, hierarquia) | Enunciado | Pendente (P-10) |
+| RD-01 | Produto | Identificador, categoria, unidade, tipo de transporte | F1, F2 | Confirmado |
+| RD-02 | Produto | Nome e descrição | F4 | Proposto (P-06) |
+| RD-03 | Fornecimento | Identificador, fornecedor (empresa), produto, preço, quantidade, origem | F1, F2 | Confirmado (posição de origem: P-05) |
+| RD-04 | Fornecimento | Formato do preço (moeda e precisão) | F4 | Pendente (P-15) |
+| RD-05 | Categoria | Estrutura (lista fixa, cadastro, hierarquia) | F1 | Pendente (P-10) |
 
 ---
 
@@ -190,9 +191,9 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 
 | ID | Regra | Origem | Status |
 |---|---|---|---|
-| RN-01 | Um fornecimento relaciona um fornecedor e um produto | Diagrama | Confirmado |
-| RN-02 | Apenas empresas com perfil de fornecedor podem criar fornecimentos | Enunciado, Diagrama | Proposto (P-07) |
-| RN-03 | Um fornecimento só pode referenciar um produto existente no catálogo | Grupo | Proposto |
+| RN-01 | Um fornecimento relaciona um fornecedor e um produto | F1, F2 | Confirmado |
+| RN-02 | Apenas empresas com perfil de fornecedor podem criar fornecimentos | F1, F2 | Proposto (P-07) |
+| RN-03 | Um fornecimento só pode referenciar um produto existente no catálogo | F4 | Proposto |
 
 ### 6.2 Regras em aberto
 
@@ -342,19 +343,19 @@ O formato do conteúdo de cada evento será detalhado em documento próprio de c
 
 | Requisito | Origem | Caso de uso | Critério de aceitação |
 |---|---|---|---|
-| RF-01 | Enunciado, Diagrama | UC-01 | CA-03 |
-| RF-03 | Enunciado | | CA-04 |
-| RF-04 | Enunciado | | CA-05 |
-| RF-06 | Enunciado, Diagrama | UC-01 | CA-03 |
-| RF-07 | Enunciado | | CA-04 |
-| RF-08 | Enunciado | | CA-05 |
-| RF-09 | Enunciado, Diagrama | UC-02 | CA-06 |
-| RF-12 | Diagrama | UC-02 | CA-06 |
-| RF-13, RF-14, RF-15 | Enunciado, Diagrama | UC-03 | CA-07 |
-| RNF-01 | Professor | UC-01, UC-02 | CA-01 |
-| RNF-02 | Professor | UC-01, UC-02 | CA-02, CA-09 |
-| RNF-06 | Grupo | UC-03 | CA-07 |
-| RNF-09 | Grupo | | CA-08 |
+| RF-01 | F1, F2 | UC-01 | CA-03 |
+| RF-03 | F5 | | CA-04 |
+| RF-04 | F5 | | CA-05 |
+| RF-06 | F2, F5 | UC-01 | CA-03 |
+| RF-07 | F5 | | CA-04 |
+| RF-08 | F5 | | CA-05 |
+| RF-09 | F1, F2 | UC-02 | CA-06 |
+| RF-12 | F2 | UC-02 | CA-06 |
+| RF-13, RF-14, RF-15 | F1, F2, F5 | UC-03 | CA-07 |
+| RNF-01 | F3 | UC-01, UC-02 | CA-01 |
+| RNF-02 | F3 | UC-01, UC-02 | CA-02, CA-09 |
+| RNF-06 | F4 | UC-03 | CA-07 |
+| RNF-09 | F4 | | CA-08 |
 
 Requisitos sem critério de aceitação nesta versão estão com status Proposto ou Pendente.
 
@@ -364,17 +365,17 @@ Requisitos sem critério de aceitação nesta versão estão com status Proposto
 
 | ID | Pergunta | A quem perguntar |
 |---|---|---|
-| P-01 | O escopo do grupo é apenas os blocos 2 e 3 do diagrama, com integração aos demais? | Professor |
+| P-01 | **Resolvida na versão 0.2.** O escopo do grupo é implementar os blocos 2 e 3 do diagrama e integrar com os demais. A lista de responsabilidades (F1) fala em "conversar com" os times de mercado, negociação, logística, frete e transportadoras, e o diagrama (F2) mostra esses módulos como serviços próprios | |
 | P-02 | Qual evento altera o estoque (`negociacao_fechada`, `pedido_criado` ou outro) e quais campos ele traz? | Grupos de Negociação e Pedidos |
 | P-03 | Estoque é a quantidade disponível de cada fornecimento? | Professor |
 | P-04 | O serviço deve revalidar o JWT ou confiar no API Gateway? Qual o formato da resposta de token inválido? | Grupo de autenticação |
-| P-05 | O que significa "origem" do produto ou do fornecimento? | Professor |
+| P-05 | O que significa "origem"? Ela é atributo do produto (F1 cita "quantidade e origem de produtos") ou do fornecimento (F2 a coloca no bloco Fornecimentos)? | Professor |
 | P-06 | Quais os atributos obrigatórios do produto e os valores possíveis de unidade e tipo de transporte? | Professor |
 | P-07 | Quais perfis podem cadastrar, alterar e excluir produtos e categorias? Comprador e administrador acessam os nossos serviços? | Professor, grupo de autenticação |
 | P-08 | Qual a serialização dos eventos, o envelope padrão e o uso do Schema Registry? | Turma |
 | P-09 | A exclusão de produto é lógica ou física? O que acontece com os fornecimentos do produto? | Professor |
 | P-10 | Categorias são uma lista fixa ou um cadastro? Existe hierarquia? | Professor |
-| P-11 | Um fornecimento pode ser alterado ou encerrado? Há eventos para isso? | Professor |
+| P-11 | Um fornecimento pode ser alterado (inclusive para repor quantidade) ou encerrado? Há eventos para isso? F1 cita "gestão de estoque" sem detalhar as operações | Professor |
 | P-12 | Qual o contrato do evento `empresa_cadastrada`? | Grupo de Usuários/Acesso |
 | P-13 | "Pedido de fornecimento entre fornecedor e grupo" corresponde ao `fornecimento_criado` ou é outro fluxo? | Professor |
 | P-14 | O uso de Docker, logs centralizados (ELK/Loki) e monitoramento (Prometheus/Grafana) é obrigatório? | Professor, turma |
@@ -406,3 +407,4 @@ Requisitos sem critério de aceitação nesta versão estão com status Proposto
 | Versão | Data | Descrição |
 |---|---|---|
 | 0.1 | 09/10/2026 | Rascunho inicial com base no enunciado, nos requisitos do professor e no diagrama de arquitetura |
+| 0.2 | 09/10/2026 | Inclusão da lista de responsabilidades do grupo como fonte F1 e das orientações de Kafka como fonte F5. Origem de cada requisito passa a indicar a fonte exata. P-01 resolvida. P-05 e P-11 detalhadas |
