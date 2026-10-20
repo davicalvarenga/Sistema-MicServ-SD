@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Documento de Análise de Requisitos — Produtos e Fornecimentos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+body { font-family: 'IBM Plex Sans', Arial, sans-serif; font-size: 10pt; line-height: 1.5; color: #1D2733; margin: 0; }
+h1, h2, h3, h4 { font-family: 'Space Grotesk', Arial, sans-serif; color: #13233A; line-height: 1.2; break-after: avoid; }
+h2 { font-size: 17pt; margin: 26pt 0 6pt; padding-bottom: 4pt; border-bottom: 2px solid #276B4B; }
+h2.quebra { break-before: page; margin-top: 0; }
+h3 { font-size: 12.5pt; margin: 16pt 0 4pt; }
+h4 { font-size: 10.5pt; margin: 12pt 0 3pt; }
+p { margin: 0 0 7pt; text-align: justify; }
+ul, ol { margin: 0 0 8pt; padding-left: 18pt; }
+li { margin-bottom: 2pt; }
+code, .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 8.6pt; }
+table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; font-size: 8.6pt; line-height: 1.35; }
+th, td { border: 1px solid #CDD3CB; padding: 3.5pt 5pt; text-align: left; vertical-align: top; }
+th { background: #E6EDE8; font-weight: 600; color: #13233A; }
+tr { break-inside: avoid; }
+thead { display: table-header-group; }
+.swebok { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8pt; color: #276B4B; letter-spacing: .4pt; text-transform: uppercase; margin: -2pt 0 8pt; }
+.nota { background: #F3F5F1; border-left: 3px solid #276B4B; padding: 6pt 9pt; margin: 6pt 0 10pt; font-size: 9pt; break-inside: avoid; }
+.alerta { background: #FBF0E6; border-left: 3px solid #B45A12; padding: 6pt 9pt; margin: 6pt 0 10pt; font-size: 9pt; break-inside: avoid; }
+.ok { color: #1F5C40; font-weight: 600; }
+.parcial { color: #8A5A10; font-weight: 600; }
+.nao { color: #9A3B0E; font-weight: 600; }
+figure { margin: 8pt 0 12pt; break-inside: avoid; text-align: center; }
+figcaption { font-size: 8.6pt; color: #4A5562; margin-top: 4pt; }
+pre { font-family: 'JetBrains Mono', monospace; font-size: 8.4pt; background: #13233A; color: #E6EDF3; padding: 8pt 10pt; border-radius: 4pt; white-space: pre-wrap; break-inside: avoid; margin: 4pt 0 10pt; line-height: 1.45; }
+.kw { color: #7FD1A6; }
+/* capa */
+.capa { height: 252mm; display: flex; flex-direction: column; justify-content: space-between; break-after: page; }
+.capa .topo { font-family: 'JetBrains Mono', monospace; font-size: 9pt; color: #276B4B; letter-spacing: 1pt; text-transform: uppercase; }
+.capa h1 { font-size: 30pt; margin: 0 0 10pt; }
+.capa .sub { font-size: 13pt; color: #3A4654; margin: 0; text-align: left; }
+.capa table { font-size: 9.5pt; width: 70%; }
+.capa table th { width: 32%; }
+.sumario { break-after: page; }
+.sumario ol { list-style: none; padding-left: 0; font-size: 10pt; }
+.sumario ol ol { padding-left: 16pt; font-size: 9.3pt; color: #3A4654; }
+.sumario li { margin-bottom: 3pt; }
+</style>
+</head>
+<body>
+
+<!-- ===================== CAPA ===================== -->
+<section class="capa">
+<div class="topo">Engenharia de Requisitos · Portal B2B Distribuído</div>
+<div>
+<h1>Documento de Análise de Requisitos</h1>
+<p class="sub">Microsserviços de Produtos e de Fornecimentos<br>Estruturado segundo a área de conhecimento <i>Software Requirements</i> do SWEBOK V3.0</p>
+</div>
+<table>
+<tr><th>Sistema</th><td>Portal B2B Distribuído (disciplina de Sistemas Distribuídos)</td></tr>
+<tr><th>Grupo</th><td>Fornecimento e Produtos</td></tr>
+<tr><th>Integrantes</th><td>Davi Coelho de Alvarenga<br>Rafael de Castro Noleto<br>Daniel Carvalho Coutinho<br>Gabriel Vicentte dos Santos Ferreira</td></tr>
+<tr><th>Versão</th><td>1.0 — análise do Documento de Requisitos v0.3</td></tr>
+<tr><th>Data</th><td>19/10/2026</td></tr>
+<tr><th>Referência</th><td>SWEBOK V3.0, cap. 1 (IEEE Computer Society, 2014)</td></tr>
+</table>
+<p style="font-size:8.6pt;color:#4A5562;text-align:left">Fontes do conteúdo: <span class="mono">docs/documento-de-requisitos.md</span> (v0.3), <span class="mono">docs/relatorio-tecnico.md</span> (v0.1) e <span class="mono">entrega_grupo/</span> (processo, modelo e relatório do experimento), no repositório <span class="mono">davicalvarenga/Sistema-MicServ-SD</span>.</p>
+</section>
+
+<!-- ===================== SUMÁRIO ===================== -->
+<section class="sumario">
+<h2 style="margin-top:0">Sumário</h2>
+<ol>
+<li>1. Introdução
+ <ol><li>1.1 Propósito · 1.2 Escopo · 1.3 Fora do escopo · 1.4 Referência metodológica · 1.5 Fontes · 1.6 Glossário</li></ol></li>
+<li>2. Fundamentos dos requisitos <span class="mono">(SWEBOK 1)</span>
+ <ol><li>2.1 Requisitos de produto e de processo · 2.2 Funcionais e não funcionais · 2.3 Propriedades emergentes · 2.4 Requisitos quantificáveis · 2.5 Requisitos de sistema e de software</li></ol></li>
+<li>3. Processo de requisitos <span class="mono">(SWEBOK 2)</span>
+ <ol><li>3.1 Modelo de processo · 3.2 Atores · 3.3 Suporte e gestão · 3.4 Qualidade e melhoria do processo</li></ol></li>
+<li>4. Elicitação <span class="mono">(SWEBOK 3)</span>
+ <ol><li>4.1 Fontes de requisitos · 4.2 Técnicas de elicitação</li></ol></li>
+<li>5. Análise <span class="mono">(SWEBOK 4)</span>
+ <ol><li>5.1 Classificação · 5.2 Modelagem conceitual · 5.3 Projeto arquitetural e alocação · 5.4 Negociação · 5.5 Análise formal</li></ol></li>
+<li>6. Especificação <span class="mono">(SWEBOK 5)</span>
+ <ol><li>6.1 Definição do sistema · 6.2 Requisitos funcionais · 6.3 Requisitos não funcionais · 6.4 Requisitos de dados · 6.5 Regras de negócio · 6.6 Casos de uso · 6.7 Eventos</li></ol></li>
+<li>7. Validação <span class="mono">(SWEBOK 6)</span>
+ <ol><li>7.1 Revisão de requisitos · 7.2 Prototipação · 7.3 Validação de modelos · 7.4 Testes de aceitação</li></ol></li>
+<li>8. Considerações práticas <span class="mono">(SWEBOK 7)</span>
+ <ol><li>8.1 Natureza iterativa · 8.2 Gestão de mudanças · 8.3 Atributos · 8.4 Rastreabilidade · 8.5 Medição</li></ol></li>
+<li>9. Ferramentas <span class="mono">(SWEBOK 8)</span></li>
+<li>10. Pendências</li>
+<li>11. Conclusões e recomendações</li>
+<li>12. Referências</li>
+</ol>
+<div class="nota"><b>Convenções.</b> RF = requisito funcional · RNF = não funcional · RD = de dados · RN = regra de negócio · UC = caso de uso · CA = critério de aceitação · P = pendência · ADR = registro de decisão arquitetural. Status: <b>Confirmado</b> (definido por fonte do professor; pode ser testado), <b>Proposto</b> (decisão do grupo; pode mudar até a v1.0 do documento de requisitos) e <b>Pendente</b> (depende de resposta externa). Trechos marcados como <i>análise</i> ou <i>proposta</i> são contribuições deste documento e não constam do documento de requisitos v0.3.</div>
+</section>
+
+<!-- ===================== 1 ===================== -->
+<h2 class="quebra">1. Introdução</h2>
+
+<h3>1.1 Propósito</h3>
+<p>Este documento analisa os requisitos dos microsserviços de Produtos e de Fornecimentos do Portal B2B Distribuído, sob responsabilidade do grupo Fornecimento e Produtos. Ele organiza o conteúdo do Documento de Requisitos v0.3 segundo as oito subáreas da área de conhecimento <i>Software Requirements</i> do SWEBOK V3.0, avalia a qualidade da especificação atual e aponta as lacunas a resolver antes da versão 1.0.</p>
+<p>Público: o próprio grupo, o professor da disciplina, os grupos que se integram com os nossos serviços e o time de QA, que usa o documento de requisitos como referência de teste.</p>
+
+<h3>1.2 Escopo</h3>
+<p>Conforme o diagrama “Arquitetura do Portal B2B Distribuído” (fonte F2), o grupo implementa dois microsserviços e todo o controle de estoque (“A parte de estoque é toda de vocês e fornecimentos também”, F7, 19:01 a 19:59):</p>
+<table>
+<thead><tr><th style="width:16%">Serviço</th><th style="width:10%">Bloco F2</th><th>Responsabilidades</th><th style="width:16%">Banco</th></tr></thead>
+<tr><td>Produtos</td><td>2</td><td>Catálogo de produtos, categoria, unidade e tipo de transporte</td><td>db produtos</td></tr>
+<tr><td>Fornecimentos</td><td>3</td><td>Relação entre fornecedor e produto, preço, quantidade, origem e estoque (quantidade disponível e reservada)</td><td>db fornecimentos</td></tr>
+</table>
+<p>Os dois serviços se comunicam com os demais módulos exclusivamente por eventos no Apache Kafka; chamadas REST ocorrem apenas entre Frontend, API Gateway e serviços (F2).</p>
+
+<h3>1.3 Fora do escopo</h3>
+<ul>
+<li>Cadastro de empresas, perfis de acesso, emissão e validação de tokens (grupo de autenticação).</li>
+<li>Padrões visuais e de usabilidade (equipe de UX). Quem implementa as telas do módulo está em aberto (P-22).</li>
+<li>Demanda, Mercado (matching), Negociação/Leilão e Pedidos. A responsabilidade por pedidos ainda não foi fechada (P-23).</li>
+<li>Frete, cotação e cadastro de transportadoras (Logística/Frete e Transportadoras).</li>
+<li>Infraestrutura de plataforma: cluster Kafka, Schema Registry, API Gateway, monitoramento e logs centralizados.</li>
+</ul>
+
+<h3>1.4 Referência metodológica: SWEBOK V3.0</h3>
+<p>O <i>Guide to the Software Engineering Body of Knowledge</i> (SWEBOK), versão 3.0, publicado pela IEEE Computer Society, descreve no capítulo 1 a área <i>Software Requirements</i> em oito subáreas. A tabela abaixo mostra onde cada uma é tratada neste documento.</p>
+<table>
+<thead><tr><th style="width:5%">#</th><th style="width:30%">Subárea do SWEBOK</th><th>Tópicos</th><th style="width:12%">Seção</th></tr></thead>
+<tr><td>1</td><td>Software Requirements Fundamentals</td><td>definição; produto × processo; funcionais × não funcionais; propriedades emergentes; requisitos quantificáveis; sistema × software</td><td>2</td></tr>
+<tr><td>2</td><td>Requirements Process</td><td>modelos de processo; atores; suporte e gestão; qualidade e melhoria</td><td>3</td></tr>
+<tr><td>3</td><td>Requirements Elicitation</td><td>fontes; técnicas</td><td>4</td></tr>
+<tr><td>4</td><td>Requirements Analysis</td><td>classificação; modelagem conceitual; projeto arquitetural e alocação; negociação; análise formal</td><td>5</td></tr>
+<tr><td>5</td><td>Requirements Specification</td><td>documento de definição do sistema; especificação de requisitos de sistema e de software</td><td>6</td></tr>
+<tr><td>6</td><td>Requirements Validation</td><td>revisões; prototipação; validação de modelos; testes de aceitação</td><td>7</td></tr>
+<tr><td>7</td><td>Practical Considerations</td><td>natureza iterativa; gestão de mudanças; atributos; rastreabilidade; medição</td><td>8</td></tr>
+<tr><td>8</td><td>Software Requirements Tools</td><td>ferramentas de apoio</td><td>9</td></tr>
+</table>
+
+<h3>1.5 Fontes</h3>
+<table>
+<thead><tr><th style="width:7%">ID</th><th>Fonte</th><th style="width:22%">Tipo</th></tr></thead>
+<tr><td>F1</td><td>Lista de responsabilidades do grupo (arquivo “FORNECIMENTO E PRODUTOS - MEMBROS”)</td><td>Documento do cliente</td></tr>
+<tr><td>F2</td><td>Diagrama “Arquitetura do Portal B2B Distribuído”, elaborado pelo professor</td><td>Modelo de arquitetura</td></tr>
+<tr><td>F3</td><td>Requisitos gerais do professor: autenticação obrigatória e token temporário</td><td>Documento do cliente</td></tr>
+<tr><td>F4</td><td>Decisões do grupo, justificadas no Relatório Técnico</td><td>Decisão interna</td></tr>
+<tr><td>F5</td><td>Orientações de integração via Kafka (tecnologia definida pela turma)</td><td>Documento do cliente</td></tr>
+<tr><td>F6</td><td>Transcrição automática do áudio da aula 1 (fluxo do negócio)</td><td>Fala do stakeholder</td></tr>
+<tr><td>F7</td><td>Transcrição automática do áudio da aula 2 (equipes, ferramentas e padrões)</td><td>Fala do stakeholder</td></tr>
+</table>
+
+<h3>1.6 Glossário</h3>
+<table>
+<thead><tr><th style="width:22%">Termo</th><th>Definição</th></tr></thead>
+<tr><td>Produto</td><td>Item do catálogo, com categoria, unidade e tipo de transporte (F2, bloco 2).</td></tr>
+<tr><td>Categoria</td><td>Classificação do produto. Forma de cadastro em aberto (P-10).</td></tr>
+<tr><td>Unidade</td><td>Unidade de medida em que o produto é negociado. Valores em aberto (P-06).</td></tr>
+<tr><td>Tipo de transporte</td><td>Como o produto precisa ser transportado (ex.: câmara frigorífica, F7, 25:43). Usado por Logística/Frete para escolher transportadoras. Valores em aberto (P-06).</td></tr>
+<tr><td>Perfil</td><td>Papel de uma empresa no portal: fornecedor, comprador ou transportadora. Uma empresa pode ter os três (F6).</td></tr>
+<tr><td>Fornecimento</td><td>Registro em que um fornecedor oferece um produto, com preço, quantidade e origem; o produto fica “na prateleira” para os compradores (F7, 29:16 a 29:34).</td></tr>
+<tr><td>Estoque</td><td>Quantidade de um produto ofertada por um fornecedor, dividida em disponível e reservada (F6). Granularidade por fornecimento é interpretação do grupo (P-03).</td></tr>
+<tr><td>Quantidade disponível</td><td>Parte do estoque que pode ser negociada e fica visível para quem quer comprar.</td></tr>
+<tr><td>Quantidade reservada</td><td>Parte bloqueada por um pedido em andamento; volta a ficar disponível se o pedido for cancelado e sai do estoque se a venda for concluída.</td></tr>
+<tr><td>Origem</td><td>Significado em aberto (P-05).</td></tr>
+<tr><td>Evento</td><td>Mensagem publicada no Kafka que informa algo que já aconteceu.</td></tr>
+<tr><td>Token</td><td>Credencial temporária de acesso; o diagrama cita JWT/OAuth2.</td></tr>
+</table>
+
+<!-- ===================== 2 ===================== -->
+<h2 class="quebra">2. Fundamentos dos requisitos</h2>
+<span class="swebok">SWEBOK V3.0 · 1 Software Requirements Fundamentals</span>
+<p>O SWEBOK define requisito de software como uma propriedade que o software deve exibir para resolver um problema do mundo real. Esta seção classifica os requisitos do grupo segundo os eixos fundamentais da subárea.</p>
+
+<h3>2.1 Requisitos de produto e de processo</h3>
+<p>Requisitos de produto restringem o software a ser construído; requisitos de processo restringem a forma de construí-lo. No nosso caso:</p>
+<table>
+<thead><tr><th style="width:22%">Tipo</th><th>Requisitos</th></tr></thead>
+<tr><td>Produto</td><td>RF-01 a RF-21, RNF-01 a RNF-11, RNF-13 a RNF-18, RD-01 a RD-06, RN-01 a RN-09.</td></tr>
+<tr><td>Processo / restrição de projeto</td><td>Uso de Apache Kafka, definido pela turma (RNF-04); execução em Docker, exigida pelo professor (RNF-12, F7 21:48 a 21:58); registro de cada decisão técnica como ADR com evidência no código (regra do Relatório Técnico); suíte de testes congelada antes da geração de código (processo do grupo, Fase 5).</td></tr>
+</table>
+
+<h3>2.2 Requisitos funcionais e não funcionais</h3>
+<p>O documento v0.3 contém <b>21 requisitos funcionais</b> e <b>18 não funcionais</b>. Os não funcionais estão classificados pelas categorias da ISO/IEC 25010:</p>
+<table>
+<thead><tr><th style="width:24%">Categoria (ISO/IEC 25010)</th><th style="width:10%">Qtd.</th><th>Requisitos</th></tr></thead>
+<tr><td>Segurança</td><td>4</td><td>RNF-01 (autenticação obrigatória), RNF-02 (token inválido → 401), RNF-03 (perfil sem permissão → 403), RNF-09 (evento sem token)</td></tr>
+<tr><td>Confiabilidade</td><td>5</td><td>RNF-06 (idempotência), RNF-07 (chave da mensagem), RNF-08 (produtor <code>acks=all</code>), RNF-10 (tópico de erro), RNF-14 (reserva atômica)</td></tr>
+<tr><td>Interoperabilidade</td><td>2</td><td>RNF-04 (eventos Kafka), RNF-13 (Schema Registry)</td></tr>
+<tr><td>Manutenibilidade</td><td>2</td><td>RNF-05 (banco próprio), RNF-11 (logs com correlação)</td></tr>
+<tr><td>Portabilidade</td><td>1</td><td>RNF-12 (Docker)</td></tr>
+<tr><td>Usabilidade</td><td>4</td><td>RNF-15 (padrão visual), RNF-16 (modo escuro), RNF-17 (acessibilidade), RNF-18 (responsividade)</td></tr>
+</table>
+<p>Nenhum requisito de desempenho foi incluído: nenhuma fonte define metas, e um requisito sem meta mensurável não pode ser verificado (P-18).</p>
+
+<h3>2.3 Propriedades emergentes</h3>
+<p>Propriedades emergentes dependem da interação entre componentes e não podem ser atribuídas a um único requisito. <i>Análise:</i> duas propriedades do nosso módulo têm essa natureza.</p>
+<ul>
+<li><b>Consistência do estoque no portal.</b> O estoque correto depende da combinação de RNF-14 (reserva atômica), RNF-06 (idempotência), RNF-07 (ordem por chave), RNF-08 (entrega garantida pelo produtor) e do contrato dos eventos de pedido (P-02). Nenhum deles isoladamente garante a propriedade; a falha de qualquer um permite estoque negativo ou baixa em duplicidade.</li>
+<li><b>Catálogo coerente entre serviços.</b> Fornecimentos só aceita produtos existentes (RN-03) mantendo uma referência local alimentada pelos eventos de produto (RF-16, ADR-011). A coerência depende da entrega e da ordem desses eventos (RNF-07, P-17).</li>
+</ul>
+
+<h3>2.4 Requisitos quantificáveis</h3>
+<p>O SWEBOK recomenda que requisitos sejam expressos de forma quantificável sempre que possível. <i>Análise</i> do documento v0.3:</p>
+<ul>
+<li><b>Quantificados:</b> os requisitos de segurança usam códigos HTTP observáveis (401, 403); os critérios CA-10 a CA-12 usam valores numéricos de estoque (100/0 → 70/30 → 100/0 ou 70/0); RNF-08 define parâmetros exatos de configuração.</li>
+<li><b>Não quantificados:</b> RNF-15 a RNF-18 (usabilidade) ainda não têm critérios mensuráveis (P-22); desempenho não tem meta (P-18).</li>
+</ul>
+
+<h3>2.5 Requisitos de sistema e requisitos de software</h3>
+<p>O <b>sistema</b> é o Portal B2B Distribuído, composto pelos módulos de todos os grupos. Os <b>requisitos de software</b> deste documento se restringem aos blocos 2 e 3. A fronteira entre os dois níveis aparece nas interfaces esperadas de outros módulos:</p>
+<table>
+<thead><tr><th style="width:22%">Módulo externo</th><th>O que esperamos dele</th><th style="width:16%">Status</th></tr></thead>
+<tr><td>Usuários/Acesso</td><td>Cadastro de empresas e perfis; token com empresa e perfil ativo; evento <code>empresa_cadastrada</code></td><td>Pendente (P-04, P-12)</td></tr>
+<tr><td>API Gateway</td><td>Autenticação das requisições e roteamento; forma de propagar a identidade</td><td>Pendente (P-04)</td></tr>
+<tr><td>Pedidos</td><td><code>pedido_criado</code> e <code>pedido_atualizado</code> com pedido, fornecimento e quantidade; criação, cancelamento e conclusão</td><td>Pendente (P-02, P-23)</td></tr>
+<tr><td>Mercado</td><td>Consumo de <code>fornecimento_criado</code> e <code>estoque_atualizado</code></td><td>Pendente (P-19)</td></tr>
+<tr><td>Logística/Frete</td><td>Consumo do tipo de transporte para escolher transportadoras</td><td>Confirmado (contrato: P-19)</td></tr>
+<tr><td>Infra</td><td>Cluster Kafka, criação de tópicos, Schema Registry</td><td>Pendente (P-08, P-17)</td></tr>
+<tr><td>Banco de dados</td><td>Papel em relação aos bancos próprios de cada serviço</td><td>Pendente (P-24)</td></tr>
+<tr><td>UX</td><td>Padrões visuais e qualidade das telas</td><td>Pendente (P-22)</td></tr>
+</table>
+
+<!-- ===================== 3 ===================== -->
+<h2 class="quebra">3. Processo de requisitos</h2>
+<span class="swebok">SWEBOK V3.0 · 2 Requirements Process</span>
+
+<h3>3.1 Modelo de processo</h3>
+<p>O grupo adotou um processo próprio, descrito na entrega <span class="mono">entrega_grupo/1_processo</span>, com fases 0 a 8 organizadas em três blocos. O processo é iterativo: requisito que não pode ser provado por teste volta à fase de refinamento, e toda mudança gera nova versão do documento.</p>
+<table>
+<thead><tr><th style="width:19%">Fase</th><th>Atividades</th><th style="width:22%">Saída</th></tr></thead>
+<tr><td>0 · Preparação</td><td>Problema de negócio, atores, escopo inicial, restrições, glossário preliminar</td><td>Escopo e glossário</td></tr>
+<tr><td>1 · Elicitação</td><td>Análise de documentos, transcrições, histórias de usuário e casos de uso</td><td>Necessidades levantadas</td></tr>
+<tr><td>2 · Refinamento</td><td>Requisitos claros, atômicos, consistentes, verificáveis e priorizados; cenários Given/When/Then</td><td>RF, RNF, RN e CA refinados</td></tr>
+<tr><td>3 · Estruturação</td><td>Preenchimento do modelo de documento com IDs únicos e um ID por critério</td><td>Documento versionado</td></tr>
+<tr><td>4 · Validação pré-geração</td><td>Checklist de completude e auditoria de granularidade</td><td>Versão congelada</td></tr>
+<tr><td>5 · Derivação de testes</td><td>Testes derivados dos critérios, por integrante diferente do autor do prompt, congelados antes do código</td><td>Suíte congelada com pesos e veto</td></tr>
+<tr><td>6 · Geração com LLM</td><td>Implementação por módulos de 3 a 5 requisitos, prompt padronizado</td><td>Código</td></tr>
+<tr><td>7 · Medição</td><td>Conformidade ponderada por prioridade, com regra de veto</td><td>Percentual de conformidade</td></tr>
+<tr><td>8 · Iteração</td><td>Classificação da causa de cada falha e nova versão</td><td>Nova versão do documento</td></tr>
+</table>
+<p>Para o microsserviço, as fases 0 a 3 já foram executadas três vezes (versões 0.1, 0.2 e 0.3 do documento de requisitos, seção 8.1). As fases 4 a 8 foram executadas no experimento piloto descrito na seção 7.4 e ainda não foram aplicadas ao microsserviço.</p>
+
+<h3>3.2 Atores do processo</h3>
+<table>
+<thead><tr><th style="width:22%">Ator</th><th>Papel no processo de requisitos</th></tr></thead>
+<tr><td>Professor</td><td>Cliente e principal fonte (F1–F3, F5–F7); responde às pendências de negócio.</td></tr>
+<tr><td>Grupo Fornecimento e Produtos</td><td>Analistas: elicitam, refinam, especificam, validam e mantêm o documento.</td></tr>
+<tr><td>Outros grupos da turma</td><td>Stakeholders de interface: definem contratos de eventos, autenticação e infraestrutura.</td></tr>
+<tr><td>Time de QA</td><td>Usa o documento de requisitos como referência para planejar e executar testes; testa apenas itens Confirmados.</td></tr>
+<tr><td>Usuários finais (fornecedor, comprador)</td><td>Representados pelo professor; são os atores dos casos de uso.</td></tr>
+<tr><td>Agentes LLM</td><td>Geram código a partir da especificação congelada (Fase 6); não escrevem nem avaliam os testes.</td></tr>
+</table>
+
+<h3>3.3 Suporte e gestão do processo</h3>
+<ul>
+<li>Documentos versionados em Markdown no repositório Git do grupo, com histórico de revisões.</li>
+<li>Decisões em aberto registradas como issues (#1 a #10) e pendências numeradas (P-01 a P-25).</li>
+<li>Decisões técnicas registradas no Relatório Técnico como ADRs (ADR-001 a ADR-019), cada uma com status e campo de evidência na implementação.</li>
+</ul>
+
+<h3>3.4 Qualidade e melhoria do processo</h3>
+<p>A qualidade do processo é medida pela <b>conformidade ponderada</b> entre a especificação e o software gerado, com meta de pelo menos 85%:</p>
+<pre>Conformidade (%) = Σ(critérios aprovados × peso) ÷ Σ(critérios totais × peso) × 100
+Pesos: Alta = 3 · Média = 2 · Baixa = 1
+Veto: falha em critério de segurança, autorização, integridade ou privacidade invalida a meta</pre>
+<p>No experimento piloto (seção 7.4), a especificação estruturada elevou a conformidade de 36,4% para 100%. Como melhoria, o próprio processo prevê classificar cada falha (ambiguidade, regra incompleta, contrato incompleto, falha de implementação, falha de teste ou mudança de escopo) e só alterar o documento quando a causa estiver nele.</p>
+
+<!-- ===================== 4 ===================== -->
+<h2 class="quebra">4. Elicitação</h2>
+<span class="swebok">SWEBOK V3.0 · 3 Requirements Elicitation</span>
+
+<h3>4.1 Fontes de requisitos</h3>
+<p>O SWEBOK lista como fontes típicas os objetivos de negócio, o conhecimento do domínio, os stakeholders, as regras de negócio, o ambiente operacional e o ambiente organizacional. A tabela relaciona cada uma às fontes F1–F7.</p>
+<table>
+<thead><tr><th style="width:26%">Fonte (SWEBOK)</th><th>No projeto</th></tr></thead>
+<tr><td>Objetivos de negócio</td><td>Fluxo do portal descrito pelo professor (F6) e diagrama (F2): fornecedor publica fornecimento, pedido reserva estoque, logística usa tipo de transporte.</td></tr>
+<tr><td>Conhecimento do domínio</td><td>Transcrições das aulas (F6, F7): demanda recorrente, leilão, reserva como transação, 30 compradores querendo o mesmo produto.</td></tr>
+<tr><td>Stakeholders</td><td>Professor (F1–F3, F5–F7) e grupos de interface (seção 2.5).</td></tr>
+<tr><td>Regras de negócio</td><td>RN-01 a RN-09, extraídas de F1, F2, F6 e F7.</td></tr>
+<tr><td>Ambiente operacional</td><td>Kafka, bancos próprios, Docker, API Gateway (F2, F5, F7).</td></tr>
+<tr><td>Ambiente organizacional</td><td>Divisão da turma em grupos, com módulos e responsabilidades separados (F7).</td></tr>
+</table>
+
+<h3>4.2 Técnicas de elicitação</h3>
+<table>
+<thead><tr><th style="width:26%">Técnica</th><th>Aplicação</th></tr></thead>
+<tr><td>Análise de documentos</td><td>Lista de responsabilidades (F1), requisitos gerais (F3) e orientações de Kafka (F5).</td></tr>
+<tr><td>Análise de modelos existentes</td><td>Diagrama de arquitetura do professor (F2), fonte do escopo e dos eventos.</td></tr>
+<tr><td>Entrevista (registro de fala)</td><td>As aulas 1 e 2 funcionam como entrevista com o cliente; as transcrições F6 e F7 são a fonte, sempre citadas com a marcação de tempo.</td></tr>
+<tr><td>Cenários e casos de uso</td><td>UC-01 a UC-03 e critérios em Gherkin, usados para confirmar o entendimento do fluxo de estoque.</td></tr>
+<tr><td>Reuniões internas do grupo</td><td>Decisões técnicas registradas como F4 e justificadas nos ADRs.</td></tr>
+</table>
+<div class="alerta"><b>Tratamento das transcrições.</b> F6 e F7 são transcrições automáticas com muitos erros de reconhecimento (ex.: “carro” onde o contexto indica Kafka, F7 21:25). Só trechos sem ambiguidade viram requisito Confirmado, sempre com o minuto do áudio. Trechos duvidosos aparecem apenas como pendências (ex.: P-13, P-25).</div>
+<p>Exemplo de elicitação e refinamento: na aula 2 o professor diz que, “a partir do momento de entrar no leilão ou fizer uma negociação, tem que fechar um pedido, tem que bloquear” o estoque (F7, 21:03). Somado à descrição da aula 1 (F6, 8:13 a 9:42), isso deu origem a RF-13, RF-14, RF-19, RF-20, RN-06, RN-07 e ao caso de uso UC-03.</p>
+
+<!-- ===================== 5 ===================== -->
+<h2 class="quebra">5. Análise</h2>
+<span class="swebok">SWEBOK V3.0 · 4 Requirements Analysis</span>
+
+<h3>5.1 Classificação</h3>
+<p>O SWEBOK propõe classificar requisitos por: funcional ou não funcional; derivado ou imposto; produto ou processo; prioridade; escopo; e volatilidade. Os eixos funcional/não funcional e produto/processo estão na seção 2. Os demais seguem abaixo.</p>
+<h4>Derivado × imposto e volatilidade</h4>
+<p><i>Análise:</i> o status atribuído no documento v0.3 já codifica esses dois eixos.</p>
+<table>
+<thead><tr><th style="width:16%">Status</th><th style="width:28%">Derivado ou imposto</th><th style="width:16%">Volatilidade</th><th>Justificativa</th></tr></thead>
+<tr><td>Confirmado</td><td>Imposto pelo cliente</td><td>Baixa</td><td>Vem de fonte do professor; muda apenas por decisão dele.</td></tr>
+<tr><td>Proposto</td><td>Derivado pelo grupo</td><td>Média</td><td>Decisão técnica do grupo (F4); pode mudar até a v1.0.</td></tr>
+<tr><td>Pendente</td><td>A definir</td><td>Alta</td><td>Depende de resposta externa ainda não recebida.</td></tr>
+</table>
+<h4>Escopo (abrangência)</h4>
+<p>Requisitos locais afetam um serviço; requisitos globais afetam os dois. Os locais estão alocados na seção 5.3. São globais: RNF-01 a RNF-13 e RNF-15 a RNF-18, que valem para Produtos e Fornecimentos.</p>
+<h4>Prioridade</h4>
+<div class="alerta"><b>Lacuna.</b> O documento v0.3 não atribui prioridade aos requisitos nem aos critérios de aceitação. Sem prioridade, não é possível calcular a conformidade ponderada definida pelo processo do grupo.<br><b>Proposta para a v1.0</b> (a validar pelo grupo): prioridade Alta e marcação de veto para os requisitos que sustentam segurança e integridade do estoque (RNF-01, RNF-02, RNF-03, RNF-06, RNF-09, RNF-14, RF-13, RF-14, RF-19 e RF-20); demais definidos em reunião.</div>
+
+<h3>5.2 Modelagem conceitual</h3>
+<p>A figura 1 mostra o contexto dos serviços; a figura 2, o modelo de domínio; a figura 3, os movimentos de estoque. Os modelos foram construídos a partir dos requisitos de dados (RD), das regras de negócio (RN) e do modelo preliminar do Relatório Técnico (seção 4).</p>
+
+<figure>
+<svg viewBox="0 0 680 300" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Arial, sans-serif" font-size="11">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#13233A"/></marker></defs>
+<rect x="20" y="20" width="120" height="40" rx="6" fill="#FCFBF8" stroke="#13233A"/><text x="80" y="45" text-anchor="middle">Frontend</text>
+<rect x="200" y="20" width="120" height="40" rx="6" fill="#FCFBF8" stroke="#13233A"/><text x="260" y="45" text-anchor="middle">API Gateway</text>
+<line x1="140" y1="40" x2="198" y2="40" stroke="#13233A" marker-end="url(#a)"/><text x="170" y="34" text-anchor="middle" font-size="9">REST</text>
+<rect x="390" y="10" width="130" height="50" rx="6" fill="#E3EFE7" stroke="#276B4B" stroke-width="1.6"/><text x="455" y="32" text-anchor="middle" font-weight="600">Produtos</text><text x="455" y="48" text-anchor="middle" font-size="9">db produtos</text>
+<rect x="390" y="80" width="130" height="50" rx="6" fill="#E3EFE7" stroke="#276B4B" stroke-width="1.6"/><text x="455" y="102" text-anchor="middle" font-weight="600">Fornecimentos</text><text x="455" y="118" text-anchor="middle" font-size="9">db fornecimentos</text>
+<path d="M320,40 L388,35" stroke="#13233A" fill="none" marker-end="url(#a)"/>
+<path d="M320,45 L388,100" stroke="#13233A" fill="none" marker-end="url(#a)"/>
+<text x="350" y="78" text-anchor="middle" font-size="9">REST</text>
+<rect x="20" y="170" width="640" height="30" rx="4" fill="#13233A"/><text x="340" y="190" text-anchor="middle" fill="#F5F4EF" font-weight="600">Apache Kafka</text>
+<path d="M520,35 L650,35 L650,168" stroke="#276B4B" fill="none" marker-end="url(#a)"/><text x="644" y="58" font-size="9" fill="#276B4B" text-anchor="end">produto_*</text>
+<path d="M520,115 L540,115 L540,168" stroke="#276B4B" fill="none" marker-end="url(#a)"/><text x="546" y="132" font-size="9" fill="#276B4B">fornecimento_criado</text><text x="546" y="144" font-size="9" fill="#276B4B">estoque_atualizado</text>
+<path d="M420,168 L420,132" stroke="#B45A12" fill="none" marker-end="url(#a)"/><text x="412" y="155" font-size="9" fill="#9A3B0E" text-anchor="end">pedido_*, produto_*, empresa_cadastrada</text>
+<rect x="20" y="240" width="140" height="40" rx="6" fill="#FCFBF8" stroke="#8C97A3"/><text x="90" y="265" text-anchor="middle">Usuários/Acesso</text>
+<rect x="185" y="240" width="140" height="40" rx="6" fill="#FCFBF8" stroke="#8C97A3"/><text x="255" y="265" text-anchor="middle">Pedidos</text>
+<rect x="350" y="240" width="140" height="40" rx="6" fill="#FCFBF8" stroke="#8C97A3"/><text x="420" y="265" text-anchor="middle">Mercado</text>
+<rect x="515" y="240" width="145" height="40" rx="6" fill="#FCFBF8" stroke="#8C97A3"/><text x="587" y="265" text-anchor="middle">Logística/Frete</text>
+<line x1="90" y1="238" x2="90" y2="202" stroke="#8C97A3"/><line x1="255" y1="238" x2="255" y2="202" stroke="#8C97A3"/><line x1="420" y1="238" x2="420" y2="202" stroke="#8C97A3"/><line x1="587" y1="238" x2="587" y2="202" stroke="#8C97A3"/>
+</svg>
+<figcaption>Figura 1 — Contexto: REST entre Frontend, API Gateway e serviços; integração com outros módulos apenas por eventos Kafka (F2).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 680 270" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Arial, sans-serif" font-size="10.5">
+<g>
+<rect x="20" y="20" width="150" height="70" rx="4" fill="#FCFBF8" stroke="#13233A"/><rect x="20" y="20" width="150" height="22" rx="4" fill="#E6EDE8" stroke="#13233A"/><text x="95" y="35" text-anchor="middle" font-weight="600">Categoria</text><text x="28" y="60">estrutura em aberto</text><text x="28" y="76">(RD-05, P-10)</text>
+<rect x="250" y="20" width="170" height="100" rx="4" fill="#FCFBF8" stroke="#13233A"/><rect x="250" y="20" width="170" height="22" rx="4" fill="#E6EDE8" stroke="#13233A"/><text x="335" y="35" text-anchor="middle" font-weight="600">Produto</text><text x="258" y="58">id</text><text x="258" y="73">categoria · unidade</text><text x="258" y="88">tipo de transporte</text><text x="258" y="103">nome, descrição (RD-02)</text>
+<rect x="250" y="160" width="170" height="100" rx="4" fill="#E3EFE7" stroke="#276B4B" stroke-width="1.6"/><rect x="250" y="160" width="170" height="22" rx="4" fill="#CFE3D6" stroke="#276B4B"/><text x="335" y="175" text-anchor="middle" font-weight="600">Fornecimento</text><text x="258" y="198">id · fornecedor · produto</text><text x="258" y="213">preço (P-15) · origem (P-05)</text><text x="258" y="228">qtd. disponível</text><text x="258" y="243">qtd. reservada</text>
+<rect x="20" y="175" width="150" height="70" rx="4" fill="#FCFBF8" stroke="#8C97A3" stroke-dasharray="4 3"/><text x="95" y="198" text-anchor="middle" font-weight="600">Empresa</text><text x="95" y="215" text-anchor="middle">perfil fornecedor</text><text x="95" y="230" text-anchor="middle" font-size="9">(externa, Usuários/Acesso)</text>
+<rect x="500" y="160" width="160" height="100" rx="4" fill="#FCFBF8" stroke="#13233A" stroke-dasharray="6 3"/><rect x="500" y="160" width="160" height="22" rx="4" fill="#E6EDE8" stroke="#13233A"/><text x="580" y="175" text-anchor="middle" font-weight="600">Reserva (proposta)</text><text x="508" y="198">pedido · fornecimento</text><text x="508" y="213">quantidade</text><text x="508" y="228">situação</text><text x="508" y="248" font-size="9">ADR-005</text>
+<rect x="500" y="40" width="160" height="60" rx="4" fill="#FCFBF8" stroke="#8C97A3" stroke-dasharray="4 3"/><text x="580" y="65" text-anchor="middle" font-weight="600">Pedido</text><text x="580" y="82" text-anchor="middle" font-size="9">(externo, via eventos)</text>
+<line x1="170" y1="55" x2="250" y2="55" stroke="#13233A"/><text x="178" y="50" font-size="9">1</text><text x="236" y="50" font-size="9">*</text><text x="210" y="70" text-anchor="middle" font-size="9">classifica</text>
+<line x1="335" y1="120" x2="335" y2="160" stroke="#13233A"/><text x="341" y="132" font-size="9">1</text><text x="341" y="156" font-size="9">*  é ofertado em (RN-05)</text>
+<line x1="170" y1="210" x2="250" y2="210" stroke="#8C97A3"/><text x="178" y="205" font-size="9">1</text><text x="236" y="205" font-size="9">*</text><text x="210" y="225" text-anchor="middle" font-size="9">oferta (RN-01)</text>
+<line x1="420" y1="210" x2="500" y2="210" stroke="#13233A"/><text x="428" y="205" font-size="9">1</text><text x="486" y="205" font-size="9">*</text>
+<line x1="580" y1="100" x2="580" y2="160" stroke="#8C97A3" stroke-dasharray="3 3"/><text x="586" y="135" font-size="9">origina</text>
+</g>
+</svg>
+<figcaption>Figura 2 — Modelo de domínio. Tracejado: entidades externas ou propostas. Um produto pode ser ofertado por vários fornecedores (RN-05); todo fornecimento referencia um produto existente (RN-03).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 680 150" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Arial, sans-serif" font-size="11">
+<defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#13233A"/></marker></defs>
+<rect x="30" y="45" width="160" height="56" rx="28" fill="#E3EFE7" stroke="#276B4B" stroke-width="1.6"/><text x="110" y="70" text-anchor="middle" font-weight="600">Disponível</text><text x="110" y="87" text-anchor="middle" font-size="9">visível ao comprador</text>
+<rect x="290" y="45" width="160" height="56" rx="28" fill="#FBF0E6" stroke="#B45A12" stroke-width="1.6"/><text x="370" y="70" text-anchor="middle" font-weight="600">Reservado</text><text x="370" y="87" text-anchor="middle" font-size="9">bloqueado por pedido</text>
+<rect x="540" y="45" width="120" height="56" rx="6" fill="#FCFBF8" stroke="#13233A"/><text x="600" y="70" text-anchor="middle" font-weight="600">Baixa</text><text x="600" y="87" text-anchor="middle" font-size="9">sai do estoque</text>
+<path d="M190,60 L288,60" stroke="#13233A" marker-end="url(#b)"/><text x="239" y="52" text-anchor="middle" font-size="9">pedido criado (RF-14)</text>
+<path d="M290,88 L192,88" stroke="#13233A" marker-end="url(#b)"/><text x="241" y="105" text-anchor="middle" font-size="9">cancelado (RF-19, RN-06)</text>
+<path d="M450,73 L538,73" stroke="#13233A" marker-end="url(#b)"/><text x="494" y="65" text-anchor="middle" font-size="9">venda (RF-20)</text>
+<text x="340" y="135" text-anchor="middle" font-size="9" fill="#4A5562">Cada movimento publica estoque_atualizado (RF-15). Pedido acima do disponível: comportamento em aberto (P-16).</text>
+</svg>
+<figcaption>Figura 3 — Movimentos da quantidade de um fornecimento.</figcaption>
+</figure>
+
+<h3>5.3 Projeto arquitetural e alocação de requisitos</h3>
+<p>A alocação distribui os requisitos entre os componentes da arquitetura. Ela decorre do ADR-001 (dois microsserviços) e do ADR-003 (banco próprio por serviço).</p>
+<table>
+<thead><tr><th style="width:18%">Componente</th><th>Requisitos alocados</th></tr></thead>
+<tr><td>Serviço de Produtos</td><td>RF-01 a RF-08, RF-21; RD-01, RD-02, RD-05; RN-08, RN-09</td></tr>
+<tr><td>Serviço de Fornecimentos</td><td>RF-09 a RF-17, RF-19, RF-20; RD-03, RD-04, RD-06; RN-01 a RN-07; RNF-14</td></tr>
+<tr><td>Ambos os serviços</td><td>RNF-01 a RNF-13, RNF-15 a RNF-18</td></tr>
+<tr><td>A definir</td><td>RF-18 (pedido de fornecimento entre fornecedor e grupo, P-13)</td></tr>
+<tr><td>Dependência externa</td><td>API Gateway e Usuários/Acesso (RNF-01 a RNF-03, P-04); Pedidos (RF-14, RF-19, RF-20, P-02); Infra (RNF-13, P-08, P-17); UX (RNF-15 a RNF-18, P-22)</td></tr>
+</table>
+<p>Decisões arquiteturais que sustentam requisitos: ADR-004 (estoque por fornecimento → RF-13), ADR-005 e ADR-006 (Saga coreografada e reserva por atualização condicional → RNF-14), ADR-007 (registro de eventos processados → RNF-06), ADR-008 e ADR-009 (chave da mensagem e produtor idempotente → RNF-07, RNF-08), ADR-011 (cópia local de produtos → RF-16, RN-03), ADR-018 (evento sem token → RNF-09), ADR-019 (tópico de erro → RNF-10).</p>
+
+<h3>5.4 Negociação de requisitos</h3>
+<p>Conflitos entre fontes ou entre stakeholders e o tratamento dado a cada um:</p>
+<table>
+<thead><tr><th style="width:20%">Conflito</th><th>Posições</th><th style="width:30%">Situação</th></tr></thead>
+<tr><td>Escopo do grupo (P-01)</td><td>F1 diz “conversar com” mercado, negociação, logística; F2 mostra esses módulos como serviços próprios.</td><td><span class="ok">Resolvido (v0.2):</span> o grupo implementa os blocos 2 e 3 e integra com os demais.</td></tr>
+<tr><td>Granularidade do estoque (P-03)</td><td>Por produto ou por fornecimento; F6 não diz, F7 23:43 é incerta.</td><td><span class="parcial">Decisão do grupo:</span> por fornecimento (cada fornecedor tem preço próprio, RN-05). Aguarda confirmação.</td></tr>
+<tr><td>Posição da “origem” (P-05)</td><td>F1 associa ao produto; F2 coloca em Fornecimentos; F6 10:58 sugere endereço do fornecedor.</td><td><span class="nao">Em aberto.</span> Evidência favorece o fornecimento.</td></tr>
+<tr><td>Permissões sobre produto (P-07)</td><td>Só quem cadastrou altera e exclui, ou qualquer empresa com o perfil?</td><td><span class="parcial">Parcial (v0.3):</span> fornecedor e comprador cadastram; alteração e exclusão em aberto.</td></tr>
+<tr><td>Responsável por pedidos (P-23)</td><td>F7 3:17 indica divisão entre grupos; F7 2:46 associa o pedido a quem cuida dos compradores.</td><td><span class="nao">Em aberto.</span> Bloqueia o contrato dos eventos de pedido (P-02).</td></tr>
+<tr><td>Tópicos × tipos de evento (P-17)</td><td>Nomes do diagrama podem ser tópicos ou tipos; tópicos separados quebram a ordem entre cadastro e alteração.</td><td><span class="nao">Em aberto</span> com o grupo de infra.</td></tr>
+<tr><td>Validação do token (P-04)</td><td>Serviço revalida o JWT ou confia no API Gateway.</td><td><span class="nao">Em aberto</span> com o grupo de autenticação (ADR-012).</td></tr>
+</table>
+
+<h3>5.5 Análise formal</h3>
+<p>O grupo não usou linguagem formal de especificação. <i>Análise:</i> os critérios CA-10 a CA-12 permitem derivar invariantes simples para o estoque de um fornecimento. Sejam <i>D</i> a quantidade disponível, <i>R</i> a reservada e <i>q</i> a quantidade do pedido:</p>
+<pre><span class="kw">Reserva</span>       (RF-14, CA-10): D' = D − q   R' = R + q   ⇒ D' + R' = D + R
+<span class="kw">Cancelamento</span>  (RF-19, CA-11): D' = D + q   R' = R − q   ⇒ D' + R' = D + R
+<span class="kw">Venda</span>         (RF-20, CA-12): D' = D       R' = R − q   ⇒ D' + R' = D + R − q
+<span class="kw">Idempotência</span>  (RNF-06, CA-07): aplicar o mesmo evento n vezes ≡ aplicar uma vez
+<span class="kw">Atomicidade</span>   (RNF-14): reservas simultâneas somadas nunca excedem D
+<span class="kw">Pré-condição</span>  da reserva: q ≤ D — comportamento quando q &gt; D em aberto (P-16)</pre>
+<p>Esses invariantes podem virar testes de propriedade na implementação e tornam explícita a lacuna da P-16: sem ela, não se sabe se <i>D</i> pode ficar negativo.</p>
+
+<!-- ===================== 6 ===================== -->
+<h2 class="quebra">6. Especificação</h2>
+<span class="swebok">SWEBOK V3.0 · 5 Requirements Specification</span>
+
+<h3>6.1 Documento de definição do sistema</h3>
+<p>O papel de documento de definição do sistema é cumprido pelo diagrama do professor (F2) e pelo fluxo do negócio: (1) o fornecedor publica um fornecimento; (2) o comprador registra uma demanda; (3) os eventos são publicados no Kafka; (4) Mercado compara oferta e demanda; (5) define-se o modo de negociação; (6) ocorre a negociação; (7) o pedido é criado e o estoque é reservado; (8) a logística é acionada usando o tipo de transporte; (9) transportadoras cotam; (10) o frete é selecionado e a entrega realizada. O grupo atua nos passos 1, 3, 7 e 8.</p>
+<p>A especificação de requisitos de software é o arquivo <span class="mono">docs/documento-de-requisitos.md</span>, estruturado com base na ISO/IEC/IEEE 29148:2018. As seções 6.2 a 6.7 reproduzem seu conteúdo de forma consolidada.</p>
+
+<h3>6.2 Requisitos funcionais</h3>
+<table>
+<thead><tr><th style="width:7%">ID</th><th>Requisito</th><th style="width:12%">Origem</th><th style="width:21%">Status</th></tr></thead>
+<tr><th colspan="4" style="background:#F3F5F1">Serviço de Produtos</th></tr>
+<tr><td>RF-01</td><td>Permitir que empresas com perfil de fornecedor ou de comprador cadastrem produto com categoria, unidade e tipo de transporte</td><td>F1, F2, F7</td><td>Confirmado (atributos: P-06)</td></tr>
+<tr><td>RF-02</td><td>Permitir consultar produtos, em lista e por identificador</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RF-03</td><td>Permitir alterar um produto cadastrado</td><td>F5</td><td>Confirmado</td></tr>
+<tr><td>RF-04</td><td>Permitir excluir um produto</td><td>F5</td><td>Confirmado (regra: P-09)</td></tr>
+<tr><td>RF-05</td><td>Permitir gerenciar as categorias de produto</td><td>F1, F2</td><td>Pendente (P-10)</td></tr>
+<tr><td>RF-06</td><td>Ao cadastrar produto, publicar <code>produto_cadastrado</code></td><td>F2, F5</td><td>Confirmado</td></tr>
+<tr><td>RF-07</td><td>Ao alterar produto, publicar <code>produto_atualizado</code></td><td>F5</td><td>Confirmado (nome: Proposto)</td></tr>
+<tr><td>RF-08</td><td>Ao excluir produto, publicar <code>produto_excluido</code></td><td>F5</td><td>Confirmado (nome: Proposto)</td></tr>
+<tr><td>RF-21</td><td>Eventos de produto contêm o tipo de transporte, para Logística/Frete</td><td>F6, F4</td><td>Proposto</td></tr>
+<tr><th colspan="4" style="background:#F3F5F1">Serviço de Fornecimentos</th></tr>
+<tr><td>RF-09</td><td>O fornecedor cria um fornecimento informando produto, preço, quantidade e origem</td><td>F1, F2</td><td>Confirmado</td></tr>
+<tr><td>RF-10</td><td>Compradores consultam fornecimentos, em lista e por identificador, com a quantidade disponível</td><td>F6, F7</td><td>Confirmado</td></tr>
+<tr><td>RF-11</td><td>Permitir alterar ou encerrar um fornecimento</td><td>F4</td><td>Pendente (P-11)</td></tr>
+<tr><td>RF-12</td><td>Ao criar fornecimento, publicar <code>fornecimento_criado</code></td><td>F2</td><td>Confirmado</td></tr>
+<tr><td>RF-13</td><td>Manter, por fornecimento, a quantidade disponível e a reservada</td><td>F1, F2, F6</td><td>Confirmado (granularidade: P-03)</td></tr>
+<tr><td>RF-14</td><td>Ao consumir a criação de pedido, reservar: subtrair da disponível e somar à reservada</td><td>F2, F5, F6</td><td>Confirmado (contrato: P-02)</td></tr>
+<tr><td>RF-15</td><td>Sempre que o estoque mudar, publicar <code>estoque_atualizado</code></td><td>F2, F5</td><td>Confirmado</td></tr>
+<tr><td>RF-16</td><td>Consumir os eventos de produto para manter referência local dos produtos válidos</td><td>F5, F4</td><td>Proposto</td></tr>
+<tr><td>RF-17</td><td>Consumir <code>empresa_cadastrada</code> para reconhecer fornecedores</td><td>F2, F4</td><td>Pendente (P-12)</td></tr>
+<tr><td>RF-18</td><td>Publicar e consumir eventos de pedido de fornecimento entre fornecedor e grupo</td><td>F5</td><td>Pendente (P-13)</td></tr>
+<tr><td>RF-19</td><td>Ao consumir o cancelamento de pedido, devolver a reservada à disponível</td><td>F6</td><td>Confirmado (contrato: P-02)</td></tr>
+<tr><td>RF-20</td><td>Ao consumir a conclusão da venda, dar baixa definitiva na reservada</td><td>F6</td><td>Confirmado (contrato: P-02)</td></tr>
+</table>
+
+<h3>6.3 Requisitos não funcionais</h3>
+<table>
+<thead><tr><th style="width:8%">ID</th><th>Requisito</th><th style="width:15%">Categoria</th><th style="width:9%">Origem</th><th style="width:15%">Status</th></tr></thead>
+<tr><td>RNF-01</td><td>Todos os endpoints exigem autenticação; requisição sem token é recusada</td><td>Segurança</td><td>F3</td><td>Confirmado</td></tr>
+<tr><td>RNF-02</td><td>Token expirado ou inválido → HTTP 401; o cliente se autentica novamente</td><td>Segurança</td><td>F3</td><td>Confirmado (P-04)</td></tr>
+<tr><td>RNF-03</td><td>Autenticado sem o perfil necessário → HTTP 403</td><td>Segurança</td><td>F6, F4</td><td>Confirmado (P-07)</td></tr>
+<tr><td>RNF-04</td><td>Comunicação entre módulos por eventos Kafka</td><td>Interoperab.</td><td>F2, F5</td><td>Confirmado</td></tr>
+<tr><td>RNF-05</td><td>Banco próprio por serviço, inacessível a outros serviços</td><td>Manutenib.</td><td>F2</td><td>Confirmado</td></tr>
+<tr><td>RNF-06</td><td>Processamento de eventos idempotente</td><td>Confiabilidade</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RNF-07</td><td>Eventos de uma entidade publicados com o identificador como chave</td><td>Confiabilidade</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RNF-08</td><td>Produtores com <code>acks=all</code> e <code>enable.idempotence=true</code></td><td>Confiabilidade</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RNF-09</td><td>Nenhum evento publicado contém token de acesso</td><td>Segurança</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RNF-10</td><td>Evento que falha após as tentativas vai a um tópico de erro sem bloquear os demais</td><td>Confiabilidade</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RNF-11</td><td>Logs com identificador de correlação por requisição e por evento</td><td>Manutenib.</td><td>F4</td><td>Proposto (P-14)</td></tr>
+<tr><td>RNF-12</td><td>Serviços executáveis em contêiner Docker</td><td>Portabilidade</td><td>F2, F7</td><td>Confirmado</td></tr>
+<tr><td>RNF-13</td><td>Esquemas dos eventos registrados no Schema Registry</td><td>Interoperab.</td><td>F2</td><td>Pendente (P-08)</td></tr>
+<tr><td>RNF-14</td><td>Reserva atômica: reservas simultâneas não ultrapassam a disponível</td><td>Confiabilidade</td><td>F6, F4</td><td>Proposto (P-16)</td></tr>
+<tr><td>RNF-15</td><td>Telas no padrão visual de UX (limpo, verde e branco, bordas finas)</td><td>Usabilidade</td><td>F7</td><td>Confirmado (P-22)</td></tr>
+<tr><td>RNF-16</td><td>Modo escuro em cinza escuro e preto, destaques em verde escuro</td><td>Usabilidade</td><td>F7</td><td>Confirmado (P-22)</td></tr>
+<tr><td>RNF-17</td><td>Telas atendem a requisitos de acessibilidade</td><td>Usabilidade</td><td>F7</td><td>Confirmado (P-22)</td></tr>
+<tr><td>RNF-18</td><td>Telas responsivas</td><td>Usabilidade</td><td>F7</td><td>Confirmado (P-22)</td></tr>
+</table>
+
+<h3>6.4 Requisitos de dados</h3>
+<table>
+<thead><tr><th style="width:8%">ID</th><th style="width:20%">Entidade</th><th>Atributos</th><th style="width:20%">Status</th></tr></thead>
+<tr><td>RD-01</td><td>Produto</td><td>Identificador, categoria, unidade, tipo de transporte</td><td>Confirmado</td></tr>
+<tr><td>RD-02</td><td>Produto</td><td>Nome e descrição</td><td>Proposto (P-06)</td></tr>
+<tr><td>RD-03</td><td>Fornecimento</td><td>Identificador, fornecedor, produto, preço, quantidade, origem</td><td>Confirmado (P-05)</td></tr>
+<tr><td>RD-04</td><td>Fornecimento</td><td>Formato do preço (moeda e precisão)</td><td>Pendente (P-15)</td></tr>
+<tr><td>RD-05</td><td>Categoria</td><td>Estrutura (lista fixa, cadastro, hierarquia)</td><td>Pendente (P-10)</td></tr>
+<tr><td>RD-06</td><td>Estoque do fornecimento</td><td>Quantidade disponível e reservada</td><td>Confirmado</td></tr>
+</table>
+
+<h3>6.5 Regras de negócio</h3>
+<table>
+<thead><tr><th style="width:8%">ID</th><th>Regra</th><th style="width:14%">Origem</th><th style="width:16%">Status</th></tr></thead>
+<tr><td>RN-01</td><td>Um fornecimento relaciona um fornecedor e um produto</td><td>F1, F2</td><td>Confirmado</td></tr>
+<tr><td>RN-02</td><td>Apenas empresas com perfil de fornecedor criam fornecimentos</td><td>F1, F2, F6</td><td>Confirmado</td></tr>
+<tr><td>RN-03</td><td>Um fornecimento só referencia produto existente no catálogo</td><td>F4</td><td>Proposto</td></tr>
+<tr><td>RN-04</td><td>Uma empresa pode ter os perfis de fornecedor, comprador e transportadora</td><td>F6</td><td>Confirmado</td></tr>
+<tr><td>RN-05</td><td>Um produto pode ser ofertado por vários fornecedores</td><td>F6</td><td>Confirmado</td></tr>
+<tr><td>RN-06</td><td>A reservada volta à disponível se o pedido for cancelado</td><td>F6</td><td>Confirmado</td></tr>
+<tr><td>RN-07</td><td>A reservada sai do estoque quando a venda é concluída</td><td>F6</td><td>Confirmado</td></tr>
+<tr><td>RN-08</td><td>Empresas com perfil de fornecedor ou comprador cadastram produtos</td><td>F7</td><td>Confirmado</td></tr>
+<tr><td>RN-09</td><td>Todo produto tem um tipo de transporte definido</td><td>F7</td><td>Proposto (P-06)</td></tr>
+</table>
+<p>Regras ainda sem resposta nas fontes, que não devem ser testadas: exclusão lógica ou física e efeito sobre fornecimentos (P-09); estoque negativo e pedido acima do disponível (P-16); mais de um fornecimento do mesmo produto pelo mesmo fornecedor (P-20); preço e quantidade iguais a zero (P-21).</p>
+
+<h3>6.6 Casos de uso</h3>
+<table>
+<thead><tr><th style="width:17%">Caso de uso</th><th style="width:15%">Ator</th><th>Fluxo principal</th><th style="width:28%">Fluxos alternativos</th></tr></thead>
+<tr><td>UC-01 Cadastrar produto</td><td>Fornecedor ou comprador (RN-08)</td><td>Envia dados → validação → grava → publica <code>produto_cadastrado</code> → HTTP 201 com o identificador</td><td>Token inválido: 401 · dados inválidos: 400 · perfil sem permissão: 403. Nada é gravado nem publicado.</td></tr>
+<tr><td>UC-02 Publicar fornecimento</td><td>Fornecedor</td><td>Informa produto, preço, quantidade e origem → valida e verifica produto (RN-03) → grava → publica <code>fornecimento_criado</code> → HTTP 201</td><td>401 · sem perfil de fornecedor: 403 · produto inexistente: 422 · dados inválidos: 400.</td></tr>
+<tr><td>UC-03 Reservar, liberar e baixar estoque</td><td>Serviço de Pedidos (P-02)</td><td>Consome criação de pedido → verifica se já processou → em operação atômica confere saldo, subtrai da disponível e soma à reservada → publica <code>estoque_atualizado</code></td><td>Evento repetido: ignora · inválido: tópico de erro · pedido acima do disponível: em aberto (P-16) · cancelado: devolve · venda: baixa.</td></tr>
+</table>
+
+<h3>6.7 Eventos</h3>
+<table>
+<thead><tr><th style="width:24%">Evento</th><th style="width:15%">Serviço</th><th style="width:20%">Papel</th><th>Chave</th><th style="width:18%">Status</th></tr></thead>
+<tr><td><code>produto_cadastrado</code></td><td>Produtos</td><td>Publica</td><td>Id do produto</td><td>Confirmado</td></tr>
+<tr><td><code>produto_atualizado</code></td><td>Produtos</td><td>Publica</td><td>Id do produto</td><td>Proposto</td></tr>
+<tr><td><code>produto_excluido</code></td><td>Produtos</td><td>Publica</td><td>Id do produto</td><td>Proposto</td></tr>
+<tr><td><code>produto_*</code></td><td>Fornecimentos</td><td>Consome</td><td>Id do produto</td><td>Proposto (RF-16)</td></tr>
+<tr><td><code>fornecimento_criado</code></td><td>Fornecimentos</td><td>Publica</td><td>Id do fornecimento</td><td>Confirmado</td></tr>
+<tr><td><code>estoque_atualizado</code></td><td>Fornecimentos</td><td>Publica</td><td>Id do fornecimento</td><td>Confirmado</td></tr>
+<tr><td><code>empresa_cadastrada</code></td><td>Fornecimentos</td><td>Consome</td><td>Definida pelo produtor</td><td>Pendente (P-12)</td></tr>
+<tr><td><code>pedido_criado</code></td><td>Fornecimentos</td><td>Consome (reserva)</td><td>Definida pelo produtor</td><td>Pendente (P-02)</td></tr>
+<tr><td><code>pedido_atualizado</code></td><td>Fornecimentos</td><td>Consome (libera ou baixa)</td><td>Definida pelo produtor</td><td>Pendente (P-02)</td></tr>
+<tr><td>Pedido de fornecimento</td><td>A definir</td><td>Publica e consome</td><td>A definir</td><td>Pendente (P-13)</td></tr>
+</table>
+
+<!-- ===================== 7 ===================== -->
+<h2 class="quebra">7. Validação</h2>
+<span class="swebok">SWEBOK V3.0 · 6 Requirements Validation</span>
+<p>Validar requisitos é verificar se eles descrevem o sistema que o cliente espera. O SWEBOK cita quatro meios: revisões, prototipação, validação de modelos e testes de aceitação.</p>
+
+<h3>7.1 Revisão de requisitos</h3>
+<p>O documento passou por três revisões internas (v0.1 a v0.3). Nesta análise, ele foi revisado com o checklist da Fase 4 do processo do grupo:</p>
+<table>
+<thead><tr><th style="width:36%">Item do checklist</th><th style="width:11%">Resultado</th><th>Observação</th></tr></thead>
+<tr><td>Objetivo de negócio claro</td><td class="parcial">Parcial</td><td>Propósito e escopo definidos; critério de sucesso de negócio não explicitado.</td></tr>
+<tr><td>Escopo e não escopo explícitos</td><td class="ok">Sim</td><td>Seções 1.2 e 1.3 do documento de requisitos.</td></tr>
+<tr><td>Glossário de termos do domínio</td><td class="ok">Sim</td><td>Categoria, unidade e origem ainda têm significado em aberto.</td></tr>
+<tr><td>Todo RF possui ID</td><td class="ok">Sim</td><td>RF-01 a RF-21.</td></tr>
+<tr><td>Cada RF possui ao menos um critério testável</td><td class="nao">Não</td><td>7 de 21 sem critério (RF-02, 05, 11, 16, 17, 18, 21), todos Propostos ou Pendentes. Todos os RF Confirmados têm critério.</td></tr>
+<tr><td>Critério com ID, prioridade, peso e veto</td><td class="parcial">Parcial</td><td>CA-01 a CA-14 numerados; sem prioridade, peso ou veto.</td></tr>
+<tr><td>Regras de negócio numeradas, com exemplos</td><td class="parcial">Parcial</td><td>Numeradas; sem exemplos concretos por regra.</td></tr>
+<tr><td>RNF com métrica e método de verificação</td><td class="parcial">Parcial</td><td>Segurança usa códigos HTTP; usabilidade sem critério (P-22); desempenho sem meta (P-18).</td></tr>
+<tr><td>Contratos de entrada e saída</td><td class="nao">Não</td><td>Formato dos eventos e endpoints REST pendente (P-08; seção 5 do Relatório Técnico a preencher).</td></tr>
+<tr><td>Casos de erro e borda</td><td class="parcial">Parcial</td><td>UCs têm fluxos alternativos; pedido acima do disponível em aberto (P-16).</td></tr>
+<tr><td>Plano de testes vinculado</td><td class="parcial">Parcial</td><td>Matriz liga requisitos a critérios; não nomeia os testes.</td></tr>
+<tr><td>Decisões pendentes identificadas</td><td class="ok">Sim</td><td>25 pendências registradas com destinatário.</td></tr>
+<tr><td>Guardrails (Always, Ask First, Never)</td><td class="nao">Não</td><td>Seção prevista no modelo do grupo, ausente no v0.3.</td></tr>
+</table>
+
+<h3>7.2 Prototipação</h3>
+<p>Não houve prototipação. As telas dependem da definição de quem as implementa (P-22) e dos padrões de UX. Recomenda-se um protótipo de baixa fidelidade das telas de cadastro de produto e de consulta de fornecimentos assim que a P-22 for resolvida, para validar RNF-15 a RNF-18 com a equipe de UX.</p>
+
+<h3>7.3 Validação de modelos</h3>
+<p>O modelo de domínio (figura 2) foi conferido contra os requisitos: cada atributo de RD-01, RD-03 e RD-06 aparece numa entidade; RN-01, RN-03 e RN-05 aparecem como multiplicidades; e o diagrama de movimentos (figura 3) reproduz exatamente CA-10, CA-11 e CA-12. A entidade Reserva é proposta (ADR-005) e não tem requisito correspondente no v0.3; deve ser incluída como requisito de dados ou removida do modelo.</p>
+
+<h3>7.4 Testes de aceitação</h3>
+<p>Os 14 critérios do documento estão em Gherkin. <i>Análise:</i> aplicando a regra do processo do grupo (critério que depende de pendência fica fora do escopo congelado), eles se dividem assim:</p>
+<table>
+<thead><tr><th style="width:8%">CA</th><th style="width:20%">Requisitos</th><th>Cenário resumido</th><th style="width:18%">Situação</th><th style="width:12%">Veto (proposta)</th></tr></thead>
+<tr><td>CA-01</td><td>RNF-01</td><td>Sem token → 401, nenhum dado</td><td class="ok">Congelável</td><td>Sim</td></tr>
+<tr><td>CA-02</td><td>RNF-02</td><td>Token expirado → 401</td><td class="ok">Congelável</td><td>Sim</td></tr>
+<tr><td>CA-03</td><td>RF-01, RF-06, RN-08</td><td>Cadastro de produto → 201 e evento com chave</td><td class="parcial">Depende de P-06</td><td>Não</td></tr>
+<tr><td>CA-04</td><td>RF-03, RF-07</td><td>Alteração publica <code>produto_atualizado</code></td><td>Proposto</td><td>Não</td></tr>
+<tr><td>CA-05</td><td>RF-04, RF-08</td><td>Exclusão publica <code>produto_excluido</code></td><td>Proposto</td><td>Não</td></tr>
+<tr><td>CA-06</td><td>RF-09, RF-12</td><td>Criar fornecimento → 201 e evento</td><td class="ok">Congelável</td><td>Não</td></tr>
+<tr><td>CA-07</td><td>RNF-06, UC-03</td><td>Evento repetido não altera estoque</td><td>Proposto</td><td>Sim</td></tr>
+<tr><td>CA-08</td><td>RNF-09</td><td>Nenhum evento contém token</td><td>Proposto</td><td>Sim</td></tr>
+<tr><td>CA-09</td><td>UC-01 A1, UC-02 A1</td><td>Recusa por token expirado não grava nem publica</td><td class="ok">Congelável</td><td>Sim</td></tr>
+<tr><td>CA-10</td><td>RF-14, UC-03</td><td>100/0 + pedido de 30 → 70/30</td><td class="parcial">Depende de P-02</td><td>Sim</td></tr>
+<tr><td>CA-11</td><td>RF-19, RN-06</td><td>Cancelamento: 70/30 → 100/0</td><td class="parcial">Depende de P-02</td><td>Sim</td></tr>
+<tr><td>CA-12</td><td>RF-20, RN-07</td><td>Venda: 70/30 → 70/0</td><td class="parcial">Depende de P-02</td><td>Sim</td></tr>
+<tr><td>CA-13</td><td>RNF-03, RN-02</td><td>Transportadora cria fornecimento → 403</td><td class="ok">Congelável</td><td>Sim</td></tr>
+<tr><td>CA-14</td><td>RF-10</td><td>Comprador consulta e vê a disponível</td><td class="ok">Congelável</td><td>Não</td></tr>
+</table>
+<p>Resultado: <b>6 congeláveis</b> (4 com veto), <b>4 dependentes de pendência</b> e <b>4 propostos</b>. A primeira medição de conformidade do microsserviço deve usar os 6 congeláveis; ela ainda não foi executada.</p>
+<h4>Experimento piloto</h4>
+<p>O processo e o modelo foram validados num piloto (API de controle de despesas), com dois braços avaliados pela mesma suíte de 8 critérios escrita antes do código (peso total 22, 3 de veto). Os números abaixo foram reproduzidos executando o <span class="mono">run.py</span> de <span class="mono">entrega_grupo/4_evidencias</span>.</p>
+<table>
+<thead><tr><th>Braço</th><th style="width:20%">Conformidade</th><th style="width:22%">Vetos reprovados</th><th style="width:14%">Meta ≥ 85%</th></tr></thead>
+<tr><td>Controle — prosa livre</td><td>36,4%</td><td>3</td><td class="nao">Não</td></tr>
+<tr><td>Documento estruturado — Claude Sonnet</td><td>100%</td><td>0</td><td class="ok">Sim</td></tr>
+<tr><td>Documento estruturado — Perplexity</td><td>100%</td><td>0</td><td class="ok">Sim</td></tr>
+<tr><td>Documento estruturado — Gemini 3 Pro</td><td>100%</td><td>0</td><td class="ok">Sim</td></tr>
+</table>
+<div class="alerta"><b>Limites do piloto:</b> uma funcionalidade, uma execução por agente e domínio sem concorrência. O resultado não pode ser transferido ao microsserviço sem a medição própria.</div>
+
+<!-- ===================== 8 ===================== -->
+<h2 class="quebra">8. Considerações práticas</h2>
+<span class="swebok">SWEBOK V3.0 · 7 Practical Considerations</span>
+
+<h3>8.1 Natureza iterativa do processo</h3>
+<table>
+<thead><tr><th style="width:10%">Versão</th><th>Mudanças</th></tr></thead>
+<tr><td>0.1</td><td>Rascunho a partir do enunciado, dos requisitos do professor e do diagrama de arquitetura.</td></tr>
+<tr><td>0.2</td><td>Inclusão de F1 e F5; origem de cada requisito passa a indicar a fonte exata; P-01 resolvida; P-05 e P-11 detalhadas.</td></tr>
+<tr><td>0.3</td><td>Inclusão de F6 e F7; estoque com quantidade disponível e reservada (RF-13, RF-14, RF-19, RF-20, RN-06, RN-07, RNF-14, UC-03); RN-08, RF-10, RN-02, RN-04, RNF-03, RNF-12 e RNF-15 a RNF-18; CA-10 a CA-14; P-02, P-07, P-14 e P-20 parcialmente resolvidas; P-22 a P-25 criadas.</td></tr>
+</table>
+
+<h3>8.2 Gestão de mudanças</h3>
+<ul>
+<li>Toda alteração gera nova versão do documento e uma linha no histórico de revisões; uma versão usada para medir conformidade nunca é alterada silenciosamente.</li>
+<li>Cada decisão tem um de três estados — Confirmado, Proposto ou Pendente — e o time de QA testa apenas itens Confirmados até a v1.0.</li>
+<li>Pedido de mudança: registrar → identificar requisitos, testes e eventos afetados → avaliar impacto → aprovar → nova versão → atualizar testes.</li>
+<li>Divergências entre implementação e requisito ou ADR são registradas na seção 14 do Relatório Técnico.</li>
+</ul>
+
+<h3>8.3 Atributos dos requisitos</h3>
+<table>
+<thead><tr><th style="width:26%">Atributo</th><th style="width:20%">Situação no v0.3</th><th>Observação</th></tr></thead>
+<tr><td>Identificador único</td><td class="ok">Presente</td><td>RF, RNF, RD, RN, UC, CA, P.</td></tr>
+<tr><td>Origem (fonte)</td><td class="ok">Presente</td><td>F1 a F7, com minuto do áudio quando vem de transcrição.</td></tr>
+<tr><td>Status</td><td class="ok">Presente</td><td>Confirmado, Proposto ou Pendente, com a pendência associada.</td></tr>
+<tr><td>Categoria (RNF)</td><td class="ok">Presente</td><td>ISO/IEC 25010.</td></tr>
+<tr><td>Justificativa</td><td class="parcial">Parcial</td><td>Presente para RF-13/14/19/20, RF-16 e RNFs técnicos.</td></tr>
+<tr><td>Prioridade, peso e veto</td><td class="nao">Ausente</td><td>Necessários para a conformidade ponderada (seção 5.1).</td></tr>
+<tr><td>Serviço alocado</td><td class="parcial">Implícito</td><td>Agrupamento por seção; tornado explícito na seção 5.3.</td></tr>
+</table>
+
+<h3>8.4 Rastreabilidade</h3>
+<table>
+<thead><tr><th style="width:20%">Requisito</th><th style="width:18%">Origem</th><th style="width:22%">Caso de uso</th><th>Critério</th></tr></thead>
+<tr><td>RF-01</td><td>F1, F2, F7</td><td>UC-01</td><td>CA-03</td></tr>
+<tr><td>RF-03</td><td>F5</td><td>—</td><td>CA-04</td></tr>
+<tr><td>RF-04</td><td>F5</td><td>—</td><td>CA-05</td></tr>
+<tr><td>RF-06</td><td>F2, F5</td><td>UC-01</td><td>CA-03</td></tr>
+<tr><td>RF-07</td><td>F5</td><td>—</td><td>CA-04</td></tr>
+<tr><td>RF-08</td><td>F5</td><td>—</td><td>CA-05</td></tr>
+<tr><td>RF-09</td><td>F1, F2</td><td>UC-02</td><td>CA-06</td></tr>
+<tr><td>RF-10</td><td>F6, F7</td><td>—</td><td>CA-14</td></tr>
+<tr><td>RF-12</td><td>F2</td><td>UC-02</td><td>CA-06</td></tr>
+<tr><td>RF-13, RF-14, RF-15</td><td>F1, F2, F5, F6</td><td>UC-03</td><td>CA-07, CA-10</td></tr>
+<tr><td>RF-19</td><td>F6</td><td>UC-03</td><td>CA-11</td></tr>
+<tr><td>RF-20</td><td>F6</td><td>UC-03</td><td>CA-12</td></tr>
+<tr><td>RNF-01</td><td>F3</td><td>UC-01, UC-02</td><td>CA-01</td></tr>
+<tr><td>RNF-02</td><td>F3</td><td>UC-01, UC-02</td><td>CA-02, CA-09</td></tr>
+<tr><td>RNF-03</td><td>F6</td><td>UC-01, UC-02</td><td>CA-13</td></tr>
+<tr><td>RNF-06</td><td>F4</td><td>UC-03</td><td>CA-07</td></tr>
+<tr><td>RNF-09</td><td>F4</td><td>—</td><td>CA-08</td></tr>
+</table>
+<p>RNF-04, RNF-05 e RNF-12 são verificados por inspeção da arquitetura e da execução em contêiner. RNF-15 a RNF-18 recebem critérios quando a P-22 for resolvida. Para rastreabilidade até o código, cada ADR aceito terá o campo “Evidência na implementação”.</p>
+
+<h3>8.5 Medição dos requisitos</h3>
+<table>
+<thead><tr><th>Indicador</th><th style="width:16%">Valor</th><th style="width:16%">%</th></tr></thead>
+<tr><td>RF Confirmados</td><td>14 de 21</td><td>66,7%</td></tr>
+<tr><td>RNF Confirmados</td><td>10 de 18</td><td>55,6%</td></tr>
+<tr><td>RN Confirmadas</td><td>7 de 9</td><td>77,8%</td></tr>
+<tr><td>RF com ao menos um critério de aceitação</td><td>14 de 21</td><td>66,7%</td></tr>
+<tr><td>RF Confirmados com critério de aceitação</td><td>14 de 14</td><td>100%</td></tr>
+<tr><td>RNF com critério de aceitação</td><td>5 de 18</td><td>27,8%</td></tr>
+<tr><td>RNF Confirmados verificáveis hoje (critério ou inspeção)</td><td>6 de 10</td><td>60,0%</td></tr>
+<tr><td>Critérios congeláveis para a primeira medição</td><td>6 de 14</td><td>42,9%</td></tr>
+<tr><td>Pendências: resolvidas · parciais · abertas</td><td>1 · 4 · 20</td><td>—</td></tr>
+</table>
+<p>A métrica de conformidade do produto é a conformidade ponderada da seção 3.4, com meta de pelo menos 85% na média de 3 ou mais execuções por versão do documento.</p>
+
+<!-- ===================== 9 ===================== -->
+<h2>9. Ferramentas</h2>
+<span class="swebok">SWEBOK V3.0 · 8 Software Requirements Tools</span>
+<table>
+<thead><tr><th style="width:26%">Ferramenta</th><th>Uso</th></tr></thead>
+<tr><td>Git e GitHub</td><td>Versionamento dos documentos, histórico de revisões e issues para decisões em aberto.</td></tr>
+<tr><td>Markdown</td><td>Formato do documento de requisitos, do relatório técnico e do modelo do grupo.</td></tr>
+<tr><td>Gherkin (Given/When/Then)</td><td>Escrita dos critérios de aceitação.</td></tr>
+<tr><td>Mermaid</td><td>Diagramas de arquitetura e de domínio no Relatório Técnico.</td></tr>
+<tr><td>Python, FastAPI e pytest</td><td>Suíte de testes congelada e runner de conformidade do experimento piloto.</td></tr>
+<tr><td>Agentes LLM</td><td>Claude Sonnet, Gemini 3 Pro e Perplexity, na geração de código a partir da especificação (Fase 6).</td></tr>
+<tr><td>Docker</td><td>Execução dos serviços (RNF-12).</td></tr>
+</table>
+
+<!-- ===================== 10 ===================== -->
+<h2 class="quebra">10. Pendências</h2>
+<table>
+<thead><tr><th style="width:7%">ID</th><th>Pergunta</th><th style="width:22%">A quem perguntar</th></tr></thead>
+<tr><td>P-01</td><td><b>Resolvida (v0.2).</b> O grupo implementa os blocos 2 e 3 e integra com os demais.</td><td>—</td></tr>
+<tr><td>P-02</td><td><b>Parcial (v0.3).</b> Falta o contrato dos eventos de pedido: campos, identificação do fornecimento, cancelamento e venda em <code>pedido_atualizado</code>.</td><td>Grupo de pedidos (P-23)</td></tr>
+<tr><td>P-03</td><td>O estoque é controlado por fornecimento ou por produto?</td><td>Professor</td></tr>
+<tr><td>P-04</td><td>O serviço revalida o JWT ou confia no API Gateway? Como o token informa empresa e perfil? Formato da resposta de token inválido?</td><td>Grupo de autenticação</td></tr>
+<tr><td>P-05</td><td>O que significa “origem”? Atributo do produto ou do fornecimento?</td><td>Professor</td></tr>
+<tr><td>P-06</td><td>Atributos obrigatórios do produto e valores de unidade e tipo de transporte.</td><td>Professor, Logística/Frete</td></tr>
+<tr><td>P-07</td><td><b>Parcial (v0.3).</b> Quem altera e exclui produto? Quem gerencia categorias? O administrador acessa os serviços?</td><td>Professor</td></tr>
+<tr><td>P-08</td><td>Serialização dos eventos, envelope padrão e uso do Schema Registry.</td><td>Infra, turma</td></tr>
+<tr><td>P-09</td><td>Exclusão de produto lógica ou física? Efeito sobre fornecimentos?</td><td>Professor</td></tr>
+<tr><td>P-10</td><td>Categorias são lista fixa ou cadastro? Há hierarquia?</td><td>Professor</td></tr>
+<tr><td>P-11</td><td>Fornecimento pode ser alterado (inclusive para repor quantidade) ou encerrado? Há eventos?</td><td>Professor</td></tr>
+<tr><td>P-12</td><td>Contrato do evento <code>empresa_cadastrada</code>.</td><td>Usuários/Acesso</td></tr>
+<tr><td>P-13</td><td>“Pedido de fornecimento entre fornecedor e grupo” é o <code>fornecimento_criado</code> ou outro fluxo?</td><td>Professor</td></tr>
+<tr><td>P-14</td><td><b>Parcial (v0.3).</b> Logs centralizados e monitoramento são obrigatórios?</td><td>Professor, infra</td></tr>
+<tr><td>P-15</td><td>Formato do preço (moeda e precisão).</td><td>Professor</td></tr>
+<tr><td>P-16</td><td>O que acontece quando chega pedido maior que a disponível? Há evento de falha de reserva?</td><td>Professor, pedidos</td></tr>
+<tr><td>P-17</td><td>Os nomes de eventos do diagrama são tópicos ou tipos de evento?</td><td>Infra, turma</td></tr>
+<tr><td>P-18</td><td>Existem metas de desempenho?</td><td>Professor</td></tr>
+<tr><td>P-19</td><td>Quais módulos consomem os eventos de produto, <code>fornecimento_criado</code> e <code>estoque_atualizado</code>?</td><td>Demais grupos</td></tr>
+<tr><td>P-20</td><td><b>Parcial (v0.3).</b> O mesmo fornecedor pode ter mais de um fornecimento do mesmo produto?</td><td>Professor</td></tr>
+<tr><td>P-21</td><td>Preço e quantidade podem ser zero?</td><td>Professor</td></tr>
+<tr><td>P-22</td><td>Quem implementa as telas do módulo? Quais critérios de acessibilidade?</td><td>Professor, UX</td></tr>
+<tr><td>P-23</td><td>Qual grupo é responsável por pedidos?</td><td>Professor, demais grupos</td></tr>
+<tr><td>P-24</td><td>Qual o papel do grupo de banco de dados?</td><td>Grupo de banco</td></tr>
+<tr><td>P-25</td><td>A transcrição F7 termina no meio de uma frase (29:45). Há continuação?</td><td>Grupo (gravação)</td></tr>
+</table>
+
+<!-- ===================== 11 ===================== -->
+<h2>11. Conclusões e recomendações</h2>
+<p>A análise mostra uma especificação com boa rastreabilidade de origem, status explícito e pendências registradas, o que atende bem às recomendações do SWEBOK sobre atributos, rastreabilidade e gestão de mudanças. Todos os requisitos funcionais confirmados têm critério de aceitação. As principais lacunas estão na especificação de contratos, na priorização e na quantificação de parte dos requisitos não funcionais.</p>
+<p>Recomendações para a versão 1.0 do documento de requisitos, em ordem de impacto:</p>
+<ol>
+<li>Fechar com o grupo de pedidos o contrato de <code>pedido_criado</code> e <code>pedido_atualizado</code> (P-02, P-23), que libera CA-10 a CA-12 e o núcleo do controle de estoque.</li>
+<li>Responder P-16 (pedido acima do disponível), que completa a pré-condição da reserva (seção 5.5).</li>
+<li>Atribuir prioridade, peso e veto a cada critério de aceitação (seções 5.1 e 8.3).</li>
+<li>Especificar os contratos de entrada e saída: endpoints REST e payload dos eventos (P-08, P-04).</li>
+<li>Adicionar a seção de guardrails (Always, Ask First, Never) prevista no modelo do grupo.</li>
+<li>Executar a primeira medição de conformidade do microsserviço com os 6 critérios congeláveis, com pelo menos 3 execuções por agente.</li>
+<li>Decidir se a entidade Reserva (ADR-005) vira requisito de dados.</li>
+</ol>
+
+<!-- ===================== 12 ===================== -->
+<h2>12. Referências</h2>
+<ul>
+<li>BOURQUE, P.; FAIRLEY, R. E. (ed.). <i>Guide to the Software Engineering Body of Knowledge (SWEBOK), Version 3.0</i>. IEEE Computer Society, 2014. Capítulo 1: Software Requirements.</li>
+<li>ISO/IEC/IEEE 29148:2018. <i>Systems and software engineering — Life cycle processes — Requirements engineering</i>.</li>
+<li>ISO/IEC 25010. <i>Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model</i>.</li>
+<li>Apache Kafka. Documentação oficial. https://kafka.apache.org/documentation/</li>
+<li>KIP-679: Producer will enable the strongest delivery guarantee by default.</li>
+<li>RFC 6750. <i>The OAuth 2.0 Authorization Framework: Bearer Token Usage</i>.</li>
+<li>RFC 9110. <i>HTTP Semantics</i>.</li>
+<li>Cucumber. <i>Gherkin Reference</i>. https://cucumber.io/docs/gherkin/reference/</li>
+<li>NYGARD, M. <i>Documenting Architecture Decisions</i>, 2011.</li>
+<li>Grupo Fornecimento e Produtos. <i>Documento de Requisitos</i> v0.3 e <i>Relatório Técnico</i> v0.1. Repositório davicalvarenga/Sistema-MicServ-SD.</li>
+</ul>
+
+</body>
+</html>

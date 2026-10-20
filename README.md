@@ -38,6 +38,7 @@ O formato dos eventos e os nomes finais dos tópicos ainda estão em definição
 |---|---|
 | [Documento de Requisitos](docs/documento-de-requisitos.md) | Requisitos funcionais e não funcionais, regras de negócio, casos de uso e critérios de aceitação. Referência do time de QA |
 | [Relatório Técnico](docs/relatorio-tecnico.md) | Arquitetura, implementação e registro de cada decisão técnica com a sua justificativa |
+| [Análise de Requisitos (SWEBOK)](docs/analise-requisitos/Analise-de-Requisitos-SWEBOK.pdf) | Análise do Documento de Requisitos v0.3 organizada pelas subáreas de *Software Requirements* do SWEBOK V3.0. Fonte em [HTML](docs/analise-requisitos/analise-requisitos.html) |
 
 ## Situação atual
 
@@ -75,9 +76,17 @@ As instruções de execução serão adicionadas quando a stack for definida e o
 ```
 .
 ├── README.md
-└── docs/
-    ├── documento-de-requisitos.md
-    └── relatorio-tecnico.md
+├── docs/
+│   ├── documento-de-requisitos.md
+│   ├── relatorio-tecnico.md
+│   └── analise-requisitos/
+│       ├── Analise-de-Requisitos-SWEBOK.pdf
+│       └── analise-requisitos.html
+└── entrega_grupo/
+    ├── 1_processo/
+    ├── 2_artefato_instrucoes/
+    ├── 3_relatorio_tecnico/
+    └── 4_evidencias/
 ```
 
 ## Como contribuir
