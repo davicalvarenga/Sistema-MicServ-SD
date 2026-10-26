@@ -1,6 +1,6 @@
 # Fornecimento e Produtos | Portal B2B Distribuído
 
-Microsserviços de **Produtos** e **Fornecimentos** do Portal B2B Distribuído, trabalho da disciplina de Sistemas Distribuídos. O portal é dividido entre vários grupos da turma, e os módulos se comunicam por eventos no Apache Kafka.
+Microsserviços de **Produtos** e **Fornecimentos** do Portal B2B Distribuído, trabalho da disciplina de Sistemas Distribuídos. O portal é dividido entre vários grupos da turma, e os módulos se comunicam por eventos no Redpanda, compatível com a API do Apache Kafka.
 
 ## Integrantes
 
@@ -11,38 +11,50 @@ Microsserviços de **Produtos** e **Fornecimentos** do Portal B2B Distribuído, 
 
 ## Responsabilidades do grupo
 
-| Serviço | O que faz |
-|---|---|
-| Produtos | Cadastro de produtos, categoria, unidade e tipo de transporte |
-| Fornecimentos | Relação de fornecimento entre fornecedor e produto, preço, quantidade, origem e controle de estoque |
+| Serviço | Porta local | Schema no banco | O que faz |
+|---|---|---|---|
+| `produtos-service` | 8102 | `produtos` | Cadastro de produtos, categoria, unidade e tipo de transporte |
+| `fornecimentos-service` | 8103 | `fornecimentos` | Relação de fornecimento entre fornecedor e produto, preço, quantidade, origem e controle de estoque |
 
 O controle de estoque separa a **quantidade disponível** da **quantidade reservada**. Quando um pedido é criado, a quantidade é reservada. Se o pedido for cancelado, ela volta a ficar disponível. Se a venda for concluída, ela sai do estoque.
 
-O grupo se integra, por eventos Kafka, com os módulos de Usuários/Acesso, Mercado, Negociação/Leilão, Pedidos e Logística/Frete, que são de outros grupos.
+O grupo se integra por eventos com os serviços de outros grupos da turma:
+
+| Grupo | Serviços | Integração com o nosso grupo |
+|---|---|---|
+| Autenticação (Equipe A) | `usuarios-service` | Token JWT validado em cada requisição e evento `empresa_cadastrada` |
+| Compra e Demanda | `demanda-service` | Consome `produto_cadastrado` |
+| Mercado, Negociação/Leilão e Pedidos | `mercado-service`, `negociacao-service`, `pedidos-service` | Mercado consome os nossos eventos. Pedidos publica os eventos que reservam e liberam estoque |
+| Logística/Transporte | `logistica-service`, `transportadoras-service` | Usa o tipo de transporte do produto |
+| Banco de Dados | PostgreSQL 16 | Cria as tabelas dos schemas `produtos` e `fornecimentos` |
+| Infraestrutura | Gateway, Redpanda, observabilidade | Mantém o [kit de integração](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra) usado como base |
+| UX/UI | Front-ends | Faz a tela `/app/produtos`, que consome a nossa API |
+| Teste | Suíte de testes | Testa os nossos serviços com base no Documento de Requisitos |
 
 ## Eventos
 
-| Evento | Papel do grupo |
-|---|---|
-| `produto_cadastrado`, `produto_atualizado`, `produto_excluido` | Publica (Produtos) e consome (Fornecimentos) |
-| `fornecimento_criado` | Publica |
-| `estoque_atualizado` | Publica |
-| `pedido_criado`, `pedido_atualizado` | Consome, para reservar, liberar ou dar baixa no estoque |
-| `empresa_cadastrada` | Consome |
+| Tópico | Chave | Papel do grupo |
+|---|---|---|
+| `produto_cadastrado` | `produtoId` | Publica (Produtos) e consome (Fornecimentos) |
+| `fornecimento_criado` | `fornecimentoId` | Publica |
+| `estoque_atualizado` | `fornecimentoId` | Publica |
+| `pedido_criado`, `pedido_atualizado` | `pedidoId` | Consome, para reservar, liberar ou dar baixa no estoque |
+| `empresa_cadastrada` | `empresaId` | Consome |
+| `produtos.dlt`, `fornecimentos.dlt` | a do evento original | Publica as mensagens que falharam após 3 tentativas |
 
-O formato dos eventos e os nomes finais dos tópicos ainda estão em definição ([issue #3](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/3)).
+Os tópicos e o envelope dos eventos seguem o catálogo do kit de integração. Os eventos de alteração e exclusão de produto ainda não têm tópico no kit (pendência P-26 do Documento de Requisitos).
 
 ## Documentação
 
 | Documento | Conteúdo |
 |---|---|
-| [Documento de Requisitos](docs/documento-de-requisitos.md) | Requisitos funcionais e não funcionais, regras de negócio, casos de uso e critérios de aceitação. Referência do time de QA |
-| [Relatório Técnico](docs/relatorio-tecnico.md) | Arquitetura, implementação e registro de cada decisão técnica com a sua justificativa |
+| [Documento de Requisitos](docs/documento-de-requisitos.md) | Requisitos funcionais e não funcionais, regras de negócio, casos de uso e critérios de aceitação. Referência do Grupo de Teste (QA). Versão 0.4 |
+| [Relatório Técnico](docs/relatorio-tecnico.md) | Arquitetura, implementação, análise do kit de infraestrutura e registro de cada decisão técnica com a sua justificativa. Versão 0.2 |
 | [Análise de Requisitos (SWEBOK)](docs/analise-requisitos/Analise-de-Requisitos-SWEBOK.pdf) | Análise do Documento de Requisitos v0.3 organizada pelas subáreas de *Software Requirements* do SWEBOK V3.0. Fonte em [HTML](docs/analise-requisitos/analise-requisitos.html) |
 
 ## Situação atual
 
-O projeto está na fase de levantamento de requisitos e definição de arquitetura. Ainda não há código.
+O projeto está na fase de requisitos e arquitetura. Ainda não há código dos serviços. A base de implementação será o kit de integração do grupo de Infraestrutura, com as correções descritas na seção 3.4 do Relatório Técnico.
 
 As decisões em aberto estão nas [issues](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues):
 
@@ -58,18 +70,39 @@ As decisões em aberto estão nas [issues](https://github.com/davicalvarenga/Sis
 | [#8](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/8) | Infra e banco de dados |
 | [#9](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/9) | Telas do módulo |
 | [#10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10) | Decisões internas do grupo |
+| [#12](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/12) | Correções e ajustes a pedir ao grupo de Infraestrutura |
+| [#13](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/13) | Conflitos entre o professor e o kit de infraestrutura |
 
 ## Tecnologias
 
-| Item | Escolha |
-|---|---|
-| Mensageria | Apache Kafka (definido pela turma) |
-| Contêineres | Docker (exigido pelo professor) |
-| Linguagem, framework e banco | Em definição ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10)) |
+| Item | Escolha | Situação |
+|---|---|---|
+| Mensageria | Redpanda, compatível com a API do Kafka (3 brokers) | Definido pelo kit |
+| Banco de dados | PostgreSQL 16, banco `portal_b2b`, um schema por serviço | Definido pelo kit |
+| Contêineres | Docker | Exigido pelo professor |
+| Gateway | Nginx na porta 8080 | Definido pelo kit |
+| Linguagem e framework | Python 3.12 com FastAPI | Proposta do grupo ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10)) |
 
 ## Como executar
 
-As instruções de execução serão adicionadas quando a stack for definida e o primeiro serviço estiver implementado. A execução será feita com Docker.
+O ambiente local vem do [kit de integração](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra). É preciso ter Docker e Docker Compose instalados.
+
+```bash
+git clone https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra
+cd portal-b2b-kit-infra
+make env        # copia .env.example para .env
+make infra-up   # sobe PostgreSQL, Redpanda, gateway, PgAdmin e Kafka UI
+```
+
+| Ferramenta | Endereço |
+|---|---|
+| Gateway (APIs e front-ends) | http://localhost:8080 |
+| PgAdmin | http://localhost:5050 |
+| Kafka UI | http://localhost:8090 |
+| Redpanda (clientes Kafka) | localhost:19092 |
+| PostgreSQL | localhost:5432 |
+
+As instruções para rodar os nossos serviços serão adicionadas quando o primeiro serviço estiver implementado. Antes disso, veja a seção 3.4 do [Relatório Técnico](docs/relatorio-tecnico.md): o script do banco do kit não dá aos serviços permissão nas próprias tabelas, e a correção está descrita lá.
 
 ## Estrutura do repositório
 
@@ -79,6 +112,7 @@ As instruções de execução serão adicionadas quando a stack for definida e o
 ├── docs/
 │   ├── documento-de-requisitos.md
 │   ├── relatorio-tecnico.md
+│   ├── AGENTE-VALIDACAO.md
 │   └── analise-requisitos/
 │       ├── Analise-de-Requisitos-SWEBOK.pdf
 │       └── analise-requisitos.html
@@ -86,7 +120,8 @@ As instruções de execução serão adicionadas quando a stack for definida e o
     ├── 1_processo/
     ├── 2_artefato_instrucoes/
     ├── 3_relatorio_tecnico/
-    └── 4_evidencias/
+    ├── 4_evidencias/
+    └── 5_cenario_real/
 ```
 
 ## Como contribuir
