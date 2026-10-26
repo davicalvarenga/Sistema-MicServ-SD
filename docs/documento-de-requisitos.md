@@ -7,6 +7,8 @@
 **Data:** 26/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O Grupo de Teste (QA) deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
+>
+> Para validação pelo QA e geração de código, este documento foi detalhado no modelo ERS-LLM do Grupo de Teste, um arquivo por serviço: [ESP-PRD-001](especificacoes/ESP-PRD-001_Produtos.md) e [ESP-FRN-001](especificacoes/ESP-FRN-001_Fornecimentos.md). As ESPs cobrem só os itens decididos; as pendências deste documento aparecem nelas como fora do escopo da versão 1.0.
 
 ---
 

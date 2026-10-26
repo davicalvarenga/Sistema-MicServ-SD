@@ -71,8 +71,10 @@ END $$;
 CREATE TABLE IF NOT EXISTS fornecimentos.reserva (
   pedido_id VARCHAR(64) NOT NULL,
   fornecimento_id VARCHAR(64) NOT NULL REFERENCES fornecimentos.fornecimento (id),
-  quantidade NUMERIC(12, 2) NOT NULL CHECK (quantidade > 0),
-  situacao VARCHAR(16) NOT NULL CHECK (situacao IN ('RESERVADA', 'LIBERADA', 'BAIXADA')),
+  quantidade NUMERIC(12, 2) NOT NULL CHECK (quantidade >= 0),
+  -- CANCELADA_SEM_RESERVA (quantidade 0): o cancelamento chegou antes do pedido_criado,
+  -- que fica em outro tópico; impede que a criação posterior reserve (ESP-FRN-001, §6.2)
+  situacao VARCHAR(32) NOT NULL CHECK (situacao IN ('RESERVADA', 'LIBERADA', 'BAIXADA', 'CANCELADA_SEM_RESERVA')),
   criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (pedido_id, fornecimento_id)

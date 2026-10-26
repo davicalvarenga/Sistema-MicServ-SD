@@ -37,8 +37,8 @@
     },
     "correlationId": {
       "type": "string",
-      "format": "uuid",
-      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+      "minLength": 1,
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição ou do evento que originou este. Não é necessariamente UUID: o gateway do kit usa o $request_id do Nginx (32 caracteres hexadecimais) quando o cliente não envia o cabeçalho."
     },
     "aggregateId": {
       "type": "string",

@@ -16,7 +16,7 @@ Este relatório documenta o que foi implementado nos serviços do grupo, cada de
 2. **Toda decisão aceita aponta onde está no código.** O campo "Evidência na implementação" recebe o caminho do arquivo, o nome do tópico ou da tabela. Uma decisão sem evidência ainda não foi implementada.
 3. **O que não foi feito é declarado.** A seção 13 lista as limitações conhecidas, e a seção 14 registra onde a implementação diverge do planejado e por quê.
 
-Os requisitos citados (RF, RNF, RN, CA) e as pendências (P) estão no [Documento de Requisitos](documento-de-requisitos.md) versão 0.4. As decisões em aberto estão nas [issues do repositório](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues).
+Os requisitos citados (RF, RNF, RN, CA) e as pendências (P) estão no [Documento de Requisitos](documento-de-requisitos.md) versão 0.4. As especificações por serviço, no modelo do Grupo de Teste, estão em [`especificacoes/`](especificacoes/): elas definem as portas (`EventBus`, `Clock` e repositório) pelas quais o código acessa banco e Kafka. As decisões em aberto estão nas [issues do repositório](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues).
 
 ---
 

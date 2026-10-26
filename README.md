@@ -51,6 +51,7 @@ Os tópicos e o envelope dos eventos seguem o catálogo do kit de integração. 
 | [Documento de Requisitos](docs/documento-de-requisitos.md) | Requisitos funcionais e não funcionais, regras de negócio, casos de uso e critérios de aceitação. Referência do Grupo de Teste (QA). Versão 0.4 |
 | [Relatório Técnico](docs/relatorio-tecnico.md) | Arquitetura, implementação, análise do kit de infraestrutura e registro de cada decisão técnica com a sua justificativa. Versão 0.3 |
 | [Contrato de Eventos](docs/contrato-eventos.md) | Conteúdo de cada evento publicado e consumido, com [JSON Schemas](docs/contratos/schemas/) e [exemplos](docs/contratos/exemplos/) |
+| [ESP-PRD-001: Produtos](docs/especificacoes/ESP-PRD-001_Produtos.md) e [ESP-FRN-001: Fornecimentos](docs/especificacoes/ESP-FRN-001_Fornecimentos.md) | Especificações de cada serviço no modelo ERS-LLM do Grupo de Teste, para validação do QA e geração de código com LLM |
 | [Proposta de DDL](docs/banco/README.md) | Ajustes nos schemas `produtos` e `fornecimentos` para o grupo de Banco de Dados, com o resultado dos testes |
 | [Análise de Requisitos (SWEBOK)](docs/analise-requisitos/Analise-de-Requisitos-SWEBOK.pdf) | Análise do Documento de Requisitos v0.3 organizada pelas subáreas de *Software Requirements* do SWEBOK V3.0. Fonte em [HTML](docs/analise-requisitos/analise-requisitos.html) |
 
@@ -115,6 +116,9 @@ As instruções para rodar os nossos serviços serão adicionadas quando o prime
 │   ├── documento-de-requisitos.md
 │   ├── relatorio-tecnico.md
 │   ├── contrato-eventos.md
+│   ├── especificacoes/
+│   │   ├── ESP-PRD-001_Produtos.md
+│   │   └── ESP-FRN-001_Fornecimentos.md
 │   ├── contratos/
 │   │   ├── schemas/
 │   │   └── exemplos/

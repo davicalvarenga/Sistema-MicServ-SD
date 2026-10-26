@@ -14,11 +14,12 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 
 | Regra | Detalhe | Origem |
 |---|---|---|
-| Envelope | Todo evento tem `eventId` (UUID), `eventType` (nome do tópico), `eventVersion` (`"1.0"`), `timestamp` (ISO-8601 em UTC), `source` (serviço produtor), `correlationId` (UUID), `aggregateId` (chave da mensagem) e `payload` | Kit, `CONTRACTS.md` |
+| Envelope | Todo evento tem `eventId` (UUID), `eventType` (nome do tópico), `eventVersion` (`"1.0"`), `timestamp` (ISO-8601 em UTC), `source` (serviço produtor), `correlationId` (texto), `aggregateId` (chave da mensagem) e `payload` | Kit, `CONTRACTS.md` |
 | Chave da mensagem | É sempre o `aggregateId` | Kit, CT-E02 |
 | Nomes de campos | `camelCase` no `payload`, como no envelope e no exemplo de `pedido_criado` do kit | Grupo |
 | Quantidades e preços | Números JSON com até 2 casas decimais (`NUMERIC(12,2)` no banco). Quem recebe deve converter para decimal antes de fazer contas | Kit, banco |
-| Datas | ISO-8601 em UTC | Kit |
+| Datas | ISO-8601 em UTC (ex.: `2026-10-26T14:00:00Z`) | Kit |
+| `correlationId` | Texto não vazio, **não necessariamente UUID**: o gateway do kit repassa o `X-Correlation-Id` do cliente e, se ele não vier, usa o `$request_id` do Nginx (32 caracteres hexadecimais) | Kit, `gateway/nginx.conf` |
 | Identificação de quem agiu | Objeto com `empresaId` e `usuarioId`. **Nenhum evento leva token de acesso** | RNF-09 |
 | Campos desconhecidos | Os nossos consumidores ignoram campos que não conhecem. Os nossos eventos só aceitam os campos definidos no schema | Grupo |
 | Evolução | Adicionar campo opcional mantém a `eventVersion`. Remover, renomear ou mudar o tipo de um campo exige nova `eventVersion` e aviso aos consumidores. É o que mantém a compatibilidade `BACKWARD` configurada no Schema Registry do kit | Kit, grupo |
@@ -177,11 +178,11 @@ Precisamos de `pedidoId`, `fornecimentoId` e `status`. Schema: [`pedido_atualiza
 
 | `status` | O que o `fornecimentos-service` faz |
 |---|---|
-| Valor que indica **cancelamento** (a informar pelo grupo de Pedidos) | Devolve a quantidade reservada para a disponível e publica `estoque_atualizado` com `LIBERACAO` |
-| Valor que indica **venda concluída** (a informar pelo grupo de Pedidos) | Retira a quantidade reservada do estoque e publica `estoque_atualizado` com `BAIXA` |
+| `CANCELADO` (proposta, a confirmar com o grupo de Pedidos) | Devolve a quantidade reservada para a disponível e publica `estoque_atualizado` com `LIBERACAO`. Se ainda não houver reserva, registra o cancelamento para que um `pedido_criado` posterior não reserve |
+| `VENDA_CONCLUIDA` (proposta, a confirmar com o grupo de Pedidos) | Retira a quantidade reservada do estoque e publica `estoque_atualizado` com `BAIXA` |
 | Qualquer outro | Registra no log e ignora |
 
-O exemplo em [`exemplos/pedido_atualizado.json`](contratos/exemplos/pedido_atualizado.json) usa `CANCELADO` só como ilustração.
+Os valores `CANCELADO` e `VENDA_CONCLUIDA` são a proposta do grupo, usada na ESP-FRN-001. Se o grupo de Pedidos definir outros, o contrato e a ESP mudam de versão.
 
 ### 3.3 `produto_cadastrado` (do nosso `produtos-service`)
 
