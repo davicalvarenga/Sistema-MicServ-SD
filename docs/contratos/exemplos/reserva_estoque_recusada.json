@@ -1,0 +1,17 @@
+{
+  "eventId": "e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b",
+  "eventType": "reserva_estoque_recusada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T14:12:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "4d3c2b1a-0f9e-4d8c-b7a6-5f4e3d2c1b0a",
+  "aggregateId": "ped-998812",
+  "payload": {
+    "pedidoId": "ped-998812",
+    "fornecimentoId": "forn-55",
+    "quantidadeSolicitada": 20000,
+    "quantidadeDisponivel": 12000,
+    "motivo": "ESTOQUE_INSUFICIENTE",
+    "recusadoEm": "2026-10-26T14:12:00.000Z"
+  }
+}

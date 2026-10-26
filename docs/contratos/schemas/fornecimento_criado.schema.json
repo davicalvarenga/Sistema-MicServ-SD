@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/fornecimento_criado.schema.json",
+  "title": "fornecimento_criado",
+  "description": "Publicado pelo fornecimentos-service quando um fornecedor cria um fornecimento (oferta).",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "fornecimento_criado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "fornecimentos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: fornecimentoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "fornecimentoId",
+        "fornecedorId",
+        "produtoId",
+        "unidade",
+        "preco",
+        "quantidadeDisponivel",
+        "origem",
+        "criadoPor",
+        "criadoEm"
+      ],
+      "properties": {
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Empresa do token de quem criou (RN-10)."
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "unidade": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Unidade do produto, copiada da referência local."
+        },
+        "preco": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Preço por unidade, até 2 casas decimais. Moeda: P-15."
+        },
+        "quantidadeDisponivel": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante."
+        },
+        "origem": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "criadoPor": {
+          "type": "object",
+          "required": [
+            "empresaId",
+            "usuarioId"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "empresaId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "usuarioId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "description": "Quem executou a ação. Nunca contém token de acesso (RNF-09)."
+        },
+        "criadoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

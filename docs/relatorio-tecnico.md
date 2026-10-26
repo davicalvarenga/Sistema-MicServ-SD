@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.2 (esboço)
+**Versão:** 0.3 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -215,7 +215,9 @@ O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A p
 
 Os tópicos de negócio têm 3 partições, fator de replicação 3 e retenção de 7 dias. Os tópicos de falha têm 1 partição e retenção de 14 dias (F8, `CONTRACTS.md` e `scripts/init_topics.sh`).
 
-> **A preencher:** o conteúdo (`payload`) de cada evento, com exemplo, e o nome do grupo de consumidores de cada serviço.
+O conteúdo (`payload`) de cada evento, com JSON Schema e exemplo validado, está no [Contrato de Eventos](contrato-eventos.md).
+
+> **A preencher:** o nome do grupo de consumidores de cada serviço.
 
 ### 6.2 Fluxo de reserva de estoque
 
@@ -283,7 +285,9 @@ Referências: ADR-003, ADR-004, ADR-006, ADR-007, ADR-010.
 - As tabelas são criadas pelo grupo de Banco de Dados com o usuário `portal_ddl`. O grupo de Fornecimento e Produtos não executa DDL.
 - A reserva é feita com atualização condicional (ADR-006), na mesma transação do registro em `processed_events` (ADR-007).
 
-> **A preencher:** o esquema final das tabelas, o código da reserva e como banco e Kafka são mantidos consistentes.
+A proposta de DDL enviada ao grupo de Banco de Dados está em [`banco/`](banco/README.md): `quantidade_reservada`, tabela `reserva`, tabela `produto_referencia`, tabelas `outbox`, verificações de estoque não negativo e permissões corrigidas. Ela foi testada em PostgreSQL 16, inclusive com duas reservas simultâneas (teste T11), o que confirma o comportamento do ADR-006.
+
+> **A preencher:** o esquema final aprovado pelo grupo de Banco de Dados, o código da reserva e como banco e Kafka são mantidos consistentes.
 
 ---
 
@@ -416,6 +420,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
   - Bloqueio pessimista (`SELECT ... FOR UPDATE` seguido de `UPDATE`): correto, mas mantém a linha bloqueada por mais tempo e exige duas instruções.
   - Controle otimista com coluna de versão: evita bloqueio, mas obriga a repetir a operação quando há conflito, o que é frequente justamente no cenário de alta disputa citado pelo professor.
 - **Justificativa:** o banco confirmado pelo kit é o PostgreSQL 16. No nível de isolamento padrão (Read Committed), uma segunda atualização concorrente sobre a mesma linha espera a primeira terminar e reavalia a condição `WHERE` sobre a versão nova da linha (documentação do PostgreSQL, seção *Transaction Isolation*). Assim, a segunda reserva vê o saldo já reduzido. Os parâmetros (`%s`) evitam injeção de SQL.
+- **Verificação:** em 26/10/2026, duas sessões tentaram reservar 60 unidades de um fornecimento com 100, ao mesmo tempo. A segunda esperou a primeira, reavaliou a condição e não reservou nada (`UPDATE 0`). O estoque terminou com 40 disponíveis e 60 reservadas (teste T11 em [`banco/README.md`](banco/README.md)).
 - **Evidência na implementação:** a preencher
 - **Status:** Proposta ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10))
 
@@ -603,4 +608,5 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | Versão | Data | Descrição |
 |---|---|---|
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
+| 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

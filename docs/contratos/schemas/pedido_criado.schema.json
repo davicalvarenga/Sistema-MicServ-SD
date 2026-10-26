@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/pedido_criado.schema.json",
+  "title": "pedido_criado (o que o fornecimentos-service precisa receber)",
+  "description": "Publicado pelo pedidos-service. Os campos obrigatórios são os que a reserva de estoque usa. Outros campos são aceitos e ignorados.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "pedido_criado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "pedidos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: pedidoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "pedidoId",
+        "fornecimentoId",
+        "produtoId",
+        "fornecedorId",
+        "quantidade",
+        "status"
+      ],
+      "properties": {
+        "pedidoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "NECESSÁRIO e ainda ausente no exemplo do kit (P-02)."
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "quantidade": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante."
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "negociacaoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "compradorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "valorTotal": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

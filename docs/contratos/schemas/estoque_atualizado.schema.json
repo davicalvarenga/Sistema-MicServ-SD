@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/estoque_atualizado.schema.json",
+  "title": "estoque_atualizado",
+  "description": "Publicado pelo fornecimentos-service sempre que o estoque de um fornecimento muda. Traz o saldo completo depois da operação.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "estoque_atualizado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "fornecimentos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: fornecimentoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "fornecimentoId",
+        "produtoId",
+        "fornecedorId",
+        "operacao",
+        "quantidadeMovimentada",
+        "quantidadeDisponivel",
+        "quantidadeReservada",
+        "pedidoId",
+        "atualizadoEm"
+      ],
+      "properties": {
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "operacao": {
+          "enum": [
+            "RESERVA",
+            "LIBERACAO",
+            "BAIXA"
+          ],
+          "description": "RESERVA: pedido criado. LIBERACAO: pedido cancelado. BAIXA: venda concluída."
+        },
+        "quantidadeMovimentada": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante."
+        },
+        "quantidadeDisponivel": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Até 2 casas decimais (NUMERIC(12,2))."
+        },
+        "quantidadeReservada": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Até 2 casas decimais (NUMERIC(12,2))."
+        },
+        "pedidoId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "atualizadoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

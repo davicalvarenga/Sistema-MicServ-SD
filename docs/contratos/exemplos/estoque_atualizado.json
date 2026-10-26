@@ -1,0 +1,20 @@
+{
+  "eventId": "c2b1a098-7f6e-4d5c-8b4a-39281706f5e4",
+  "eventType": "estoque_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T14:10:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "b7c6d5e4-f3a2-4b1c-9d0e-8f7a6b5c4d3e",
+  "aggregateId": "forn-55",
+  "payload": {
+    "fornecimentoId": "forn-55",
+    "produtoId": "prod-1",
+    "fornecedorId": "emp-34",
+    "operacao": "RESERVA",
+    "quantidadeMovimentada": 3000,
+    "quantidadeDisponivel": 12000,
+    "quantidadeReservada": 3000,
+    "pedidoId": "ped-998811",
+    "atualizadoEm": "2026-10-26T14:10:00.000Z"
+  }
+}

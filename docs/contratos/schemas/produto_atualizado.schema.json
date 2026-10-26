@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/produto_atualizado.schema.json",
+  "title": "produto_atualizado (proposta)",
+  "description": "PROPOSTA: o kit ainda não tem este tópico (P-26). Leva o estado completo do produto depois da alteração.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "produto_atualizado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "produtos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: produtoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "produtoId",
+        "nome",
+        "categoria",
+        "unidade",
+        "tipoTransporte",
+        "atualizadoPor",
+        "atualizadoEm"
+      ],
+      "properties": {
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "nome": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 255
+        },
+        "categoria": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "unidade": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "tipoTransporte": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "atualizadoPor": {
+          "type": "object",
+          "required": [
+            "empresaId",
+            "usuarioId"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "empresaId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "usuarioId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "description": "Quem executou a ação. Nunca contém token de acesso (RNF-09)."
+        },
+        "atualizadoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

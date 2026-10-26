@@ -461,7 +461,7 @@ Os tópicos, as chaves e os consumidores abaixo seguem o catálogo do kit de inf
 | `fornecimentos.dlt` | Fornecimentos | Publica (falhas) | a do evento original | | Confirmado (1 partição, retenção de 14 dias) |
 | Pedido de fornecimento | A definir | Publica e consome | A definir | | Pendente (P-13) |
 
-**Envelope.** Todos os eventos usam o envelope canônico do RNF-13. O conteúdo do `payload` de cada evento será detalhado no contrato de eventos do grupo.
+**Envelope e conteúdo.** Todos os eventos usam o envelope canônico do RNF-13. O conteúdo do `payload` de cada evento, com JSON Schema e exemplo, está no [Contrato de Eventos](contrato-eventos.md).
 
 **Ordem entre tópicos.** Como cada evento tem o próprio tópico, o Kafka não garante a ordem entre eventos de tópicos diferentes, mesmo com a mesma chave (RNF-07). Isso afeta a proposta da P-26: se a alteração de produto ficar em um tópico separado, um consumidor pode receber a alteração antes do cadastro. O consumidor precisa tolerar essa situação, por exemplo comparando o `timestamp` ou uma versão do produto.
 
@@ -533,7 +533,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-25 | A transcrição F7 termina no meio de uma frase sobre empresas que têm dois perfis (29:45). Existe continuação? | Grupo (verificar gravação) |
 | P-26 | O kit só tem o tópico `produto_cadastrado`. Onde publicar a alteração e a exclusão de produto, exigidas pelo F5? Opções: criar os tópicos `produto_atualizado` e `produto_excluido`, ou publicar os três tipos em um tópico único de produto, o que garante a ordem por `produtoId` | Infraestrutura |
 | P-27 | Logística/Transporte precisa do tipo de transporte (F6, F7), mas não consome `produto_cadastrado` no catálogo do kit e consome `pedido_criado`, que não traz esse dado. Logística passa a consumir `produto_cadastrado`, ou o `pedido_criado` passa a levar o tipo de transporte? | Grupo de Logística/Transporte; Mercado, Negociação/Leilão e Pedidos |
-| P-28 | A tabela `fornecimentos.fornecimento` do kit só tem `quantidade_disponivel`. A reserva exige `quantidade_reservada` e um registro de reservas por pedido (para liberar ou dar baixa na quantidade certa). O DDL é do grupo de Banco de Dados | Grupo de Banco de Dados |
+| P-28 | A tabela `fornecimentos.fornecimento` do kit só tem `quantidade_disponivel`. A reserva exige `quantidade_reservada` e um registro de reservas por pedido (para liberar ou dar baixa na quantidade certa). O DDL é do grupo de Banco de Dados. Proposta testada em [`banco/`](banco/README.md) | Grupo de Banco de Dados |
 | P-29 | Quando o pedido é criado? O professor diz que o estoque é bloqueado ao entrar em leilão ou negociação (F6, 8:19; F7, 21:03). No kit, o `pedidos-service` cria o pedido a partir de `negociacao_fechada`, ou seja, depois da negociação. Nesse caso o estoque não fica bloqueado durante o leilão | Professor; Mercado, Negociação/Leilão e Pedidos |
 | P-30 | O professor diz que o comprador pode cadastrar produtos (F7, 1:17 a 1:49). O guia do kit (seção 7.2) diz que o comprador só cria demandas e dá lances. Se o Grupo de Teste seguir o guia, vai esperar 403 quando um comprador cadastrar produto | Infraestrutura, Autenticação, Teste |
 | P-31 | O professor diz que uma empresa pode ter os três perfis (F6, 1:34). No banco do kit, `empresa.tipo` e `usuario.perfil` têm um único valor, e o token leva um único `perfil`. Como uma empresa fornecedora e compradora opera? | Grupo de Autenticação, Banco de Dados |

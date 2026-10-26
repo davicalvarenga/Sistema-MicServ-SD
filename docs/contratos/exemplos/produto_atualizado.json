@@ -1,0 +1,21 @@
+{
+  "eventId": "9b1d6f2c-0d3e-4a5b-8c7d-6e5f4a3b2c1d",
+  "eventType": "produto_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T15:30:00.000Z",
+  "source": "produtos-service",
+  "correlationId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+  "aggregateId": "prod-1",
+  "payload": {
+    "produtoId": "prod-1",
+    "nome": "Leite integral UHT",
+    "categoria": "LATICINIOS",
+    "unidade": "L",
+    "tipoTransporte": "REFRIGERADO",
+    "atualizadoPor": {
+      "empresaId": "emp-34",
+      "usuarioId": "usr-7"
+    },
+    "atualizadoEm": "2026-10-26T15:30:00.000Z"
+  }
+}

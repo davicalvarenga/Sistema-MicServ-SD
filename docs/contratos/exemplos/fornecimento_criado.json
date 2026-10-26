@@ -1,0 +1,23 @@
+{
+  "eventId": "a8098c1a-f86e-41da-bd1a-00112444be1e",
+  "eventType": "fornecimento_criado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T14:05:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "1e2d3c4b-5a69-4788-9a0b-c1d2e3f4a5b6",
+  "aggregateId": "forn-55",
+  "payload": {
+    "fornecimentoId": "forn-55",
+    "fornecedorId": "emp-34",
+    "produtoId": "prod-1",
+    "unidade": "L",
+    "preco": 5.5,
+    "quantidadeDisponivel": 15000,
+    "origem": "Goiânia-GO",
+    "criadoPor": {
+      "empresaId": "emp-34",
+      "usuarioId": "usr-7"
+    },
+    "criadoEm": "2026-10-26T14:05:00.000Z"
+  }
+}

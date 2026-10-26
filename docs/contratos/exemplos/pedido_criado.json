@@ -1,0 +1,20 @@
+{
+  "eventId": "a8098c1a-f86e-41da-bd1a-00112444be1f",
+  "eventType": "pedido_criado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T14:09:59.000Z",
+  "source": "pedidos-service",
+  "correlationId": "b7c6d5e4-f3a2-4b1c-9d0e-8f7a6b5c4d3e",
+  "aggregateId": "ped-998811",
+  "payload": {
+    "pedidoId": "ped-998811",
+    "negociacaoId": "neg-7788",
+    "compradorId": "emp-12",
+    "fornecedorId": "emp-34",
+    "fornecimentoId": "forn-55",
+    "produtoId": "prod-1",
+    "quantidade": 3000,
+    "valorTotal": 16500.0,
+    "status": "CRIADO"
+  }
+}

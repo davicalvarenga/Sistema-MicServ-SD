@@ -1,0 +1,17 @@
+{
+  "eventId": "5c4b3a29-1807-4f6e-9d5c-4b3a2918f7e6",
+  "eventType": "produto_excluido",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T16:00:00.000Z",
+  "source": "produtos-service",
+  "correlationId": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2910",
+  "aggregateId": "prod-1",
+  "payload": {
+    "produtoId": "prod-1",
+    "excluidoPor": {
+      "empresaId": "emp-34",
+      "usuarioId": "usr-7"
+    },
+    "excluidoEm": "2026-10-26T16:00:00.000Z"
+  }
+}

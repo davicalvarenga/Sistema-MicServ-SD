@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/produto_excluido.schema.json",
+  "title": "produto_excluido (proposta)",
+  "description": "PROPOSTA: o kit ainda não tem este tópico (P-26). O efeito da exclusão sobre os fornecimentos depende da P-09.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "produto_excluido"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "produtos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição que originou o evento."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: produtoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "produtoId",
+        "excluidoPor",
+        "excluidoEm"
+      ],
+      "properties": {
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "excluidoPor": {
+          "type": "object",
+          "required": [
+            "empresaId",
+            "usuarioId"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "empresaId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "usuarioId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "description": "Quem executou a ação. Nunca contém token de acesso (RNF-09)."
+        },
+        "excluidoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

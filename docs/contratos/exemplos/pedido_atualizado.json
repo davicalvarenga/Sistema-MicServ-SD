@@ -1,0 +1,14 @@
+{
+  "eventId": "f0e1d2c3-b4a5-4968-8776-655443322110",
+  "eventType": "pedido_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T18:00:00.000Z",
+  "source": "pedidos-service",
+  "correlationId": "b7c6d5e4-f3a2-4b1c-9d0e-8f7a6b5c4d3e",
+  "aggregateId": "ped-998811",
+  "payload": {
+    "pedidoId": "ped-998811",
+    "fornecimentoId": "forn-55",
+    "status": "CANCELADO"
+  }
+}

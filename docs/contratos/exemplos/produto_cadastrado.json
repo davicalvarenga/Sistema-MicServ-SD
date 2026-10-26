@@ -1,0 +1,21 @@
+{
+  "eventId": "3f0c2a8e-6a1b-4f4e-9a7d-1c2b3d4e5f60",
+  "eventType": "produto_cadastrado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-10-26T14:00:00.000Z",
+  "source": "produtos-service",
+  "correlationId": "d3b07384-d113-4f9e-8c65-27a36c8d76e4",
+  "aggregateId": "prod-1",
+  "payload": {
+    "produtoId": "prod-1",
+    "nome": "Leite integral",
+    "categoria": "LATICINIOS",
+    "unidade": "L",
+    "tipoTransporte": "REFRIGERADO",
+    "cadastradoPor": {
+      "empresaId": "emp-34",
+      "usuarioId": "usr-7"
+    },
+    "cadastradoEm": "2026-10-26T14:00:00.000Z"
+  }
+}
