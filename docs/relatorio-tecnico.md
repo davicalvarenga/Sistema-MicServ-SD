@@ -208,6 +208,8 @@ Proposta do grupo, seguindo o padrão do kit (ADR-020):
 
 Códigos de resposta de erro, sempre no formato RFC 7807 (RNF-20): 401 (token ausente, inválido ou expirado), 403 (perfil sem permissão), 404 (recurso inexistente), 422 (dados inválidos, `size` maior que 100, produto inexistente no cadastro de fornecimento ou quantidade maior que a disponível), 429 (limite de requisições do gateway) e 503 (dependência fora do ar em `/health/ready`).
 
+Preços são em reais (BRL), com 2 casas decimais, trafegando como número JSON sem símbolo de moeda (decisão do grupo, P-15, a confirmar com o professor).
+
 O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A proposta do grupo é não manter esse endpoint, porque o estoque muda pelos eventos de pedido (ADR-022).
 
 ---
@@ -659,7 +661,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 |---|---|---|
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
 | 0.5 | 10/11/2026 | Implementação dos dois serviços: evidências dos ADRs, seções 2.2, 3.2, 5, 6, 7, 8, 10, 11, 13 e 14 preenchidas. ADR-016 aceita; ADR-021 substituída |
-| 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados |
+| 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados. Moeda do preço (BRL) registrada na seção 5 |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

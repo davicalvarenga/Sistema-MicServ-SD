@@ -91,7 +91,7 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 | `fornecedorId` | texto | Empresa fornecedora. Vem do token, nunca do corpo da requisição (RN-10) |
 | `produtoId` | texto | Produto ofertado |
 | `unidade` | texto | Unidade do produto, para interpretar quantidade e preço |
-| `preco` | número | Preço por unidade, maior que zero (moeda: P-15) |
+| `preco` | número | Preço por unidade em reais (BRL), maior que zero, com até 2 casas decimais (P-15) |
 | `quantidadeDisponivel` | número | Quantidade ofertada, maior que zero |
 | `origem` | objeto | Ponto de coleta: `cidade` (texto) e `uf` (sigla de uma das 27 unidades da federação). Formato pedido pela Logística, igual ao campo `origem` que ela propôs para o `pedido_criado` (P-05) |
 | `criadoPor` | objeto | `empresaId` e `usuarioId` de quem criou |
