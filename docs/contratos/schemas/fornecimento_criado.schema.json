@@ -92,9 +92,52 @@
           "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante."
         },
         "origem": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 255
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": false,
+          "description": "Ponto de coleta do produto, pedido pela Logística (P-05). Mesmo formato do campo origem que a Logística propôs para o pedido_criado.",
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "uf": {
+              "enum": [
+                "AC",
+                "AL",
+                "AP",
+                "AM",
+                "BA",
+                "CE",
+                "DF",
+                "ES",
+                "GO",
+                "MA",
+                "MT",
+                "MS",
+                "MG",
+                "PA",
+                "PB",
+                "PR",
+                "PE",
+                "PI",
+                "RJ",
+                "RN",
+                "RS",
+                "RO",
+                "RR",
+                "SC",
+                "SP",
+                "SE",
+                "TO"
+              ],
+              "description": "Sigla de uma das 27 unidades da federação (IBGE)."
+            }
+          }
         },
         "criadoPor": {
           "type": "object",

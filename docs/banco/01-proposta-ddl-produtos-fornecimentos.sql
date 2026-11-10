@@ -4,6 +4,8 @@
 -- Destinatário: grupo de Banco de Dados
 -- Base: database/01-init.sql do kit de infraestrutura (commit 630515c)
 -- Versão: 1.1 (10/11/2026): colunas exigidas pelas ESPs e reserva sem chave estrangeira
+-- Versão: 1.2 (10/11/2026): UF da origem do fornecimento e peso unitário do produto,
+--         pedidos pelo grupo de Logística/Transporte (ESP-FRN-001 v1.2, ESP-PRD-001 v1.2)
 --
 -- Executar depois do 01-init.sql do kit, com um usuário que possa assumir a role
 -- portal_ddl (dona das tabelas). O script pode ser executado mais de uma vez.
@@ -27,7 +29,10 @@ ALTER TABLE fornecimentos.fornecimento
   ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Atributos do fornecimento na ESP-FRN-001 (§6.1) que a tabela do kit não tem
   ADD COLUMN IF NOT EXISTS unidade VARCHAR(32),
-  ADD COLUMN IF NOT EXISTS criado_por_usuario_id VARCHAR(64);
+  ADD COLUMN IF NOT EXISTS criado_por_usuario_id VARCHAR(64),
+  -- Origem em cidade e UF (P-05): a coluna origem do kit passa a guardar a cidade,
+  -- e a UF fica nesta coluna nova
+  ADD COLUMN IF NOT EXISTS origem_uf VARCHAR(2);
 
 -- 1.2 O estoque nunca fica negativo (RN-11). A verificação no banco é a última
 --     barreira caso o código tenha um erro.
@@ -40,6 +45,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_fornecimento_reservada_nao_negativa') THEN
     ALTER TABLE fornecimentos.fornecimento
       ADD CONSTRAINT ck_fornecimento_reservada_nao_negativa CHECK (quantidade_reservada >= 0);
+  END IF;
+  -- Sigla de uma das 27 unidades da federação (IBGE)
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_fornecimento_origem_uf') THEN
+    ALTER TABLE fornecimentos.fornecimento
+      ADD CONSTRAINT ck_fornecimento_origem_uf CHECK (origem_uf IN (
+        'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
+        'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'));
   END IF;
 END $$;
 
@@ -112,7 +124,18 @@ ALTER TABLE produtos.produto
   ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Quem cadastrou (ESP-PRD-001, §6.1): claims tenant_id e sub do token
   ADD COLUMN IF NOT EXISTS cadastrado_por_empresa_id VARCHAR(64),
-  ADD COLUMN IF NOT EXISTS cadastrado_por_usuario_id VARCHAR(64);
+  ADD COLUMN IF NOT EXISTS cadastrado_por_usuario_id VARCHAR(64),
+  -- Peso de uma unidade do produto em kg, opcional (ESP-PRD-001, RN-08). Permite a
+  -- Logística calcular o peso da carga quando a unidade é UN, CX ou L
+  ADD COLUMN IF NOT EXISTS peso_unitario_kg NUMERIC(12, 3);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_produto_peso_unitario_positivo') THEN
+    ALTER TABLE produtos.produto
+      ADD CONSTRAINT ck_produto_peso_unitario_positivo CHECK (peso_unitario_kg > 0);
+  END IF;
+END $$;
 
 -- 2.2 Índice para o filtro por categoria (RF-02)
 CREATE INDEX IF NOT EXISTS ix_produto_categoria ON produtos.produto (categoria);

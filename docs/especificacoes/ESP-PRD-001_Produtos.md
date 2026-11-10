@@ -5,12 +5,12 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 1.1 |
+| Versão | 1.2 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
 | Data | 2026-10-26 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; ESP-FRN-001 (Fornecimentos); resposta do grupo de Autenticação nas issues #2 e #13 (2026-11-09) |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; ESP-FRN-001 (Fornecimentos); resposta do grupo de Autenticação nas issues #2 e #13 (2026-11-09); resposta do grupo de Logística/Transporte sobre P-06 e P-27 (2026-11-10) |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -59,10 +59,12 @@ Front-end ─► Gateway ─REST─► produtos-service ──[produto_cadastrad
 
 | Termo | Definição precisa |
 |---|---|
-| Produto | Item do catálogo identificado por `produto_id`, com `nome`, `categoria`, `unidade` e `tipo_transporte`. |
+| Produto | Item do catálogo identificado por `produto_id`, com `nome`, `categoria`, `unidade`, `tipo_transporte` e, opcionalmente, `peso_unitario_kg`. |
 | Categoria | Texto livre de 2 a 64 caracteres, sem tabela própria. Comparação exata, com diferença entre maiúsculas e minúsculas. |
 | Unidade | Unidade de medida em que o produto é negociado. Um de: `KG`, `TON`, `UN`, `CX`, `L`. |
 | Tipo de transporte | Como o produto precisa ser transportado. Um de: `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`. |
+| Peso unitário | Peso de uma unidade do produto, em quilogramas. Opcional. Usado pela Logística/Transporte para calcular o peso da carga quando a unidade é `UN`, `CX` ou `L`. |
+| Valor de peso | Número JSON (não booleano, não string) maior que 0, menor ou igual a 999999999.999 e com no máximo 3 casas decimais, contadas em `Decimal(str(valor))`. Na resposta e no evento, é número JSON. |
 | Escopo ativo | Valor do claim `active_scope` do token: o perfil em que o usuário está atuando. Um de: `SUPPLIER` (fornecedor), `BUYER` (comprador), `CARRIER` (transportadora), `TENANT_ADMIN` (administrador da empresa). Comparação exata, em maiúsculas. Uma empresa pode ter vários escopos; o usuário escolhe o ativo no serviço de Autenticação. |
 | Token | JWT assinado com RS256 pelo serviço de Autenticação, enviado no cabeçalho `Authorization: Bearer <token>`. A chave pública de cada `kid` vem da porta `ChavesPublicas` (§5.1). |
 | Instante | Data/hora em UTC no formato ISO-8601 com sufixo `Z` e sem frações de segundo (ex.: `"2026-10-26T14:00:00Z"`). |
@@ -132,6 +134,7 @@ class ProdutoRepositorio(Protocol):
 | categoria | string | Sim | Corpo da requisição, depois de `strip()`; 2 a 64 caracteres. |
 | unidade | enum | Sim | Corpo da requisição; um de `KG`, `TON`, `UN`, `CX`, `L`. |
 | tipo_transporte | enum | Sim | Corpo da requisição; um de `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`. |
+| peso_unitario_kg | valor de peso ou `null` | Sim (pode ser `null`) | Corpo da requisição; ausente ou `null` → `null`. |
 | cadastrado_por_empresa_id | string | Sim | Claim `tenant_id` do token. |
 | cadastrado_por_usuario_id | string | Sim | Claim `sub` do token. |
 | cadastrado_em | instante | Sim | `clock.now()` no momento do cadastro. |
@@ -192,6 +195,8 @@ Requisição:
 ```json
 {"nome": "Leite integral", "categoria": "LATICINIOS", "unidade": "L", "tipo_transporte": "REFRIGERADO"}
 ```
+`peso_unitario_kg` é opcional e, neste exemplo, não foi enviado.
+
 Resposta 201:
 ```json
 {
@@ -200,6 +205,7 @@ Resposta 201:
   "categoria": "LATICINIOS",
   "unidade": "L",
   "tipo_transporte": "REFRIGERADO",
+  "peso_unitario_kg": null,
   "cadastrado_por_empresa_id": "EMP-34",
   "cadastrado_por_usuario_id": "USR-7",
   "cadastrado_em": "2026-10-26T14:00:00Z"
@@ -222,6 +228,7 @@ Resposta 200:
       "categoria": "LATICINIOS",
       "unidade": "L",
       "tipo_transporte": "REFRIGERADO",
+      "peso_unitario_kg": null,
       "cadastrado_por_empresa_id": "EMP-34",
       "cadastrado_por_usuario_id": "USR-7",
       "cadastrado_em": "2026-10-26T14:00:00Z"
@@ -254,9 +261,9 @@ Envelope comum (padrão do kit de infraestrutura, `CONTRACTS.md`):
 
 | Tópico | Quando | Chave de partição | Payload |
 |---|---|---|---|
-| `produto_cadastrado` | Produto cadastrado (RF-01) | `produto_id` | `produtoId`, `nome`, `categoria`, `unidade`, `tipoTransporte`, `cadastradoPor` (`empresaId`, `usuarioId`), `cadastradoEm` |
+| `produto_cadastrado` | Produto cadastrado (RF-01) | `produto_id` | `produtoId`, `nome`, `categoria`, `unidade`, `tipoTransporte`, `pesoUnitarioKg`, `cadastradoPor` (`empresaId`, `usuarioId`), `cadastradoEm` |
 
-Mapeamento entre o produto (§6.1) e o payload: `produto_id` → `produtoId`; `tipo_transporte` → `tipoTransporte`; `cadastrado_por_empresa_id` → `cadastradoPor.empresaId`; `cadastrado_por_usuario_id` → `cadastradoPor.usuarioId`; `cadastrado_em` → `cadastradoEm`; `nome`, `categoria` e `unidade` com o mesmo nome.
+Mapeamento entre o produto (§6.1) e o payload: `produto_id` → `produtoId`; `tipo_transporte` → `tipoTransporte`; `peso_unitario_kg` → `pesoUnitarioKg` (`null` quando não informado); `cadastrado_por_empresa_id` → `cadastradoPor.empresaId`; `cadastrado_por_usuario_id` → `cadastradoPor.usuarioId`; `cadastrado_em` → `cadastradoEm`; `nome`, `categoria` e `unidade` com o mesmo nome.
 
 Exemplo (`event_bus.publish("produto_cadastrado", "6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b", mensagem)`):
 ```json
@@ -274,6 +281,7 @@ Exemplo (`event_bus.publish("produto_cadastrado", "6f1d2c3b-4a59-4e6f-8a7b-9c0d1
     "categoria": "LATICINIOS",
     "unidade": "L",
     "tipoTransporte": "REFRIGERADO",
+    "pesoUnitarioKg": null,
     "cadastradoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
     "cadastradoEm": "2026-10-26T14:00:00Z"
   }
@@ -287,7 +295,7 @@ Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `acti
 ### RF-01 — Cadastrar produto
 - **Prioridade:** Must
 - **Enunciado (EARS):** Quando uma empresa com perfil `SUPPLIER` ou `BUYER` enviar um produto válido para a API-04, o serviço deve gravá-lo e publicar `produto_cadastrado`.
-- **Regras aplicáveis:** RN-01, RN-02, RN-03, RN-04
+- **Regras aplicáveis:** RN-01, RN-02, RN-03, RN-04, RN-08
 - **Interface:** API-04, tópico `produto_cadastrado`
 
 **Critérios de aceitação**
@@ -296,7 +304,7 @@ Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `acti
 Cenário: Fornecedor cadastra produto
   Dado um token de "SUPPLIER"
   Quando envia POST /api/v1/produtos com nome "Leite integral", categoria "LATICINIOS", unidade "L" e tipo_transporte "REFRIGERADO"
-  Então a resposta é 201 com produto_id UUID4, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipo_transporte "REFRIGERADO", cadastrado_por_empresa_id "EMP-34", cadastrado_por_usuario_id "USR-7" e cadastrado_em "2026-10-26T14:00:00Z"
+  Então a resposta é 201 com produto_id UUID4, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipo_transporte "REFRIGERADO", peso_unitario_kg null, cadastrado_por_empresa_id "EMP-34", cadastrado_por_usuario_id "USR-7" e cadastrado_em "2026-10-26T14:00:00Z"
   E GET /api/v1/produtos/{produto_id} retorna 200 com o mesmo corpo
 
 # CA-02
@@ -323,6 +331,12 @@ Cenário: Dados inválidos (partição de equivalência)
     | unidade fora da lista        | {"nome": "Leite", "categoria": "LATICINIOS", "unidade": "litro", "tipo_transporte": "REFRIGERADO"} |
     | tipo_transporte fora da lista| {"nome": "Leite", "categoria": "LATICINIOS", "unidade": "L", "tipo_transporte": "AEREO"} |
     | nome numérico                | {"nome": 123, "categoria": "LATICINIOS", "unidade": "L", "tipo_transporte": "REFRIGERADO"} |
+    | peso zero                    | o corpo válido do CA-01 com "peso_unitario_kg": 0                                       |
+    | peso negativo                | o corpo válido do CA-01 com "peso_unitario_kg": -1                                      |
+    | peso como texto              | o corpo válido do CA-01 com "peso_unitario_kg": "1.5"                                   |
+    | peso booleano                | o corpo válido do CA-01 com "peso_unitario_kg": true                                    |
+    | peso com 4 casas decimais    | o corpo válido do CA-01 com "peso_unitario_kg": 1.0005                                  |
+    | peso acima do máximo         | o corpo válido do CA-01 com "peso_unitario_kg": 1000000000                              |
     | corpo não é objeto           | ["Leite"]                                                                               |
     | JSON malformado              | {"nome": "Leite",                                                                        |
   Então cada resposta é 422 com codigo "DADOS_INVALIDOS"
@@ -340,6 +354,18 @@ Cenário: Falha do repositório
   Quando envia POST /api/v1/produtos com um corpo válido
   Então a resposta é 500 com codigo "ERRO_INTERNO"
   E nenhuma mensagem é publicada
+
+# CA-28
+Cenário: Peso unitário opcional (valor-limite)
+  Dado um token de "SUPPLIER"
+  Quando envia POST /api/v1/produtos com nome "Caixa de leite", categoria "LATICINIOS", unidade "CX", tipo_transporte "REFRIGERADO" e peso_unitario_kg 12.35
+  Então a resposta é 201 com peso_unitario_kg 12.35
+  E GET /api/v1/produtos/{produto_id} retorna 200 com o mesmo corpo
+  E o payload da mensagem publicada tem pesoUnitarioKg 12.35
+  Quando envia o mesmo corpo com peso_unitario_kg null
+  Então a resposta é 201 com peso_unitario_kg null e o payload publicado tem pesoUnitarioKg null
+  Quando envia o mesmo corpo com peso_unitario_kg 0.001, e depois com 999999999.999
+  Então as duas respostas são 201, com peso_unitario_kg igual ao valor enviado
 ```
 
 ### RF-02 — Consultar produto
@@ -410,7 +436,7 @@ Cenário: Evento publicado com envelope e chave
   Quando o CA-01 é executado
   Então exatamente 1 mensagem é publicada, no tópico "produto_cadastrado", com key igual ao produto_id da resposta
   E a mensagem tem eventId UUID4, eventType "produto_cadastrado", eventVersion "1.0", timestamp "2026-10-26T14:00:00Z", source "produtos-service", correlationId "corr-001" e aggregateId igual ao produto_id
-  E o payload tem produtoId, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipoTransporte "REFRIGERADO", cadastradoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e cadastradoEm "2026-10-26T14:00:00Z"
+  E o payload tem produtoId, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipoTransporte "REFRIGERADO", pesoUnitarioKg null, cadastradoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e cadastradoEm "2026-10-26T14:00:00Z"
 
 # CA-13
 Cenário: Requisição recusada não publica
@@ -512,6 +538,7 @@ Cenário: Métricas por código de status
 | RN-05 | Um `produto_id` inexistente → 404 `PRODUTO_NAO_ENCONTRADO`. | `PROD-INEXISTENTE` → 404. |
 | RN-06 | Paginação: `page` inteiro ≥ 1 (padrão 1); `size` inteiro de 1 a 100 (padrão 10). Fora disso, ou não inteiro → 422 `PAGINACAO_INVALIDA`. `offset = (page − 1) × size`. Página além do fim → 200 com `itens` vazio. | `size=101` → 422; `size=100` → 200. |
 | RN-07 | Nenhum evento, resposta ou log contém o token de acesso. Eventos identificam quem agiu só por `empresaId` e `usuarioId`. | Payload sem campo de token. |
+| RN-08 | `peso_unitario_kg` é opcional para todas as unidades. Ausente ou `null` → gravado como `null`. Se informado, precisa ser valor de peso (glossário); caso contrário → 422 `DADOS_INVALIDOS`. O serviço não confere o peso com a unidade: para `KG` e `TON` a Logística converte a quantidade diretamente. | `"peso_unitario_kg": 12.35` → aceito; `"peso_unitario_kg": 0` → 422. |
 
 ## 10. Catálogo de erros
 
@@ -539,7 +566,7 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | PRODUTO_NAO_ENCONTRADO | 404 | Produto Não Encontrado | RN-05. |
 | ROTA_NAO_ENCONTRADA | 404 | Rota Não Encontrada | Rota inexistente. |
 | METODO_NAO_PERMITIDO | 405 | Método Não Permitido | Método não aceito pela rota. |
-| DADOS_INVALIDOS | 422 | Dados Inválidos | RN-02. |
+| DADOS_INVALIDOS | 422 | Dados Inválidos | RN-02, RN-08. |
 | PAGINACAO_INVALIDA | 422 | Paginação Inválida | RN-06. |
 | ERRO_INTERNO | 500 | Erro Interno | Exceção não prevista, inclusive do repositório. O `detail` não expõe a mensagem da exceção. |
 | DEPENDENCIA_INDISPONIVEL | 503 | Dependência Indisponível | API-02 com dependência indisponível. |
@@ -607,10 +634,10 @@ Cenário: Token não vaza
 
 | Requisito | Regras | Interfaces | Critérios de aceitação |
 |---|---|---|---|
-| RF-01 | RN-01, RN-02, RN-03, RN-04 | API-04, `produto_cadastrado` | CA-01 a CA-06 |
+| RF-01 | RN-01, RN-02, RN-03, RN-04, RN-08 | API-04, `produto_cadastrado` | CA-01 a CA-06, CA-28 |
 | RF-02 | RN-05 | API-05 | CA-07, CA-08 |
 | RF-03 | RN-05, RN-06 | API-06 | CA-09 a CA-11 |
-| RF-04 | RN-03, RN-04, RN-07 | `produto_cadastrado` | CA-12, CA-13 |
+| RF-04 | RN-03, RN-04, RN-07, RN-08 | `produto_cadastrado` | CA-12, CA-13, CA-28 |
 | RF-05 | RN-01, RN-04 | API-04 a API-06 | CA-14 a CA-17 |
 | RF-06 | RN-07 | todas | CA-18, CA-19 |
 | RF-07 | — | API-01 a API-03 | CA-20 a CA-22 |
@@ -626,12 +653,13 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-02 | Decisão | Nomes dos campos de erro: o grupo de Autenticação usa `code` e `correlation_id` (RFC 9457); o kit usa `correlationId`; esta ESP usa `codigo` e `correlationId`. | Mantidos `codigo` e `correlationId` até a turma definir um padrão único (pergunta feita na issue #2). Se mudar, esta ESP muda de versão. |
 | Q-03 | Decisão | O comprador pode cadastrar produto? O professor disse que sim (aula 2, 1:17 a 1:49); o guia do kit restringe o comprador (P-30). | Segue o professor: `BUYER` cadastra (RN-01). Revisar se o professor decidir diferente. |
 | Q-04 | Decisão | Permissões do `TENANT_ADMIN` (P-07). | Na versão 1.0, `TENANT_ADMIN` consulta e lista, mas não cadastra. |
-| Q-05 | Decisão | Listas de unidade e de tipo de transporte (P-06). | As sugeridas pelo boilerplate do kit. Mudanças acordadas com Logística/Transporte geram nova versão desta ESP. |
+| Q-05 | Decisão | Listas de unidade e de tipo de transporte (P-06). | As sugeridas pelo boilerplate do kit, confirmadas pelo grupo de Logística/Transporte em 2026-11-10 (são as que ele usa na cotação e no cadastro de veículos). |
 | Q-06 | Decisão | Alteração e exclusão de produto (P-07, P-09, P-26). | Fora do escopo da versão 1.0 (§3.2). |
 | Q-07 | Decisão | Formato de erro: o exemplo do Grupo de Teste usa `{"erro": {...}}`, e o kit exige RFC 7807. | RFC 7807 com o membro de extensão `codigo` (§10), que permite comparação literal nos testes. |
 | Q-08 | Decisão | Persistência em memória (como no exemplo ESP-NEG-001) ou banco. | Porta `ProdutoRepositorio` (§5.1). O Grupo de Teste injeta uma implementação em memória; em produção, o adaptador usa o schema `produtos` do PostgreSQL. Atende ao requisito de serviços sem estado em memória do kit. |
 | Q-09 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real usa *transactional outbox* (Relatório Técnico, ADR-010). |
 | Q-10 | Premissa | O gateway encaminha as requisições `/api/v1/produtos` ao serviço sem alterar o cabeçalho `Authorization`. | Confirmado pela configuração do gateway do kit. |
+| Q-11 | Decisão | Peso da carga quando a unidade não é de massa. A Logística pediu um campo opcional de peso unitário (2026-11-10). | Campo opcional `peso_unitario_kg` (RN-08), com até 3 casas decimais (precisão de 1 grama). O cálculo do peso da carga (`pesoKg` do `pedido_criado`) é do grupo de Pedidos. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -667,3 +695,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 |---|---|---|---|
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4 e do kit de infraestrutura. |
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
+| 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | Campo opcional `peso_unitario_kg` no produto e `pesoUnitarioKg` no evento (RN-08, CA-04, CA-28, Q-11). Listas de unidade e de tipo de transporte confirmadas (Q-05). Motivo: resposta do grupo de Logística/Transporte sobre P-06 e P-27. |

@@ -1,8 +1,8 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 1.0 (proposta para revisão dos grupos que integram com a gente)
-**Data:** 26/10/2026
+**Versão:** 1.1 (proposta para revisão dos grupos que integram com a gente)
+**Data:** 10/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
 
@@ -33,7 +33,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 
 ### 2.1 `produto_cadastrado`
 
-- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores (kit):** `fornecimentos-service`, `demanda-service`, `mercado-service`.
+- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores (kit):** `fornecimentos-service`, `demanda-service`, `mercado-service`. O grupo de Logística/Transporte não consome este evento: recebe o tipo de transporte pelo `pedido_criado`, que o grupo de Pedidos preenche a partir do produto. Se o grupo de Pedidos não puder incluir o campo, o plano B da Logística é consumir `produto_cadastrado` e `produto_atualizado` e guardar uma cópia local (resposta da Logística, 10/11/2026).
 - **Quando:** depois que o produto é gravado com sucesso (RF-06).
 - **Schema:** [`produto_cadastrado.schema.json`](contratos/schemas/produto_cadastrado.schema.json)
 
@@ -42,8 +42,9 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 | `produtoId` | texto | Identificador do produto |
 | `nome` | texto | Nome do produto |
 | `categoria` | texto | Categoria (lista em definição, P-10) |
-| `unidade` | texto | Unidade de medida. Sugestão do kit: `KG`, `TON`, `UN`, `CX`, `L` (P-06) |
-| `tipoTransporte` | texto | Como o produto precisa ser transportado. Sugestão do kit: `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO` (P-06) |
+| `unidade` | texto | Unidade de medida: `KG`, `TON`, `UN`, `CX` ou `L` (lista do kit, confirmada pela Logística; P-06 resolvida) |
+| `tipoTransporte` | texto | Como o produto precisa ser transportado: `GRANEL`, `REFRIGERADO`, `CARGA_SECA` ou `PERIGOSO` (lista do kit, confirmada pela Logística; P-06 resolvida) |
+| `pesoUnitarioKg` | número ou `null` | Peso de uma unidade em kg, até 3 casas decimais. Opcional no cadastro: `null` quando não informado. Pedido pela Logística para calcular o peso da carga quando a unidade é `UN`, `CX` ou `L` |
 | `cadastradoPor` | objeto | `empresaId` e `usuarioId` de quem cadastrou |
 | `cadastradoEm` | data e hora | Momento do cadastro |
 
@@ -62,6 +63,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
     "categoria": "LATICINIOS",
     "unidade": "L",
     "tipoTransporte": "REFRIGERADO",
+    "pesoUnitarioKg": null,
     "cadastradoPor": { "empresaId": "emp-34", "usuarioId": "usr-7" },
     "cadastradoEm": "2026-10-26T14:00:00.000Z"
   }
@@ -91,11 +93,13 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 | `unidade` | texto | Unidade do produto, para interpretar quantidade e preço |
 | `preco` | número | Preço por unidade, maior que zero (moeda: P-15) |
 | `quantidadeDisponivel` | número | Quantidade ofertada, maior que zero |
-| `origem` | texto | Origem do fornecimento (significado em definição, P-05) |
+| `origem` | objeto | Ponto de coleta: `cidade` (texto) e `uf` (sigla de uma das 27 unidades da federação). Formato pedido pela Logística, igual ao campo `origem` que ela propôs para o `pedido_criado` (P-05) |
 | `criadoPor` | objeto | `empresaId` e `usuarioId` de quem criou |
 | `criadoEm` | data e hora | Momento da criação |
 
 Exemplo: [`exemplos/fornecimento_criado.json`](contratos/exemplos/fornecimento_criado.json)
+
+Na versão 1.0 deste contrato, `origem` era texto livre. A mudança para objeto é incompatível, mas nenhum grupo consumia o evento ainda.
 
 ### 2.4 `estoque_atualizado`
 
@@ -184,6 +188,8 @@ Precisamos de `pedidoId`, `fornecimentoId` e `status`. Schema: [`pedido_atualiza
 
 Os valores `CANCELADO` e `VENDA_CONCLUIDA` são a proposta do grupo, usada na ESP-FRN-001. Se o grupo de Pedidos definir outros, o contrato e a ESP mudam de versão.
 
+A Logística também usa `CANCELADO` e sugeriu ao grupo de Pedidos publicar `VENDA_CONCLUIDA` quando receber o evento `entrega_concluida` da Logística, se a venda for concluída na entrega. Isso fecha o momento da baixa de estoque, que ainda depende do grupo de Pedidos.
+
 ### 3.3 `produto_cadastrado` (do nosso `produtos-service`)
 
 O `fornecimentos-service` grava o produto na tabela local `produto_referencia` (ADR-011), com `nome`, `unidade` e `tipoTransporte`.
@@ -221,8 +227,17 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 
 | Grupo | Pedido |
 |---|---|
-| Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada` |
+| Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
 | Infraestrutura | Criar os tópicos de alteração e exclusão de produto e o de recusa de reserva, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md` |
 | Autenticação | Definir o conteúdo de `empresa_cadastrada` |
 | Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` |
-| Logística/Transporte | Confirmar a lista de tipos de transporte e como vai obter o tipo de transporte do produto (P-27) |
+| Logística/Transporte | Respondido em 10/11/2026: listas confirmadas (P-06), tipo de transporte pelo `pedido_criado` (P-27), origem em cidade e UF (P-05) e peso unitário opcional atendidos na versão 1.1 |
+
+---
+
+## 6. Histórico
+
+| Versão | Data | Mudança |
+|---|---|---|
+| 1.0 | 26/10/2026 | Primeira proposta |
+| 1.1 | 10/11/2026 | `pesoUnitarioKg` em `produto_cadastrado` e `produto_atualizado`; `origem` de `fornecimento_criado` como objeto com `cidade` e `uf`; listas de unidade e tipo de transporte confirmadas. Motivo: resposta do grupo de Logística/Transporte |

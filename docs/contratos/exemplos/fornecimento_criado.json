@@ -13,7 +13,10 @@
     "unidade": "L",
     "preco": 5.5,
     "quantidadeDisponivel": 15000,
-    "origem": "Goiânia-GO",
+    "origem": {
+      "cidade": "Goiânia",
+      "uf": "GO"
+    },
     "criadoPor": {
       "empresaId": "emp-34",
       "usuarioId": "usr-7"

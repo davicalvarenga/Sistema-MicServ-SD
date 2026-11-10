@@ -15,7 +15,7 @@ from decimal import Decimal
 from psycopg2.pool import ThreadedConnectionPool
 
 COLUNAS_FORNECIMENTO = ("id, fornecedor_id, produto_id, unidade, preco, quantidade_disponivel, quantidade_reservada, "
-                        "origem, criado_por_usuario_id, criado_em, atualizado_em")
+                        "origem, origem_uf, criado_por_usuario_id, criado_em, atualizado_em")
 
 
 def _instante(momento: datetime) -> str:
@@ -25,8 +25,10 @@ def _instante(momento: datetime) -> str:
 def _fornecimento(linha) -> dict:
     return {
         "fornecimento_id": linha[0], "fornecedor_id": linha[1], "produto_id": linha[2], "unidade": linha[3],
-        "preco": linha[4], "quantidade_disponivel": linha[5], "quantidade_reservada": linha[6], "origem": linha[7],
-        "criado_por_usuario_id": linha[8], "criado_em": _instante(linha[9]), "atualizado_em": _instante(linha[10]),
+        "preco": linha[4], "quantidade_disponivel": linha[5], "quantidade_reservada": linha[6],
+        # A coluna origem do kit guarda a cidade; origem_uf foi acrescentada pela proposta de DDL v1.2
+        "origem": {"cidade": linha[7], "uf": linha[8]},
+        "criado_por_usuario_id": linha[9], "criado_em": _instante(linha[10]), "atualizado_em": _instante(linha[11]),
     }
 
 
@@ -97,9 +99,10 @@ class RepositorioFornecimentosPostgres:
 
     def inserir_fornecimento(self, fornecimento: dict) -> None:
         self._executar(
-            f"INSERT INTO fornecimentos.fornecimento ({COLUNAS_FORNECIMENTO}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            f"INSERT INTO fornecimentos.fornecimento ({COLUNAS_FORNECIMENTO}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (fornecimento["fornecimento_id"], fornecimento["fornecedor_id"], fornecimento["produto_id"], fornecimento["unidade"],
-             fornecimento["preco"], fornecimento["quantidade_disponivel"], fornecimento["quantidade_reservada"], fornecimento["origem"],
+             fornecimento["preco"], fornecimento["quantidade_disponivel"], fornecimento["quantidade_reservada"],
+             fornecimento["origem"]["cidade"], fornecimento["origem"]["uf"],
              fornecimento["criado_por_usuario_id"], fornecimento["criado_em"], fornecimento["atualizado_em"]))
 
     def obter_fornecimento(self, fornecimento_id: str) -> dict | None:

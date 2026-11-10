@@ -56,7 +56,7 @@ def _fornecimento(repo, fid, pid, disponivel):
     with repo.transacao():
         repo.inserir_fornecimento({
             "fornecimento_id": fid, "fornecedor_id": "EMP-34", "produto_id": pid, "unidade": "L", "preco": Decimal("5.50"),
-            "quantidade_disponivel": Decimal(disponivel), "quantidade_reservada": Decimal("0"), "origem": "Goiânia-GO",
+            "quantidade_disponivel": Decimal(disponivel), "quantidade_reservada": Decimal("0"), "origem": {"cidade": "Goiânia", "uf": "GO"},
             "criado_por_usuario_id": "USR-7", "criado_em": "2026-10-26T14:00:00Z", "atualizado_em": "2026-10-26T14:00:00Z"})
 
 
@@ -133,7 +133,8 @@ def test_fluxo_completo_com_o_servico(repo):
     amb = Amb()
     amb.bus = bus
     entregar(amb, "produto_cadastrado", produto(pid))
-    r = cliente.post("/api/v1/fornecimentos", json={"produto_id": pid, "preco": 0.07, "quantidade_disponivel": 0.3, "origem": "GO"},
+    r = cliente.post("/api/v1/fornecimentos", json={"produto_id": pid, "preco": 0.07, "quantidade_disponivel": 0.3,
+                                                    "origem": {"cidade": "Brasília", "uf": "DF"}},
                      headers=auth())
     assert r.status_code == 201, r.text
     fid = r.json()["fornecimento_id"]
@@ -143,6 +144,7 @@ def test_fluxo_completo_com_o_servico(repo):
     entregar(amb, "pedido_atualizado", pedido_atualizado(f"PED-{fid}-0", fid, "CANCELADO"))
     g = cliente.get(f"/api/v1/fornecimentos/{fid}", headers=auth("BUYER")).json()
     assert (g["preco"], g["quantidade_disponivel"], g["quantidade_reservada"]) == (0.07, 0.1, 0.2)
+    assert g["origem"] == {"cidade": "Brasília", "uf": "DF"}
     topicos = [p["topic"] for p in bus.publicadas]
     assert topicos.count("estoque_atualizado") == 4 and topicos.count("reserva_estoque_recusada") == 1
     lista = cliente.get(f"/api/v1/fornecimentos?produto_id={pid}", headers=auth("BUYER")).json()

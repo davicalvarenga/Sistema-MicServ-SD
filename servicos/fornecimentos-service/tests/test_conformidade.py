@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-FRN-001 v1.1: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-FRN-001 v1.2: um teste por critério de aceitação."""
 
 import ast
 import copy
@@ -54,7 +54,7 @@ def test_CA01(amb):
     assert eh_uuid4(corpo["fornecimento_id"])
     assert corpo == {
         "fornecimento_id": corpo["fornecimento_id"], "fornecedor_id": "EMP-34", "produto_id": "PROD-1", "unidade": "L",
-        "preco": 5.5, "quantidade_disponivel": 15000, "quantidade_reservada": 0, "origem": "Goiânia-GO",
+        "preco": 5.5, "quantidade_disponivel": 15000, "quantidade_reservada": 0, "origem": {"cidade": "Goiânia", "uf": "GO"},
         "criado_por_usuario_id": "USR-7", "criado_em": "2026-10-26T14:00:00Z", "atualizado_em": "2026-10-26T14:00:00Z",
     }
     g = amb.cliente.get(f"{URL}/{corpo['fornecimento_id']}", headers=auth("BUYER"))
@@ -75,7 +75,10 @@ SEM_PRODUTO = {k: v for k, v in FORNECIMENTO_VALIDO.items() if k != "produto_id"
     {**FORNECIMENTO_VALIDO, "preco": 0}, {**FORNECIMENTO_VALIDO, "preco": -1}, {**FORNECIMENTO_VALIDO, "preco": "5.50"},
     {**FORNECIMENTO_VALIDO, "preco": 5.555}, {**FORNECIMENTO_VALIDO, "preco": 10000000000}, {**FORNECIMENTO_VALIDO, "preco": True},
     {**FORNECIMENTO_VALIDO, "quantidade_disponivel": 0}, {**FORNECIMENTO_VALIDO, "quantidade_disponivel": 1.234},
-    {**FORNECIMENTO_VALIDO, "origem": "   "}, {**FORNECIMENTO_VALIDO, "origem": "a" * 256}, SEM_PRODUTO,
+    {**FORNECIMENTO_VALIDO, "origem": "Goiânia-GO"}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "   ", "uf": "GO"}},
+    {**FORNECIMENTO_VALIDO, "origem": {"cidade": "a" * 256, "uf": "GO"}}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia"}},
+    {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia", "uf": "go"}}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia", "uf": "XX"}},
+    SEM_PRODUTO,
     {**FORNECIMENTO_VALIDO, "produto_id": 1}, ["x"], '{"produto_id": ',
 ])
 def test_CA03(amb, corpo):
@@ -95,10 +98,10 @@ def test_CA04(amb):
 
 def test_CA05(amb):
     r = cadastrar(amb, {"produto_id": "PROD-1", "preco": 9999999999.99, "quantidade_disponivel": 0.01,
-                        "origem": "  Anápolis-GO  ", "fornecedor_id": "EMP-99"})
+                        "origem": {"cidade": "  Anápolis  ", "uf": " GO "}, "fornecedor_id": "EMP-99"})
     assert r.status_code == 201
     c = r.json()
-    assert (c["fornecedor_id"], c["preco"], c["quantidade_disponivel"], c["origem"]) == ("EMP-34", 9999999999.99, 0.01, "Anápolis-GO")
+    assert (c["fornecedor_id"], c["preco"], c["quantidade_disponivel"], c["origem"]) == ("EMP-34", 9999999999.99, 0.01, {"cidade": "Anápolis", "uf": "GO"})
 
 
 def test_CA06(amb):
@@ -134,11 +137,11 @@ def test_CA10(amb):
     entregar(amb, "produto_cadastrado", produto("PROD-2", unidade="KG"))
     for segundo, (origem, pid) in enumerate([("A", "PROD-1"), ("B", "PROD-2"), ("C", "PROD-1")]):
         amb.clock.agora = T0 + timedelta(seconds=segundo)
-        assert cadastrar(amb, {**FORNECIMENTO_VALIDO, "origem": origem, "produto_id": pid}).status_code == 201
+        assert cadastrar(amb, {**FORNECIMENTO_VALIDO, "origem": {"cidade": origem, "uf": "GO"}, "produto_id": pid}).status_code == 201
     r = amb.cliente.get(f"{URL}?page=1&size=2", headers=auth("BUYER")).json()
-    assert [f["origem"] for f in r["itens"]] == ["A", "B"] and (r["page"], r["size"], r["total"]) == (1, 2, 3)
+    assert [f["origem"]["cidade"] for f in r["itens"]] == ["A", "B"] and (r["page"], r["size"], r["total"]) == (1, 2, 3)
     r = amb.cliente.get(f"{URL}?produto_id=PROD-1", headers=auth("BUYER")).json()
-    assert [f["origem"] for f in r["itens"]] == ["A", "C"] and r["total"] == 2
+    assert [f["origem"]["cidade"] for f in r["itens"]] == ["A", "C"] and r["total"] == 2
     r = amb.cliente.get(f"{URL}?page=9&size=2", headers=auth("BUYER"))
     assert r.status_code == 200 and r.json()["itens"] == [] and r.json()["total"] == 3
 
@@ -164,7 +167,7 @@ def test_CA12(amb):
         "eventType": "fornecimento_criado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00Z",
         "source": "fornecimentos-service", "correlationId": "corr-001", "aggregateId": fid}
     assert m["payload"] == {"fornecimentoId": fid, "fornecedorId": "EMP-34", "produtoId": "PROD-1", "unidade": "L", "preco": 5.5,
-                            "quantidadeDisponivel": 15000, "origem": "Goiânia-GO",
+                            "quantidadeDisponivel": 15000, "origem": {"cidade": "Goiânia", "uf": "GO"},
                             "criadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "criadoEm": "2026-10-26T14:00:00Z"}
 
 
