@@ -88,7 +88,7 @@ Front-end ─► Gateway ─REST────────────────
 | Estrutura de arquivos | `app/__init__.py` e `app/main.py` obrigatórios; outros módulos dentro de `app/` são permitidos. |
 | Ponto de entrada | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas) -> fastapi.FastAPI` |
 | Formato de data/hora | Instante (ver glossário). |
-| Formato monetário | Valor decimal (ver glossário). |
+| Formato monetário | Valor decimal (ver glossário), em reais (BRL). O JSON leva só o número, sem símbolo nem código de moeda. |
 
 ### 5.1 Portas (interfaces de infraestrutura)
 
@@ -973,4 +973,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 |---|---|---|---|
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4, do Contrato de Eventos v1.0, da proposta de DDL e do kit de infraestrutura. |
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
-| 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | `origem` passa de texto livre a objeto com `cidade` e `uf` (glossário, §6.1, RN-02, CA-01, CA-03, CA-05, CA-10, CA-12, Q-16). Mudança incompatível com a versão 1.1 no corpo da API-04, nas respostas e no `fornecimento_criado`. Motivo: pedido do grupo de Logística/Transporte (P-05). |
+| 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | `origem` passa de texto livre a objeto com `cidade` e `uf` (glossário, §6.1, RN-02, CA-01, CA-03, CA-05, CA-10, CA-12, Q-16). Mudança incompatível com a versão 1.1 no corpo da API-04, nas respostas e no `fornecimento_criado`. Motivo: pedido do grupo de Logística/Transporte (P-05). Moeda do preço registrada como real (BRL), sem mudança de comportamento (P-15). |

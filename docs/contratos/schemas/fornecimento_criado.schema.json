@@ -84,7 +84,7 @@
         "preco": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Preço por unidade, até 2 casas decimais. Moeda: P-15."
+          "description": "Preço por unidade em reais (BRL), até 2 casas decimais (P-15)."
         },
         "quantidadeDisponivel": {
           "type": "number",
