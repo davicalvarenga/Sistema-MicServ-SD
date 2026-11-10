@@ -57,7 +57,7 @@ Os tópicos e o envelope dos eventos seguem o catálogo do kit de integração. 
 
 ## Situação atual
 
-O projeto está na fase de requisitos e arquitetura. Ainda não há código dos serviços. A base de implementação será o kit de integração do grupo de Infraestrutura, com as correções descritas na seção 3.4 do Relatório Técnico.
+Os dois serviços estão implementados em [`servicos/`](servicos/), seguindo as especificações ESP-PRD-001 e ESP-FRN-001, com um teste automatizado para cada critério de aceitação e testes de integração com PostgreSQL. Falta executá-los no ambiente do kit, com Redpanda e Docker, e receber as respostas dos outros grupos listadas nas issues.
 
 As decisões em aberto estão nas [issues](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues):
 
@@ -84,7 +84,8 @@ As decisões em aberto estão nas [issues](https://github.com/davicalvarenga/Sis
 | Banco de dados | PostgreSQL 16, banco `portal_b2b`, um schema por serviço | Definido pelo kit |
 | Contêineres | Docker | Exigido pelo professor |
 | Gateway | Nginx na porta 8080 | Definido pelo kit |
-| Linguagem e framework | Python 3.12 com FastAPI | Proposta do grupo ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10)) |
+| Linguagem e framework | Python 3.12 com FastAPI | Adotado na implementação |
+| Autenticação | JWT RS256 validado com as chaves públicas (JWKS) do serviço de Autenticação | Definido pelo grupo de Autenticação |
 
 ## Como executar
 
@@ -105,13 +106,17 @@ make infra-up   # sobe PostgreSQL, Redpanda, gateway, PgAdmin e Kafka UI
 | Redpanda (clientes Kafka) | localhost:19092 |
 | PostgreSQL | localhost:5432 |
 
-As instruções para rodar os nossos serviços serão adicionadas quando o primeiro serviço estiver implementado. Antes disso, veja a seção 3.4 do [Relatório Técnico](docs/relatorio-tecnico.md): o script do banco do kit não dá aos serviços permissão nas próprias tabelas, e a correção está descrita lá.
+Para rodar os nossos serviços e os testes, veja [`servicos/README.md`](servicos/README.md). Antes disso, veja a seção 3.4 do [Relatório Técnico](docs/relatorio-tecnico.md): o script do banco do kit não dá aos serviços permissão nas próprias tabelas, e a correção está descrita lá.
 
 ## Estrutura do repositório
 
 ```
 .
 ├── README.md
+├── .github/workflows/testes.yml
+├── servicos/
+│   ├── produtos-service/
+│   └── fornecimentos-service/
 ├── docs/
 │   ├── documento-de-requisitos.md
 │   ├── relatorio-tecnico.md

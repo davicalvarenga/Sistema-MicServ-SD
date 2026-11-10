@@ -3,7 +3,7 @@
 -- Grupo: Fornecimento e Produtos
 -- Destinatário: grupo de Banco de Dados
 -- Base: database/01-init.sql do kit de infraestrutura (commit 630515c)
--- Versão: 1.0 (26/10/2026)
+-- Versão: 1.1 (10/11/2026): colunas exigidas pelas ESPs e reserva sem chave estrangeira
 --
 -- Executar depois do 01-init.sql do kit, com um usuário que possa assumir a role
 -- portal_ddl (dona das tabelas). O script pode ser executado mais de uma vez.
@@ -24,7 +24,10 @@ SET LOCAL ROLE portal_ddl;
 -- 1.1 Quantidade reservada e data de atualização no fornecimento (RF-13, P-28)
 ALTER TABLE fornecimentos.fornecimento
   ADD COLUMN IF NOT EXISTS quantidade_reservada NUMERIC(12, 2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Atributos do fornecimento na ESP-FRN-001 (§6.1) que a tabela do kit não tem
+  ADD COLUMN IF NOT EXISTS unidade VARCHAR(32),
+  ADD COLUMN IF NOT EXISTS criado_por_usuario_id VARCHAR(64);
 
 -- 1.2 O estoque nunca fica negativo (RN-11). A verificação no banco é a última
 --     barreira caso o código tenha um erro.
@@ -70,7 +73,9 @@ END $$;
 --     Guarda a quantidade reservada para liberar ou dar baixa no valor exato.
 CREATE TABLE IF NOT EXISTS fornecimentos.reserva (
   pedido_id VARCHAR(64) NOT NULL,
-  fornecimento_id VARCHAR(64) NOT NULL REFERENCES fornecimentos.fornecimento (id),
+  -- Sem chave estrangeira: um cancelamento pode chegar para um fornecimento que não existe e é
+  -- registrado como CANCELADA_SEM_RESERVA (ESP-FRN-001, §6.2)
+  fornecimento_id VARCHAR(64) NOT NULL,
   quantidade NUMERIC(12, 2) NOT NULL CHECK (quantidade >= 0),
   -- CANCELADA_SEM_RESERVA (quantidade 0): o cancelamento chegou antes do pedido_criado,
   -- que fica em outro tópico; impede que a criação posterior reserve (ESP-FRN-001, §6.2)
@@ -104,7 +109,10 @@ CREATE INDEX IF NOT EXISTS ix_fornecimentos_outbox_pendente
 -- 2.1 Data de atualização do produto. A coluna "ativo" só será necessária se a
 --     exclusão for lógica (P-09), e por isso não está nesta proposta.
 ALTER TABLE produtos.produto
-  ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Quem cadastrou (ESP-PRD-001, §6.1): claims tenant_id e sub do token
+  ADD COLUMN IF NOT EXISTS cadastrado_por_empresa_id VARCHAR(64),
+  ADD COLUMN IF NOT EXISTS cadastrado_por_usuario_id VARCHAR(64);
 
 -- 2.2 Índice para o filtro por categoria (RF-02)
 CREATE INDEX IF NOT EXISTS ix_produto_categoria ON produtos.produto (categoria);
