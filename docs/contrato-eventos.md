@@ -1,7 +1,7 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 1.1 (proposta para revisão dos grupos que integram com a gente)
+**Versão:** 1.2 (proposta para revisão dos grupos que integram com a gente)
 **Data:** 10/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
@@ -196,13 +196,13 @@ O `fornecimentos-service` grava o produto na tabela local `produto_referencia` (
 
 ### 3.4 `empresa_cadastrada` (do serviço de Autenticação)
 
-Conteúdo definido pelo grupo de Autenticação na issue #2 (09/11/2026). Chave: `tenant_id`. O `source` é `identity-service` (o kit chama o serviço de `usuarios-service`, divergência registrada na P-34 do Documento de Requisitos). O `payload` usa `snake_case`, diferente dos nossos eventos:
+Conteúdo definido pelo grupo de Autenticação na issue #2 (09/11/2026). Em 10/11/2026, a pedido nosso, o `payload` passou de `snake_case` para `camelCase`, como os demais eventos. Chave: o `tenantId`. O `source` é `identity-service` (o kit chama o serviço de `usuarios-service`, divergência registrada na P-34 do Documento de Requisitos).
 
 | Campo | Descrição |
 |---|---|
-| `tenant_id`, `group_id` | Empresa e grupo econômico (UUID) |
-| `cnpj`, `legal_name`, `branch_type` | Dados cadastrais (`branch_type`: ex. `HQ`) |
-| `geo_lat`, `geo_lng` | Localização |
+| `tenantId`, `groupId` | Empresa e grupo econômico (UUID) |
+| `cnpj`, `legalName`, `branchType` | Dados cadastrais (`branchType`: ex. `HQ`) |
+| `geoLat`, `geoLng` | Localização |
 | `status` | Situação da empresa (ex.: `ACTIVE`) |
 | `scopes` | Escopos habilitados: `BUYER`, `SUPPLIER`, `CARRIER`, `TENANT_ADMIN` |
 
@@ -229,7 +229,7 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 |---|---|
 | Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
 | Infraestrutura | Criar os tópicos de alteração e exclusão de produto e o de recusa de reserva, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md` |
-| Autenticação | Definir o conteúdo de `empresa_cadastrada` |
+| Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2): conteúdo de `empresa_cadastrada`, em camelCase. Em aberto: padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
 | Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` |
 | Logística/Transporte | Respondido em 10/11/2026: listas confirmadas (P-06), tipo de transporte pelo `pedido_criado` (P-27), origem em cidade e UF (P-05) e peso unitário opcional atendidos na versão 1.1 |
 
@@ -241,3 +241,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 |---|---|---|
 | 1.0 | 26/10/2026 | Primeira proposta |
 | 1.1 | 10/11/2026 | `pesoUnitarioKg` em `produto_cadastrado` e `produto_atualizado`; `origem` de `fornecimento_criado` como objeto com `cidade` e `uf`; listas de unidade e tipo de transporte confirmadas. Motivo: resposta do grupo de Logística/Transporte |
+| 1.2 | 10/11/2026 | `empresa_cadastrada` em camelCase (`tenantId`, `groupId`, `legalName`, `branchType`, `geoLat`, `geoLng`), conforme a resposta do grupo de Autenticação na issue #2 |
