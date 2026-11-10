@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.5 (esboço)
+**Versão:** 0.6 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -63,7 +63,7 @@ O portal conecta empresas compradoras, fornecedoras e transportadoras. O fluxo p
 - **Passo 1 (fornecedor publica fornecimento):** o `fornecimentos-service` recebe o cadastro da oferta (`POST /api/v1/fornecimentos`), valida o produto na cópia local e publica `fornecimento_criado` para o Mercado.
 - **Passo 3 (eventos no Kafka):** o `produtos-service` publica `produto_cadastrado`; o `fornecimentos-service` consome esse evento e os de pedido, e publica `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
 - **Passo 7 (pedido criado):** o `fornecimentos-service` reserva a quantidade ao consumir `pedido_criado`, libera em cancelamento e dá baixa na venda concluída (`pedido_atualizado`).
-- **Passo 8 (logística):** o tipo de transporte do produto viaja no `produto_cadastrado`; como a Logística vai obtê-lo ainda está em aberto (P-27).
+- **Passo 8 (logística):** a Logística recebe o tipo de transporte, o peso da carga e a origem pelo `pedido_criado`, que o grupo de Pedidos monta com os dados de `produto_cadastrado` (tipo de transporte e peso unitário) e de `fornecimento_criado` (origem em cidade e UF). Proposta da Logística ao grupo de Pedidos, ainda sem resposta (ADR-023).
 
 ---
 
@@ -148,6 +148,7 @@ erDiagram
         varchar categoria
         varchar unidade
         varchar tipo_transporte
+        numeric peso_unitario_kg
     }
     FORNECIMENTO {
         varchar id
@@ -155,6 +156,7 @@ erDiagram
         varchar produto_id
         numeric preco
         varchar origem
+        varchar origem_uf
         numeric quantidade_disponivel
         numeric quantidade_reservada
     }
@@ -397,6 +399,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 020 | Padrão de API do kit de infraestrutura | Aceita |
 | 021 | Uso do kit como base, com as correções da seção 3.4 | Substituída (seção 14) |
 | 022 | Estoque alterado só por eventos de pedido | Proposta |
+| 023 | Dados de produto e fornecimento que a Logística precisa: origem em cidade e UF e peso unitário | Aceita |
 
 ---
 
@@ -590,6 +593,15 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` não tem endpoint de baixa; `DELETE` e métodos fora do contrato respondem 405 (CA-40).
 - **Status:** Proposta
 
+### ADR-023: Origem em cidade e UF e peso unitário do produto
+
+- **Contexto:** a Logística cota o frete a partir do ponto de coleta e do peso da carga. Ela pediu (Documento de Requisitos, F11) que a origem do fornecimento seja cidade e UF e que o produto tenha um peso unitário opcional, porque com as unidades `UN`, `CX` e `L` não há como saber o peso. A origem era texto livre no kit (P-05).
+- **Decisão:** `origem` passa a ser um objeto `{cidade, uf}`, com a UF validada contra as 27 siglas, no mesmo formato que a Logística propôs para o `pedido_criado`. O produto ganha `peso_unitario_kg`, opcional, com até 3 casas decimais (1 grama). O banco reaproveita a coluna `origem` do kit para a cidade e acrescenta `origem_uf` e `peso_unitario_kg`.
+- **Alternativas consideradas:** manter a origem como texto no formato "Cidade-UF", que obrigaria cada consumidor a separar os dois valores e não permitiria validar a UF; peso obrigatório, que obrigaria o fornecedor a informar um dado inútil para `KG` e `TON`; a Logística consumir os eventos de produto e fornecimento diretamente (plano B dela), que fica possível com os mesmos campos.
+- **Consequências:** a mudança na origem é incompatível com a versão 1.1 das ESPs e do contrato, mas ainda não havia consumidor do `fornecimento_criado`. O cálculo do peso da carga fica com o grupo de Pedidos, que precisa aceitar a proposta da Logística.
+- **Evidência na implementação:** `origem_valida` e `UFS` em `servicos/fornecimentos-service/app/main.py`; `_peso_unitario` em `servicos/produtos-service/app/main.py`; colunas e `CHECK` na proposta de DDL v1.2. CA-03, CA-05 e CA-12 (Fornecimentos) e CA-04 e CA-28 (Produtos).
+- **Status:** Aceita
+
 ---
 
 ## 13. Limitações conhecidas e itens não implementados
@@ -647,6 +659,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 |---|---|---|
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
 | 0.5 | 10/11/2026 | Implementação dos dois serviços: evidências dos ADRs, seções 2.2, 3.2, 5, 6, 7, 8, 10, 11, 13 e 14 preenchidas. ADR-016 aceita; ADR-021 substituída |
+| 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

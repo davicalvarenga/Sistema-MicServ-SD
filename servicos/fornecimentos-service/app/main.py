@@ -1,4 +1,4 @@
-"""fornecimentos-service: implementação da ESP-FRN-001 v1.1."""
+"""fornecimentos-service: implementação da ESP-FRN-001 v1.2."""
 
 import traceback
 import uuid
@@ -36,6 +36,9 @@ STATUS_CANCELADO = "CANCELADO"
 STATUS_VENDA_CONCLUIDA = "VENDA_CONCLUIDA"
 MAXIMO = Decimal("9999999999.99")
 ZERO = Decimal("0")
+# Siglas das 27 unidades da federação (IBGE), usadas na origem do fornecimento (RN-02)
+UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+       "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
 
 
 class EventBus(Protocol):
@@ -81,6 +84,18 @@ def decimal_valido(valor: Any, minimo_exclusivo: bool = True, maximo: Decimal | 
     return numero
 
 
+def origem_valida(valor: Any) -> dict | None:
+    """Origem do fornecimento (RN-02): objeto com cidade (1 a 255 caracteres) e uf (sigla da lista UFS)."""
+    if not isinstance(valor, dict):
+        return None
+    cidade, uf = valor.get("cidade"), valor.get("uf")
+    if not isinstance(cidade, str) or not 1 <= len(cidade.strip()) <= 255:
+        return None
+    if not isinstance(uf, str) or uf.strip() not in UFS:
+        return None
+    return {"cidade": cidade.strip(), "uf": uf.strip()}
+
+
 def numero_json(valor: Decimal | None) -> float | None:
     return None if valor is None else float(valor)
 
@@ -88,6 +103,7 @@ def numero_json(valor: Decimal | None) -> float | None:
 def projecao(fornecimento: dict) -> dict:
     """Resposta da API-04/05/06: atributos do §6.1 com decimais como número JSON."""
     resposta = dict(fornecimento)
+    resposta["origem"] = dict(fornecimento["origem"])
     for campo in ("preco", "quantidade_disponivel", "quantidade_reservada"):
         resposta[campo] = numero_json(fornecimento[campo])
     for campo in ("criado_em", "atualizado_em"):
@@ -97,7 +113,7 @@ def projecao(fornecimento: dict) -> dict:
 
 
 def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas) -> FastAPI:
-    app = FastAPI(title="Fornecimentos API", version="1.1", docs_url="/docs", openapi_url="/openapi.json")
+    app = FastAPI(title="Fornecimentos API", version="1.2", docs_url="/docs", openapi_url="/openapi.json")
     logger = criar_logger(NOME_SERVICO)
 
     def prontas() -> bool:
@@ -123,9 +139,9 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         quantidade = decimal_valido(corpo.get("quantidade_disponivel"))
         if quantidade is None:
             raise ErroApi(422, "DADOS_INVALIDOS", "quantidade_disponivel deve ser número maior que 0, com até 2 casas decimais e até 9999999999.99.")
-        origem = corpo.get("origem")
-        if not isinstance(origem, str) or not 1 <= len(origem.strip()) <= 255:
-            raise ErroApi(422, "DADOS_INVALIDOS", "origem deve ser texto de 1 a 255 caracteres.")
+        origem = origem_valida(corpo.get("origem"))
+        if origem is None:
+            raise ErroApi(422, "DADOS_INVALIDOS", "origem deve ser objeto com cidade (1 a 255 caracteres) e uf (sigla de UF em maiúsculas).")
         produto_id = produto_id.strip()
         produto = repositorio.obter_produto_referencia(produto_id)
         if produto is None:
@@ -139,7 +155,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "preco": preco,
             "quantidade_disponivel": quantidade,
             "quantidade_reservada": ZERO,
-            "origem": origem.strip(),
+            "origem": origem,
             "criado_por_usuario_id": claims["sub"],
             "criado_em": momento,
             "atualizado_em": momento,
@@ -157,7 +173,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "unidade": fornecimento["unidade"],
             "preco": numero_json(preco),
             "quantidadeDisponivel": numero_json(quantidade),
-            "origem": fornecimento["origem"],
+            "origem": dict(origem),
             "criadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
             "criadoEm": momento,
         }

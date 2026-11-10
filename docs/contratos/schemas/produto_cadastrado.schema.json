@@ -53,6 +53,7 @@
         "categoria",
         "unidade",
         "tipoTransporte",
+        "pesoUnitarioKg",
         "cadastradoPor",
         "cadastradoEm"
       ],
@@ -73,16 +74,32 @@
           "maxLength": 64
         },
         "unidade": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 32,
-          "description": "Sugestão do kit: KG, TON, UN, CX, L (P-06)."
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ],
+          "description": "Lista confirmada pelo grupo de Logística/Transporte (P-06 resolvida)."
         },
         "tipoTransporte": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 64,
-          "description": "Sugestão do kit: GRANEL, REFRIGERADO, CARGA_SECA, PERIGOSO (P-06)."
+          "enum": [
+            "GRANEL",
+            "REFRIGERADO",
+            "CARGA_SECA",
+            "PERIGOSO"
+          ],
+          "description": "Lista confirmada pelo grupo de Logística/Transporte (P-06 resolvida)."
+        },
+        "pesoUnitarioKg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 999999999.999,
+          "description": "Peso de uma unidade do produto em kg, até 3 casas decimais, ou null quando não informado. Pedido pela Logística para calcular o peso da carga quando a unidade é UN, CX ou L."
         },
         "cadastradoPor": {
           "type": "object",

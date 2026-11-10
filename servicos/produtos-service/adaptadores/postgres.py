@@ -8,7 +8,8 @@ from datetime import timezone
 
 from psycopg2.pool import ThreadedConnectionPool
 
-COLUNAS = "id, nome, categoria, unidade, tipo_transporte, cadastrado_por_empresa_id, cadastrado_por_usuario_id, criado_em"
+COLUNAS = ("id, nome, categoria, unidade, tipo_transporte, peso_unitario_kg, cadastrado_por_empresa_id, "
+           "cadastrado_por_usuario_id, criado_em")
 
 
 def _instante(momento) -> str:
@@ -18,7 +19,8 @@ def _instante(momento) -> str:
 def _produto(linha) -> dict:
     return {
         "produto_id": linha[0], "nome": linha[1], "categoria": linha[2], "unidade": linha[3], "tipo_transporte": linha[4],
-        "cadastrado_por_empresa_id": linha[5], "cadastrado_por_usuario_id": linha[6], "cadastrado_em": _instante(linha[7]),
+        "peso_unitario_kg": linha[5], "cadastrado_por_empresa_id": linha[6], "cadastrado_por_usuario_id": linha[7],
+        "cadastrado_em": _instante(linha[8]),
     }
 
 
@@ -41,9 +43,9 @@ class RepositorioProdutosPostgres:
 
     def inserir(self, produto: dict) -> None:
         self._executar(
-            f"INSERT INTO produtos.produto ({COLUNAS}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            f"INSERT INTO produtos.produto ({COLUNAS}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (produto["produto_id"], produto["nome"], produto["categoria"], produto["unidade"], produto["tipo_transporte"],
-             produto["cadastrado_por_empresa_id"], produto["cadastrado_por_usuario_id"], produto["cadastrado_em"]),
+             produto["peso_unitario_kg"], produto["cadastrado_por_empresa_id"], produto["cadastrado_por_usuario_id"], produto["cadastrado_em"]),
         )
 
     def obter(self, produto_id: str) -> dict | None:

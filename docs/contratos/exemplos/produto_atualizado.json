@@ -12,6 +12,7 @@
     "categoria": "LATICINIOS",
     "unidade": "L",
     "tipoTransporte": "REFRIGERADO",
+    "pesoUnitarioKg": null,
     "atualizadoPor": {
       "empresaId": "emp-34",
       "usuarioId": "usr-7"

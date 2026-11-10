@@ -46,3 +46,7 @@ def test_fluxo_completo_com_o_servico(dsn_servico):
     lista = cliente.get("/api/v1/produtos?categoria=LATICINIOS", headers=auth("BUYER")).json()
     assert lista["total"] == 1 and lista["itens"][0] == criado
     assert cliente.get("/api/v1/produtos?size=1&page=2", headers=auth("BUYER")).json()["total"] == 2
+    caixa = cliente.post("/api/v1/produtos", json={**PRODUTO_VALIDO, "unidade": "CX", "peso_unitario_kg": 999999999.999},
+                         headers=auth()).json()
+    assert caixa["peso_unitario_kg"] == 999999999.999
+    assert cliente.get(f"/api/v1/produtos/{caixa['produto_id']}", headers=auth("BUYER")).json() == caixa

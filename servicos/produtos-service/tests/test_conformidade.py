@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-PRD-001 v1.1: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-PRD-001 v1.2: um teste por critério de aceitação."""
 
 import ast
 import logging
@@ -32,8 +32,8 @@ def test_CA01(amb):
     assert eh_uuid4(corpo["produto_id"])
     assert corpo == {
         "produto_id": corpo["produto_id"], "nome": "Leite integral", "categoria": "LATICINIOS", "unidade": "L",
-        "tipo_transporte": "REFRIGERADO", "cadastrado_por_empresa_id": "EMP-34", "cadastrado_por_usuario_id": "USR-7",
-        "cadastrado_em": "2026-10-26T14:00:00Z",
+        "tipo_transporte": "REFRIGERADO", "peso_unitario_kg": None, "cadastrado_por_empresa_id": "EMP-34",
+        "cadastrado_por_usuario_id": "USR-7", "cadastrado_em": "2026-10-26T14:00:00Z",
     }
     g = amb.cliente.get(f"{URL}/{corpo['produto_id']}", headers=auth("SUPPLIER"))
     assert g.status_code == 200 and g.json() == corpo
@@ -58,6 +58,12 @@ def test_CA03(amb):
     {**PRODUTO_VALIDO, "unidade": "litro"},
     {**PRODUTO_VALIDO, "tipo_transporte": "AEREO"},
     {**PRODUTO_VALIDO, "nome": 123},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": 0},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": -1},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": "1.5"},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": True},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": 1.0005},
+    {**PRODUTO_VALIDO, "peso_unitario_kg": 1000000000},
     ["Leite"],
     '{"nome": "Leite",',
 ])
@@ -144,7 +150,8 @@ def test_CA12(amb):
         "eventType": "produto_cadastrado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00Z",
         "source": "produtos-service", "correlationId": "corr-001", "aggregateId": pid}
     assert m["payload"] == {"produtoId": pid, "nome": "Leite integral", "categoria": "LATICINIOS", "unidade": "L",
-                            "tipoTransporte": "REFRIGERADO", "cadastradoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
+                            "tipoTransporte": "REFRIGERADO", "pesoUnitarioKg": None,
+                            "cadastradoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
                             "cadastradoEm": "2026-10-26T14:00:00Z"}
 
 
@@ -307,3 +314,21 @@ def test_CA27(amb, caplog):
         amb.cliente.post(URL, json=PRODUTO_VALIDO, headers={"Authorization": "Bearer " + valor})
     assert valor not in str(amb.bus.publicadas)
     assert all(valor not in registro.getMessage() for registro in caplog.records)
+
+
+# RF-01 e RF-04: peso unitário opcional (RN-08)
+
+def test_CA28(amb):
+    corpo = {"nome": "Caixa de leite", "categoria": "LATICINIOS", "unidade": "CX", "tipo_transporte": "REFRIGERADO",
+             "peso_unitario_kg": 12.35}
+    r = cadastrar(amb, corpo)
+    assert r.status_code == 201 and r.json()["peso_unitario_kg"] == 12.35
+    pid = r.json()["produto_id"]
+    assert amb.cliente.get(f"{URL}/{pid}", headers=auth("BUYER")).json() == r.json()
+    assert amb.bus.publicadas[0]["message"]["payload"]["pesoUnitarioKg"] == 12.35
+    r = cadastrar(amb, {**corpo, "peso_unitario_kg": None})
+    assert r.status_code == 201 and r.json()["peso_unitario_kg"] is None
+    assert amb.bus.publicadas[1]["message"]["payload"]["pesoUnitarioKg"] is None
+    for limite in (0.001, 999999999.999):
+        r = cadastrar(amb, {**corpo, "peso_unitario_kg": limite})
+        assert r.status_code == 201 and r.json()["peso_unitario_kg"] == limite

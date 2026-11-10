@@ -147,7 +147,7 @@ def auth(escopo="SUPPLIER", **kwargs):
     return {"Authorization": "Bearer " + token(escopo, **kwargs)}
 
 
-FORNECIMENTO_VALIDO = {"produto_id": "PROD-1", "preco": 5.5, "quantidade_disponivel": 15000, "origem": "Goiânia-GO"}
+FORNECIMENTO_VALIDO = {"produto_id": "PROD-1", "preco": 5.5, "quantidade_disponivel": 15000, "origem": {"cidade": "Goiânia", "uf": "GO"}}
 
 
 class Ambiente:
@@ -210,4 +210,4 @@ def gravar_fornecimento(amb, disponivel, reservada=0, fid="FORN-1", produto_id="
     amb.repo.estado["fornecimentos"][fid] = {
         "fornecimento_id": fid, "fornecedor_id": "EMP-34", "produto_id": produto_id, "unidade": "L",
         "preco": Decimal("5.5"), "quantidade_disponivel": Decimal(str(disponivel)), "quantidade_reservada": Decimal(str(reservada)),
-        "origem": "Goiânia-GO", "criado_por_usuario_id": "USR-7", "criado_em": criado_em, "atualizado_em": criado_em}
+        "origem": {"cidade": "Goiânia", "uf": "GO"}, "criado_por_usuario_id": "USR-7", "criado_em": criado_em, "atualizado_em": criado_em}

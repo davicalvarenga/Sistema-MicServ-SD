@@ -5,12 +5,12 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 1.1 |
+| Versão | 1.2 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
 | Data | 2026-10-26 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; Proposta de DDL (`docs/banco/`); ESP-PRD-001 (Produtos); resposta do grupo de Autenticação nas issues #2 e #13 (2026-11-09) |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; Proposta de DDL (`docs/banco/`); ESP-PRD-001 (Produtos); resposta do grupo de Autenticação nas issues #2 e #13 (2026-11-09); resposta do grupo de Logística/Transporte sobre P-05 (2026-11-10) |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -66,6 +66,7 @@ Front-end ─► Gateway ─REST────────────────
 | Quantidade reservada | Parte do estoque bloqueada por pedidos em andamento. Nunca negativa. |
 | Reserva | Registro de quanto um pedido (`pedido_id`) bloqueou de um fornecimento, com uma situação (§6.2). |
 | Produto de referência | Cópia local de um produto, criada a partir de `produto_cadastrado`. Um fornecimento só pode referenciar um produto de referência existente. |
+| Origem | Local de coleta do produto: objeto JSON `{"cidade": ..., "uf": ...}`. `cidade` é texto com 1 a 255 caracteres depois de `strip()`; `uf` é, depois de `strip()`, uma das 27 siglas de unidade da federação do IBGE, em maiúsculas: `AC`, `AL`, `AP`, `AM`, `BA`, `CE`, `DF`, `ES`, `GO`, `MA`, `MT`, `MS`, `MG`, `PA`, `PB`, `PR`, `PE`, `PI`, `RJ`, `RN`, `RS`, `RO`, `RR`, `SC`, `SP`, `SE`, `TO`. Campos extras dentro do objeto são ignorados e não são gravados. |
 | Valor decimal | Número com no máximo 2 casas decimais, entre 0 e 9999999999.99. Em JSON é **número** (não string). Internamente, toda aritmética e comparação usa `decimal.Decimal`, obtido com `Decimal(str(valor))`; proibido calcular com `float`. Na saída, o `Decimal` é convertido com `float()` e serializado como número JSON. |
 | Instante | Data/hora em UTC no formato ISO-8601 com sufixo `Z` e sem frações de segundo (ex.: `"2026-10-26T14:00:00Z"`). |
 | Agora | Valor retornado por `clock.now()` (porta Clock). O serviço nunca usa o relógio do sistema. |
@@ -154,7 +155,7 @@ Comportamento das portas:
 | preco | valor decimal | Sim | Corpo da requisição; > 0. |
 | quantidade_disponivel | valor decimal | Sim | Corpo da requisição no cadastro (> 0); depois, só muda por `aplicar_movimento`; ≥ 0. |
 | quantidade_reservada | valor decimal | Sim | `0` no cadastro; só muda por `aplicar_movimento`; ≥ 0. |
-| origem | string | Sim | Corpo da requisição, depois de `strip()`; 1 a 255 caracteres. |
+| origem | objeto (`cidade`, `uf`) | Sim | Corpo da requisição; formato do glossário (Origem). Grava só `cidade` e `uf`, depois de `strip()`. |
 | criado_por_usuario_id | string | Sim | Claim `sub` do token. |
 | criado_em | instante | Sim | `clock.now()` no cadastro. |
 | atualizado_em | instante | Sim | `clock.now()` no cadastro e a cada movimento. |
@@ -240,7 +241,7 @@ A contagem inclui todas as respostas HTTP da aplicação, exceto as do próprio 
 #### API-04 — Cadastrar fornecimento
 Requisição:
 ```json
-{"produto_id": "PROD-1", "preco": 5.5, "quantidade_disponivel": 15000, "origem": "Goiânia-GO"}
+{"produto_id": "PROD-1", "preco": 5.5, "quantidade_disponivel": 15000, "origem": {"cidade": "Goiânia", "uf": "GO"}}
 ```
 Resposta 201:
 ```json
@@ -252,7 +253,7 @@ Resposta 201:
   "preco": 5.5,
   "quantidade_disponivel": 15000.0,
   "quantidade_reservada": 0.0,
-  "origem": "Goiânia-GO",
+  "origem": {"cidade": "Goiânia", "uf": "GO"},
   "criado_por_usuario_id": "USR-7",
   "criado_em": "2026-10-26T14:00:00Z",
   "atualizado_em": "2026-10-26T14:00:00Z"
@@ -339,7 +340,7 @@ Envelope comum:
 | `reserva_estoque_recusada` | Reserva não feita (RF-06) | `pedido_id` | `pedidoId`, `fornecimentoId`, `quantidadeSolicitada`, `quantidadeDisponivel` (`null` se o fornecimento não existe), `motivo` (`ESTOQUE_INSUFICIENTE` ou `FORNECIMENTO_INEXISTENTE`), `recusadoEm` |
 | `fornecimentos.dlt` | Mensagem consumida inválida ou com falha (RN-09) | `aggregateId` da mensagem original se for texto preenchido; senão `eventId` original se for texto preenchido; senão `"desconhecido"` | `originalEvent` (a mensagem recebida, intacta), `error` (texto não vazio com o motivo), `stackTrace` (`""` para mensagem inválida; o *traceback* para exceção), `failedAtAttempt` (`1`) |
 
-Mapeamento do fornecimento (§6.1) para `fornecimento_criado`: `fornecimento_id` → `fornecimentoId`; `fornecedor_id` → `fornecedorId` e `criadoPor.empresaId`; `produto_id` → `produtoId`; `quantidade_disponivel` → `quantidadeDisponivel`; `criado_por_usuario_id` → `criadoPor.usuarioId`; `criado_em` → `criadoEm`; `unidade`, `preco` e `origem` com o mesmo nome. `quantidade_reservada` e `atualizado_em` não vão no evento.
+Mapeamento do fornecimento (§6.1) para `fornecimento_criado`: `fornecimento_id` → `fornecimentoId`; `fornecedor_id` → `fornecedorId` e `criadoPor.empresaId`; `produto_id` → `produtoId`; `quantidade_disponivel` → `quantidadeDisponivel`; `criado_por_usuario_id` → `criadoPor.usuarioId`; `criado_em` → `criadoEm`; `unidade`, `preco` e `origem` (objeto com `cidade` e `uf`) com o mesmo nome. `quantidade_reservada` e `atualizado_em` não vão no evento.
 
 Exemplo de `estoque_atualizado` (`event_bus.publish("estoque_atualizado", "FORN-1", mensagem)`):
 ```json
@@ -401,8 +402,8 @@ Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `acti
 # CA-01
 Cenário: Fornecedor cadastra oferta
   Dado o produto PROD-1 conhecido e um token de "SUPPLIER"
-  Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 5.5, quantidade_disponivel 15000 e origem "Goiânia-GO"
-  Então a resposta é 201 com fornecimento_id UUID4, fornecedor_id "EMP-34", produto_id "PROD-1", unidade "L", preco 5.5, quantidade_disponivel 15000, quantidade_reservada 0, origem "Goiânia-GO", criado_por_usuario_id "USR-7", criado_em e atualizado_em "2026-10-26T14:00:00Z"
+  Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 5.5, quantidade_disponivel 15000 e origem {"cidade": "Goiânia", "uf": "GO"}
+  Então a resposta é 201 com fornecimento_id UUID4, fornecedor_id "EMP-34", produto_id "PROD-1", unidade "L", preco 5.5, quantidade_disponivel 15000, quantidade_reservada 0, origem {"cidade": "Goiânia", "uf": "GO"}, criado_por_usuario_id "USR-7", criado_em e atualizado_em "2026-10-26T14:00:00Z"
   E GET /api/v1/fornecimentos/{fornecimento_id} com um token de "BUYER" retorna 200 com o mesmo corpo
 
 # CA-02
@@ -425,8 +426,12 @@ Cenário: Dados inválidos (partição de equivalência e valor-limite)
     | preço booleano                    | "preco": true                             |
     | quantidade zero                   | "quantidade_disponivel": 0                |
     | quantidade com 3 casas            | "quantidade_disponivel": 1.234            |
-    | origem só com espaços             | "origem": "   "                           |
-    | origem com 256 caracteres         | "origem": 256 vezes "a"                   |
+    | origem como texto (formato antigo)| "origem": "Goiânia-GO"                    |
+    | cidade só com espaços             | "origem": {"cidade": "   ", "uf": "GO"}   |
+    | cidade com 256 caracteres         | "origem": {"cidade": 256 vezes "a", "uf": "GO"} |
+    | uf ausente                        | "origem": {"cidade": "Goiânia"}           |
+    | uf em minúsculas                  | "origem": {"cidade": "Goiânia", "uf": "go"} |
+    | uf fora da lista                  | "origem": {"cidade": "Goiânia", "uf": "XX"} |
     | produto_id ausente                | sem a chave "produto_id"                  |
     | produto_id numérico               | "produto_id": 1                           |
   E também com o corpo ["x"] e com o texto {"produto_id": (JSON malformado)
@@ -443,8 +448,8 @@ Cenário: Produto desconhecido
 # CA-05
 Cenário: Fornecedor vem do token e valores no limite são aceitos
   Dado o produto PROD-1 conhecido e um token de "SUPPLIER" com tenant_id "EMP-34"
-  Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 9999999999.99, quantidade_disponivel 0.01, origem "  Anápolis-GO  " e fornecedor_id "EMP-99"
-  Então a resposta é 201 com fornecedor_id "EMP-34", preco 9999999999.99, quantidade_disponivel 0.01 e origem "Anápolis-GO"
+  Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 9999999999.99, quantidade_disponivel 0.01, origem {"cidade": "  Anápolis  ", "uf": " GO "} e fornecedor_id "EMP-99"
+  Então a resposta é 201 com fornecedor_id "EMP-34", preco 9999999999.99, quantidade_disponivel 0.01 e origem {"cidade": "Anápolis", "uf": "GO"}
 
 # CA-06
 Cenário: Falha do repositório
@@ -490,11 +495,11 @@ Cenário: Transportadora não consulta ofertas
 ```gherkin
 # CA-10
 Cenário: Paginação e filtro por produto
-  Dado os produtos PROD-1 e PROD-2 conhecidos e 3 fornecimentos cadastrados nesta ordem: origem "A" (PROD-1) às 14:00:00Z, origem "B" (PROD-2) às 14:00:01Z e origem "C" (PROD-1) às 14:00:02Z
+  Dado os produtos PROD-1 e PROD-2 conhecidos e 3 fornecimentos cadastrados nesta ordem: cidade de origem "A" (PROD-1) às 14:00:00Z, "B" (PROD-2) às 14:00:01Z e "C" (PROD-1) às 14:00:02Z, todas com uf "GO"
   Quando um token de "BUYER" consulta GET /api/v1/fornecimentos?page=1&size=2
-  Então a resposta é 200 com os itens de origem "A" e "B", page 1, size 2 e total 3
+  Então a resposta é 200 com os itens de cidade de origem "A" e "B", page 1, size 2 e total 3
   Quando consulta GET /api/v1/fornecimentos?produto_id=PROD-1
-  Então a resposta é 200 com os itens de origem "A" e "C" e total 2
+  Então a resposta é 200 com os itens de cidade de origem "A" e "C" e total 2
   Quando consulta GET /api/v1/fornecimentos?page=9&size=2
   Então a resposta é 200 com itens [] e total 3
 
@@ -520,7 +525,7 @@ Cenário: Evento publicado com envelope, chave e payload
   Quando o CA-01 é executado
   Então exatamente 1 mensagem é publicada, no tópico "fornecimento_criado", com key igual ao fornecimento_id da resposta
   E a mensagem tem eventId UUID4, eventType "fornecimento_criado", eventVersion "1.0", timestamp "2026-10-26T14:00:00Z", source "fornecimentos-service", correlationId "corr-001" e aggregateId igual ao fornecimento_id
-  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem "Goiânia-GO", criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e criadoEm "2026-10-26T14:00:00Z"
+  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem {"cidade": "Goiânia", "uf": "GO"}, criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e criadoEm "2026-10-26T14:00:00Z"
 
 # CA-13
 Cenário: Requisição recusada não publica
@@ -765,7 +770,7 @@ Cenário: Métricas
 | ID | Regra | Exemplo concreto |
 |---|---|---|
 | RN-01 | Apenas o perfil `SUPPLIER` cadastra fornecimentos. `BUYER`, `CARRIER` e `TENANT_ADMIN` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403. |
-| RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` string com 1 a 255 caracteres depois de `strip()`. Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` → aceito. |
+| RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` objeto no formato do glossário (Origem). Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` → aceito; `"origem": {"cidade": "Goiânia", "uf": "go"}` → 422. |
 | RN-03 | O `produto_id` precisa existir como produto de referência; senão → 422 `PRODUTO_INEXISTENTE`. A `unidade` do fornecimento é copiada do produto de referência. | PROD-X desconhecido → 422. |
 | RN-04 | Requisição recusada (qualquer 4xx ou 5xx) não grava nada e não publica evento. | 403 → nenhuma mensagem. |
 | RN-05 | Consulta e listagem: perfis `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` → 403 `PERFIL_NAO_PERMITIDO`. `fornecimento_id` inexistente → 404 `FORNECIMENTO_NAO_ENCONTRADO`. | Transportadora em GET → 403. |
@@ -932,6 +937,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
 | Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real usa *transactional outbox* (ADR-010). |
 | Q-14 | Premissa | Momento em que o pedido é criado: o professor fala na entrada do leilão; o kit, depois de `negociacao_fechada` (P-29). | O serviço reserva quando receber `pedido_criado`, seja qual for o momento escolhido pelos grupos. A decisão não muda esta ESP. |
+| Q-16 | Decisão | Formato da origem (P-05). O kit guardava texto livre; a Logística pediu cidade e UF para usar como ponto de coleta (2026-11-10). | Objeto com `cidade` e `uf` (glossário), no mesmo formato do campo `origem` que a Logística propôs para o `pedido_criado`. UF validada contra a lista do IBGE. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -967,3 +973,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 |---|---|---|---|
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4, do Contrato de Eventos v1.0, da proposta de DDL e do kit de infraestrutura. |
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
+| 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | `origem` passa de texto livre a objeto com `cidade` e `uf` (glossário, §6.1, RN-02, CA-01, CA-03, CA-05, CA-10, CA-12, Q-16). Mudança incompatível com a versão 1.1 no corpo da API-04, nas respostas e no `fornecimento_criado`. Motivo: pedido do grupo de Logística/Transporte (P-05). |

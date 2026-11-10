@@ -2,7 +2,7 @@
 
 **De:** grupo de Fornecimento e Produtos
 **Para:** grupo de Banco de Dados (com cópia ao grupo de Infraestrutura)
-**Data:** 26/10/2026
+**Data:** 26/10/2026 (versão 1.2: 10/11/2026)
 **Script:** [`01-proposta-ddl-produtos-fornecimentos.sql`](01-proposta-ddl-produtos-fornecimentos.sql)
 
 O DDL é responsabilidade do grupo de Banco de Dados, conforme o guia do kit de infraestrutura (seção 5). Este arquivo é uma **proposta** para facilitar a revisão. A decisão final é de vocês.
@@ -18,6 +18,8 @@ O DDL é responsabilidade do grupo de Banco de Dados, conforme o guia do kit de 
 | `pedido_id` em `movimento_estoque` | Liga cada movimento de estoque ao pedido que o causou (auditoria) | RF-14 |
 | Tabelas `outbox` | O evento é gravado na mesma transação da alteração e publicado depois. Evita perder evento quando o Redpanda está fora | ADR-010 |
 | Colunas `cadastrado_por_empresa_id` e `cadastrado_por_usuario_id` em `produto`; `unidade` e `criado_por_usuario_id` em `fornecimento` | Atributos exigidos pelas ESPs que as tabelas do kit não têm (incluídos na versão 1.1, 10/11/2026) | ESP-PRD-001 e ESP-FRN-001, §6.1 |
+| `origem_uf` em `fornecimento`, com `CHECK` das 27 UFs; a coluna `origem` do kit passa a guardar a cidade | A Logística precisa da origem em cidade e UF como ponto de coleta (P-05). Aproveitar a coluna `origem` evita duplicar a cidade em duas colunas (incluído na versão 1.2) | ESP-FRN-001, §6.1 e Q-16 |
+| `peso_unitario_kg` em `produto` (`NUMERIC(12,3)`, opcional, `CHECK` > 0) | A Logística precisa do peso da carga quando a unidade é `UN`, `CX` ou `L` (incluído na versão 1.2) | ESP-PRD-001, RN-08 e Q-11 |
 | `atualizado_em` e índices | Data da última alteração e índices para as listagens filtradas por produto, fornecedor e categoria | RF-02, RF-10 |
 | Permissões refeitas | No `01-init.sql` do kit, os `GRANT` rodam antes do `CREATE TABLE`, e `svc_produtos` e `svc_fornecimentos` ficam sem acesso às próprias tabelas. A proposta concede só DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`), como pede a seção 5.2 do guia, e define permissões padrão para tabelas futuras | RNF-24, P-32 |
 
@@ -41,6 +43,7 @@ Em 26/10/2026, num PostgreSQL 16 local (T12 depois do ajuste para a ESP-FRN-001,
 | T9 | Gravar evento na `outbox` | Gravado | Gravado |
 | T10 | `DROP TABLE` e leitura do schema `produtos` como `svc_fornecimentos` | Ambos recusados | `must be owner of table` e `permission denied for schema produtos` |
 | T12 | Gravar reserva `CANCELADA_SEM_RESERVA` com quantidade 0; tentar quantidade -1 e situação `RECUSADA` | A primeira é aceita; as duas outras são recusadas pelos `CHECK` | Aceita; `reserva_quantidade_check` e `reserva_situacao_check` recusaram as outras duas |
+| T13 | Gravar fornecimento com `origem_uf` `XX` e produto com `peso_unitario_kg` 0 | Ambos recusados pelos `CHECK` | `ck_fornecimento_origem_uf` e `ck_produto_peso_unitario_positivo` recusaram (10/11/2026) |
 | T11 | **Concorrência:** duas sessões reservam 60 de um fornecimento com 100. A sessão A segura a transação por 3 segundos, e a sessão B tenta reservar nesse intervalo | Só uma reserva passa, e o estoque não fica negativo | A: `UPDATE 1`. B esperou A terminar e fez `UPDATE 0`. Final: 40 disponíveis, 60 reservadas |
 
 O T11 confirma o comportamento descrito no ADR-006 do Relatório Técnico: no PostgreSQL, com o isolamento padrão (Read Committed), a segunda atualização espera a primeira e reavalia a condição sobre a linha já atualizada.
@@ -57,3 +60,8 @@ O T11 confirma o comportamento descrito no ADR-006 do Relatório Técnico: no Po
 - A tabela `reserva` deixou de ter chave estrangeira para `fornecimento`: um cancelamento pode chegar para um fornecimento que não existe e precisa ser registrado como `CANCELADA_SEM_RESERVA`.
 - A proposta passou a ser testada automaticamente pelos testes de integração dos serviços (`servicos/*/tests/test_postgres.py`), que aplicam o script do kit e este DDL num PostgreSQL 16 e usam o banco com os usuários `svc_produtos` e `svc_fornecimentos`. Em 10/11/2026: 7 testes aprovados, inclusive reservas concorrentes com 5 conexões.
 
+## Versão 1.2 (10/11/2026)
+
+- `origem_uf` em `fornecimento` e `peso_unitario_kg` em `produto` (tabela acima), pedidos pelo grupo de Logística/Transporte.
+- O script continua podendo ser executado mais de uma vez: testado duas vezes seguidas sobre o `01-init.sql` do kit, sem erro.
+- Testes de integração dos serviços aprovados com esta versão (PostgreSQL 16).
