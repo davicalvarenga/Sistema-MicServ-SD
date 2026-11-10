@@ -188,9 +188,19 @@ Os valores `CANCELADO` e `VENDA_CONCLUIDA` são a proposta do grupo, usada na ES
 
 O `fornecimentos-service` grava o produto na tabela local `produto_referencia` (ADR-011), com `nome`, `unidade` e `tipoTransporte`.
 
-### 3.4 `empresa_cadastrada` (do `usuarios-service`)
+### 3.4 `empresa_cadastrada` (do serviço de Autenticação)
 
-O conteúdo ainda não foi definido (P-12). Precisamos de `empresaId`, dos perfis da empresa e de se ela está ativa, para reconhecer fornecedores.
+Conteúdo definido pelo grupo de Autenticação na issue #2 (09/11/2026). Chave: `tenant_id`. O `source` é `identity-service` (o kit chama o serviço de `usuarios-service`, divergência registrada na P-34 do Documento de Requisitos). O `payload` usa `snake_case`, diferente dos nossos eventos:
+
+| Campo | Descrição |
+|---|---|
+| `tenant_id`, `group_id` | Empresa e grupo econômico (UUID) |
+| `cnpj`, `legal_name`, `branch_type` | Dados cadastrais (`branch_type`: ex. `HQ`) |
+| `geo_lat`, `geo_lng` | Localização |
+| `status` | Situação da empresa (ex.: `ACTIVE`) |
+| `scopes` | Escopos habilitados: `BUYER`, `SUPPLIER`, `CARRIER`, `TENANT_ADMIN` |
+
+O `fornecimentos-service` não consome este evento na versão 1.1 da ESP-FRN-001, porque o escopo ativo já vem no token (`active_scope`). O campo `empresaId` dos nossos eventos recebe o valor do claim `tenant_id`.
 
 ---
 

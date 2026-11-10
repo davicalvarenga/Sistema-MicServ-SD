@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.4 (rascunho para revisão interna)
+**Versão:** 0.5 (rascunho para revisão interna)
 **Data:** 26/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O Grupo de Teste (QA) deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
@@ -59,6 +59,7 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 | F7 | Transcrição automática do áudio da aula 2, em que o professor divide as equipes e define responsabilidades, ferramentas obrigatórias e padrões de interface |
 | F8 | Kit de integração do grupo de Infraestrutura (repositório `Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`, 25/10/2026): guia `ORIENTACOES-ARQUITETURA-GRUPOS.md`, catálogo de eventos `CONTRACTS.md`, script de tópicos, script do banco e boilerplates dos serviços |
 | F9 | Relação final de grupos e integrantes divulgada à turma |
+| F10 | Respostas do grupo de Autenticação (Matheus Alves) nas issues #2 e #13 do repositório do grupo, em 09/11/2026: token RS256 com chaves públicas em `/.well-known/jwks.json`, claims `sub`, `tenant_id`, `group_id`, `active_scope`, `roles` e `permissions`, empresa com vários escopos e conteúdo do evento `empresa_cadastrada` |
 
 Quando F8 divergir de uma orientação do professor (F2, F3, F6, F7), vale a do professor, e a divergência é registrada como pendência para alinhamento com o grupo de Infraestrutura. Quando os próprios arquivos de F8 divergirem entre si, vale o que está implementado (script de tópicos, script do banco e código), e a divergência também é registrada.
 
@@ -68,7 +69,7 @@ As transcrições F6 e F7 têm muitos erros de reconhecimento. Só trechos sem a
 
 **Identificadores:** RF (requisito funcional), RNF (requisito não funcional), RD (requisito de dados), RN (regra de negócio), UC (caso de uso), CA (critério de aceitação), P (pendência).
 
-**Origem:** identificador da fonte (F1 a F9, seção 1.4). F4 indica decisão do grupo.
+**Origem:** identificador da fonte (F1 a F10, seção 1.4). F4 indica decisão do grupo.
 
 **Status:**
 
@@ -116,7 +117,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 
 | Módulo | O que esperamos dele | Status |
 |---|---|---|
-| Autenticação (`usuarios-service`) | Cadastro de empresas e perfis (F7, 19:09). Token JWT com `sub`, empresa, `perfil` (comprador, fornecedor, transportadora ou admin) e `exp`. Access token de 15 minutos e refresh token de 8 horas (F8). Evento `empresa_cadastrada`, com chave `empresaId` (F8) | Confirmado (divergências: P-04, P-31; conteúdo do evento: P-12) |
+| Autenticação (`identity-service`, chamado de `usuarios-service` no kit) | Cadastro de empresas e escopos (F7, 19:09). Token JWT RS256 com `sub`, `tenant_id` (empresa ativa), `group_id`, `active_scope` (`SUPPLIER`, `BUYER`, `CARRIER` ou `TENANT_ADMIN`), `roles`, `permissions` e `exp`; chaves públicas em `/.well-known/jwks.json` (F10). Access token de 15 minutos (F8). Evento `empresa_cadastrada` com chave `tenant_id` (F10) | Confirmado (alinhamento com o kit: P-34) |
 | Gateway (grupo de Infraestrutura) | Gateway Nginx na porta 8080: rotas `/api/v1/produtos` e `/api/v1/fornecimentos`, limite de 100 requisições por segundo por IP e repasse do cabeçalho `X-Correlation-Id` (F8). A validação do token é feita em cada serviço, não no gateway (F8, `services/common/auth.py`) | Confirmado |
 | Mercado, Negociação/Leilão e Pedidos (`pedidos-service`) | Eventos `pedido_criado` e `pedido_atualizado` com identificação do fornecimento, quantidade e situação (criado, cancelado, venda concluída). O professor associa a criação do pedido à entrada em leilão ou negociação, momento em que o estoque precisa ser bloqueado (F6, 8:19; F7, 21:03) | Pendente (P-02, P-29) |
 | Mercado (`mercado-service`) | Consome `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` (F8, `CONTRACTS.md`) | Confirmado |
@@ -129,7 +130,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 
 ### 2.3 Premissas
 
-1. A autenticação usa JWT assinado com HS256. Cada serviço valida o token localmente com a chave compartilhada, usando a biblioteca comum do kit (F8, `services/common/auth.py`).
+1. A autenticação usa JWT assinado com RS256 pelo serviço de Autenticação. Cada serviço valida o token localmente com a chave pública do `kid` do token, obtida do endpoint `/.well-known/jwks.json` e guardada em cache por 1 hora (F10). Isso substitui o HS256 com chave compartilhada do kit (F8).
 2. Cada serviço tem o seu próprio schema no banco `portal_b2b`, e nenhum outro serviço acessa esse schema (F2, legenda "Banco de dados próprio de cada serviço"; F8, seção 5.1 do guia).
 3. Toda comunicação de negócio entre módulos acontece por eventos no cluster Redpanda, compatível com a API do Kafka. Chamadas REST ocorrem apenas entre front-end, gateway e serviços (F2, legenda; F8, seção 3 do guia).
 4. Os serviços rodam em contêineres Docker, em duas instâncias cada (`app1-*` e `app2-*`), atrás do gateway (F7, 21:58; F8, `docker-compose.yml`).
@@ -242,7 +243,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RN-01 | Um fornecimento relaciona um fornecedor e um produto | F1, F2 | Confirmado |
 | RN-02 | Apenas empresas com perfil de fornecedor podem criar fornecimentos | F1, F2, F6, F8 | Confirmado |
 | RN-03 | Um fornecimento só pode referenciar um produto existente no catálogo | F4 | Proposto |
-| RN-04 | Uma empresa pode ter os perfis de fornecedor, comprador e transportadora ao mesmo tempo | F6 | Confirmado (o modelo de dados do kit tem um tipo por empresa e um perfil por usuário: P-31) |
+| RN-04 | Uma empresa pode ter os perfis de fornecedor, comprador e transportadora ao mesmo tempo. O usuário escolhe o escopo em que está atuando, e o token informa esse escopo em `active_scope` | F6, F10 | Confirmado |
 | RN-05 | Um mesmo produto pode ser ofertado por vários fornecedores | F6 | Confirmado |
 | RN-06 | A quantidade reservada por um pedido volta a ficar disponível se o pedido for cancelado | F6 | Confirmado |
 | RN-07 | A quantidade reservada por um pedido sai do estoque quando a venda é concluída | F6 | Confirmado |
@@ -511,7 +512,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-01 | **Resolvida na versão 0.2.** O escopo do grupo é implementar os blocos 2 e 3 do diagrama e integrar com os demais | |
 | P-02 | **Parcialmente resolvida.** O exemplo de `pedido_criado` no guia do kit traz `pedidoId`, `negociacaoId`, `compradorId`, `fornecedorId`, `produtoId`, `quantidade`, `valorTotal` e `status`. Faltam: (a) o `fornecimentoId`, sem o qual não sabemos de qual oferta reservar se o fornecedor tiver mais de uma do mesmo produto (P-20); (b) os valores de `status` em `pedido_atualizado` que indicam cancelamento e venda concluída; (c) incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md`, que hoje lista só a Logística | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
 | P-03 | O estoque é controlado por fornecimento ou por produto? O grupo adota o controle por fornecimento, e o kit também (a quantidade fica na tabela `fornecimento`) | Professor |
-| P-04 | **Resolvida pelo F8.** O token é JWT HS256, validado em cada serviço com a biblioteca comum do kit. A resposta de erro é 401 no formato RFC 7807. Resta a divergência no nome do claim da empresa (P-33) | |
+| P-04 | **Resolvida pelo F10.** O token é JWT RS256, validado em cada serviço com a chave pública do serviço de Autenticação (JWKS). Claims `sub`, `tenant_id` e `active_scope`. Substitui a definição do kit (HS256, `empresaId`, `perfil`) | |
 | P-05 | O que significa "origem"? O kit guarda como texto livre obrigatório na tabela `fornecimento`. Em F6 (10:58), a origem do frete é o endereço do fornecedor | Professor |
 | P-06 | **Parcialmente resolvida.** O boilerplate do kit sugere unidades `KG`, `TON`, `UN`, `CX`, `L` e tipos de transporte `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`. Falta confirmar essas listas, principalmente com Logística/Transporte, que usa o tipo de transporte | Grupo de Logística/Transporte |
 | P-07 | **Parcialmente resolvida.** Falta: quem pode alterar e excluir um produto (só a empresa que cadastrou?) e o que o perfil `admin` pode fazer nos nossos serviços | Professor |
@@ -519,7 +520,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-09 | A exclusão de produto é lógica ou física? A tabela `produto` do kit não tem coluna de situação, o que obrigaria exclusão física ou um ajuste no DDL | Professor, Banco de Dados |
 | P-10 | Categorias são uma lista fixa ou um cadastro? O kit guarda a categoria como texto na tabela `produto`, sem tabela própria | Professor |
 | P-11 | Um fornecimento pode ser alterado (inclusive para repor quantidade) ou encerrado? Há eventos para isso? O kit não tem tópico para alteração de fornecimento | Professor |
-| P-12 | Qual o conteúdo (`payload`) do evento `empresa_cadastrada`? O `CONTRACTS.md` traz só o envelope e a chave | Grupo de Autenticação |
+| P-12 | **Resolvida pelo F10.** O `payload` de `empresa_cadastrada` tem `tenant_id`, `group_id`, `cnpj`, `legal_name`, `branch_type`, `geo_lat`, `geo_lng`, `status` e `scopes` | |
 | P-13 | "Pedido de fornecimento entre fornecedor e grupo" corresponde ao `fornecimento_criado` ou é outro fluxo? O kit não tem tópico com esse nome | Professor |
 | P-14 | **Resolvida pelo F8.** O kit inclui Prometheus, Grafana, Loki, Jaeger e Alertmanager, e exige `/health`, `/health/ready`, `/metrics` e logs JSON (RNF-11, RNF-22) | |
 | P-15 | Qual a moeda do preço? A precisão é de 2 casas decimais (RD-04) | Professor |
@@ -538,9 +539,10 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-28 | A tabela `fornecimentos.fornecimento` do kit só tem `quantidade_disponivel`. A reserva exige `quantidade_reservada` e um registro de reservas por pedido (para liberar ou dar baixa na quantidade certa). O DDL é do grupo de Banco de Dados. Proposta testada em [`banco/`](banco/README.md) | Grupo de Banco de Dados |
 | P-29 | Quando o pedido é criado? O professor diz que o estoque é bloqueado ao entrar em leilão ou negociação (F6, 8:19; F7, 21:03). No kit, o `pedidos-service` cria o pedido a partir de `negociacao_fechada`, ou seja, depois da negociação. Nesse caso o estoque não fica bloqueado durante o leilão | Professor; Mercado, Negociação/Leilão e Pedidos |
 | P-30 | O professor diz que o comprador pode cadastrar produtos (F7, 1:17 a 1:49). O guia do kit (seção 7.2) diz que o comprador só cria demandas e dá lances. Se o Grupo de Teste seguir o guia, vai esperar 403 quando um comprador cadastrar produto | Infraestrutura, Autenticação, Teste |
-| P-31 | O professor diz que uma empresa pode ter os três perfis (F6, 1:34). No banco do kit, `empresa.tipo` e `usuario.perfil` têm um único valor, e o token leva um único `perfil`. Como uma empresa fornecedora e compradora opera? | Grupo de Autenticação, Banco de Dados |
+| P-31 | **Resolvida pelo F10.** Uma empresa tem de 1 a N escopos (`tenant_scope`); o usuário troca o escopo ativo em `POST /api/v1/auth/switch-context`, sem novo login, e o token leva o escopo em `active_scope` | |
 | P-32 | No script do banco do kit, as permissões dos usuários `svc_*` são concedidas antes da criação das tabelas. Teste com PostgreSQL 16 confirmou que `svc_fornecimentos` recebe `permission denied` ao ler a própria tabela. Os contêineres dos serviços também não recebem `DB_USER`, e a biblioteca comum usa `portal_admin`, que é superusuário, por padrão | Infraestrutura, Banco de Dados |
 | P-33 | Divergências entre os arquivos do kit: o guia usa `produto_criado`, chave `produto_id` nos eventos de fornecimento e estoque, campo `version` no envelope e claim `empresa_id`. O `CONTRACTS.md`, o script de tópicos e o código usam `produto_cadastrado`, chave `fornecimentoId`, campo `eventVersion` e claim `empresaId`. Este documento segue o que está implementado | Infraestrutura |
+| P-34 | O grupo de Autenticação definiu RS256, `tenant_id`, `active_scope` e o nome `identity-service` (F10), mas o kit de infraestrutura ainda usa HS256, `empresaId`, `perfil` e `usuarios-service` (F8). A Infraestrutura vai atualizar o kit? Também falta um padrão único para os campos de erro: Autenticação usa `code` e `correlation_id` (RFC 9457), o kit usa `correlationId`, e as nossas ESPs usam `codigo` e `correlationId` | Autenticação, Infraestrutura |
 
 ---
 
@@ -569,3 +571,4 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | 0.2 | 09/10/2026 | Inclusão da lista de responsabilidades do grupo como fonte F1 e das orientações de Kafka como fonte F5. Origem de cada requisito passa a indicar a fonte exata. P-01 resolvida. P-05 e P-11 detalhadas |
 | 0.3 | 09/10/2026 | Inclusão das transcrições das aulas 1 e 2 como fontes F6 e F7. Estoque passa a ter quantidade disponível e reservada, com reserva, liberação e baixa a partir de eventos de pedido (RF-13, RF-14, RF-19, RF-20, RN-06, RN-07, RNF-14, UC-03). Comprador e fornecedor podem cadastrar produtos (RN-08). Comprador consulta fornecimentos (RF-10). Perfis e autorização por perfil confirmados (RN-02, RN-04, RNF-03). Docker obrigatório (RNF-12). Requisitos de interface incluídos (RNF-15 a RNF-18). Novos critérios CA-10 a CA-14. P-02, P-07, P-14 e P-20 parcialmente resolvidas. Novas pendências P-22 a P-25 |
 | 0.4 | 26/10/2026 | Inclusão do kit de infraestrutura (F8) e da relação final de grupos (F9). Atualização de interfaces, premissas, eventos, tópicos e chaves. Novos requisitos não funcionais RNF-19 a RNF-26 (padrão de API, RFC 7807, paginação, endpoints técnicos, pool de conexões, usuário do banco, metas de desempenho e serviços sem estado em memória). Novas regras RN-10 e RN-11. Novos critérios CA-15 a CA-19. Pendências P-04, P-14, P-17, P-18, P-19, P-22, P-23 e P-24 resolvidas. Novas pendências P-26 a P-33. Correção da tabela de requisitos funcionais, que tinha linhas fora da tabela na versão 0.3 |
+| 0.5 | 10/11/2026 | Inclusão das respostas do grupo de Autenticação (F10): token RS256 com JWKS, claims `tenant_id` e `active_scope`, empresa com vários escopos e conteúdo de `empresa_cadastrada`. P-04, P-12 e P-31 resolvidas. Nova pendência P-34 |

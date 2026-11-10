@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.3 (esboço)
+**Versão:** 0.4 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -271,7 +271,7 @@ Referências: ADR-012, ADR-018 e ADR-020. Requisitos: RNF-01, RNF-02, RNF-03, RN
 | Token inválido | 401, RFC 7807, título "Token Inválido" |
 | Token válido, perfil sem permissão | 403, RFC 7807 |
 
-O token é um JWT assinado com HS256 e validado em cada serviço com a chave compartilhada `JWT_SECRET_KEY` (F8, `services/common/auth.py`). O access token vale 15 minutos. O serviço lê do token o usuário (`sub`), a empresa e o `perfil`.
+O token é um JWT assinado com RS256 pelo serviço de Autenticação e validado em cada serviço com a chave pública obtida do endpoint `/.well-known/jwks.json` (ADR-012). Ele substitui o HS256 com chave compartilhada do kit. O access token vale 15 minutos. O serviço lê do token o usuário (`sub`), a empresa e o `perfil`.
 
 > **A preencher:** onde a verificação está no código e a tabela final de perfis por rota.
 
@@ -354,7 +354,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 009 | Produtor com `acks=all` e idempotência habilitada | Aceita |
 | 010 | Consistência entre banco e Kafka | Pendente |
 | 011 | Fornecimentos mantém cópia local dos produtos a partir dos eventos | Aceita |
-| 012 | Validação local do JWT em cada serviço | Aceita |
+| 012 | Validação local do JWT RS256 com chaves públicas (JWKS) | Aceita |
 | 013 | Eventos de alteração e exclusão de produto | Pendente |
 | 014 | Exclusão de produto lógica ou física | Pendente |
 | 015 | Eventos em JSON com envelope canônico | Aceita |
@@ -468,12 +468,12 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Evidência na implementação:** a preencher
 - **Status:** Aceita
 
-### ADR-012: Validação local do JWT em cada serviço
+### ADR-012: Validação local do JWT RS256 com chaves públicas (JWKS)
 
-- **Contexto:** todos os endpoints exigem autenticação, e o token expirado precisa ser recusado (exigência do professor). O kit define JWT assinado com HS256 e validado em cada serviço pela biblioteca comum, com access token de 15 minutos.
-- **Decisão:** validar o token em cada requisição com a biblioteca comum do kit e responder 401 ou 403 no formato RFC 7807.
-- **Alternativas que foram consideradas pela turma:** introspecção no serviço de autenticação (RFC 7662), que permite revogação imediata, mas exige uma chamada por requisição; e assinatura assimétrica (RS256), em que só o serviço de autenticação tem a chave que assina.
-- **Consequências:** nenhuma chamada de rede por requisição. Como HS256 usa a mesma chave para assinar e validar, qualquer serviço que tenha `JWT_SECRET_KEY` também consegue emitir tokens válidos. Esse risco é aceito pela arquitetura da turma e fica registrado aqui. Um token só deixa de valer quando expira.
+- **Contexto:** todos os endpoints exigem autenticação, e o token expirado precisa ser recusado (exigência do professor). O kit definia JWT HS256 com a chave compartilhada `JWT_SECRET_KEY`, o que permitiria a qualquer serviço emitir tokens válidos (risco registrado na versão anterior deste ADR). Em 09/11/2026, o grupo de Autenticação definiu, nas issues #2 e #13, tokens RS256 com as chaves públicas publicadas em `/.well-known/jwks.json`, e os claims `sub`, `tenant_id` e `active_scope`.
+- **Decisão:** validar o token em cada requisição com a chave pública do `kid` do token, aceitando só o algoritmo RS256. Em produção, as chaves vêm do JWKS do serviço de Autenticação, com cache de 1 hora (`jwt.PyJWKClient`); no código do serviço, elas chegam pela porta `ChavesPublicas` das ESPs, o que permite testar sem rede. Responder 401 ou 403 no formato RFC 7807 (atualizada pela RFC 9457, com o mesmo formato).
+- **Alternativas consideradas:** HS256 com chave compartilhada (definição original do kit), descartada pelo risco de emissão de tokens por qualquer serviço; introspecção no serviço de Autenticação (RFC 7662), que permite revogação imediata, mas exige uma chamada por requisição.
+- **Consequências:** só o serviço de Autenticação emite tokens. Não há chamada de rede por requisição, só a busca das chaves a cada hora. Um token continua válido até expirar (15 minutos). Fixar `algorithms=["RS256"]` impede o ataque de confusão de algoritmo, em que um token HS256 é assinado com a chave pública como segredo. O kit ainda descreve HS256 e precisa ser alinhado (P-34).
 - **Evidência na implementação:** a preencher
 - **Status:** Aceita
 
@@ -608,5 +608,6 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | Versão | Data | Descrição |
 |---|---|---|
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
+| 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

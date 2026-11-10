@@ -5,12 +5,12 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 1.0 |
+| Versão | 1.1 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
 | Data | 2026-10-26 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; Proposta de DDL (`docs/banco/`); ESP-PRD-001 (Produtos) |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (professor); Kit de integração da Infraestrutura (`Printf-PedroCardoso/portal-b2b-kit-infra`, commit `630515c`); Documento de Requisitos do grupo v0.4; Contrato de Eventos v1.0; Proposta de DDL (`docs/banco/`); ESP-PRD-001 (Produtos); resposta do grupo de Autenticação nas issues #2 e #13 (2026-11-09) |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -40,7 +40,7 @@ Front-end ─► Gateway ─REST────────────────
 ## 3. Escopo
 
 ### 3.1 Dentro do escopo
-- Cadastro de fornecimento (oferta) por empresas com perfil `fornecedor`.
+- Cadastro de fornecimento (oferta) por empresas com perfil `SUPPLIER`.
 - Consulta e listagem paginada de fornecimentos, com filtro opcional por produto.
 - Cópia local dos produtos a partir do evento `produto_cadastrado`.
 - Reserva de estoque a partir de `pedido_criado`; liberação e baixa a partir de `pedido_atualizado`.
@@ -51,7 +51,7 @@ Front-end ─► Gateway ─REST────────────────
 ### 3.2 Fora do escopo (não implementar)
 - Alteração, reposição de quantidade e encerramento de fornecimento (aguardam a P-11 do Documento de Requisitos).
 - Endpoint REST de baixa ou ajuste de estoque. O estoque muda só pelos eventos de pedido (ADR-022 do Relatório Técnico).
-- Consumo de `empresa_cadastrada` (conteúdo não definido, P-12) e de eventos de alteração ou exclusão de produto (P-26).
+- Consumo de `empresa_cadastrada`: o conteúdo foi definido pelo grupo de Autenticação (issue #2), mas não é necessário na versão 1.1, porque o escopo ativo da empresa já vem no token. Consumo de eventos de alteração ou exclusão de produto (P-26).
 - Comparação entre `fornecedorId`/`produtoId` do pedido e os dados do fornecimento.
 - Emissão de tokens e cadastro de empresas (serviço `usuarios-service`).
 - Novas tentativas (*retry*) com espera em falhas transitórias: responsabilidade do adaptador de consumo.
@@ -70,8 +70,8 @@ Front-end ─► Gateway ─REST────────────────
 | Instante | Data/hora em UTC no formato ISO-8601 com sufixo `Z` e sem frações de segundo (ex.: `"2026-10-26T14:00:00Z"`). |
 | Agora | Valor retornado por `clock.now()` (porta Clock). O serviço nunca usa o relógio do sistema. |
 | Texto preenchido | String que, depois de `strip()`, tem pelo menos 1 caractere. |
-| Perfil | Valor do claim `perfil` do token. Um de: `comprador`, `fornecedor`, `transportadora`, `admin`. |
-| Token | JWT assinado com HS256 e a chave `jwt_secret` recebida por `create_app`, enviado no cabeçalho `Authorization: Bearer <token>`. |
+| Escopo ativo | Valor do claim `active_scope` do token: o perfil em que o usuário está atuando. Um de: `SUPPLIER` (fornecedor), `BUYER` (comprador), `CARRIER` (transportadora), `TENANT_ADMIN` (administrador da empresa). Comparação exata, em maiúsculas. Uma empresa pode ter vários escopos; o usuário escolhe o ativo no serviço de Autenticação. |
+| Token | JWT assinado com RS256 pelo serviço de Autenticação, enviado no cabeçalho `Authorization: Bearer <token>`. A chave pública de cada `kid` vem da porta `ChavesPublicas` (§5.1). |
 | Correlation id | Na API: valor do cabeçalho `X-Correlation-Id`, ou UUID4 novo se ausente ou não for texto preenchido. No consumo de eventos: o `correlationId` da mensagem recebida, ou UUID4 novo se ausente ou não for texto preenchido. |
 | Status de cancelamento | Valor literal `"CANCELADO"` no `payload.status` de `pedido_atualizado`. |
 | Status de venda concluída | Valor literal `"VENDA_CONCLUIDA"` no `payload.status` de `pedido_atualizado`. |
@@ -82,10 +82,10 @@ Front-end ─► Gateway ─REST────────────────
 |---|---|
 | Linguagem / versão | Python 3.12 |
 | Framework | FastAPI (com Pydantic v2, se usado) |
-| Dependências permitidas | Biblioteca padrão do Python, `fastapi`, `pydantic`, `starlette`, `PyJWT` (importado como `jwt`). Nenhuma outra. |
+| Dependências permitidas | Biblioteca padrão do Python, `fastapi`, `pydantic`, `starlette`, `PyJWT` (importado como `jwt`) e `cryptography` (exigida pelo PyJWT para RS256). Nenhuma outra. |
 | Persistência | Somente pela porta `RepositorioFornecimentos` (§5.1). Proibido guardar fornecimentos, reservas, produtos ou eventos processados em variáveis do módulo ou da aplicação. |
 | Estrutura de arquivos | `app/__init__.py` e `app/main.py` obrigatórios; outros módulos dentro de `app/` são permitidos. |
-| Ponto de entrada | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, jwt_secret: str) -> fastapi.FastAPI` |
+| Ponto de entrada | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas) -> fastapi.FastAPI` |
 | Formato de data/hora | Instante (ver glossário). |
 | Formato monetário | Valor decimal (ver glossário). |
 
@@ -106,6 +106,10 @@ class EventBus(Protocol):
 
 class Clock(Protocol):
     def now(self) -> datetime: ...  # datetime com timezone UTC
+
+
+class ChavesPublicas(Protocol):
+    def obter(self, kid: str) -> object | None: ...  # chave pública RSA do kid, ou None se desconhecido
 
 
 class RepositorioFornecimentos(Protocol):
@@ -134,6 +138,7 @@ Comportamento das portas:
 - Valores de preço e quantidade circulam entre o serviço e o repositório como `Decimal`.
 - `publish` é síncrono e pode, no mesmo fluxo, chamar handlers inscritos; o serviço não pode entrar em deadlock nesse caso. Ordem dentro de uma escrita: validar → gravar (dentro da transação) → publicar **depois** que a transação terminar. Falhas lançadas por `publish` estão fora do escopo (o adaptador real usa *transactional outbox*, ADR-010).
 - `clock.now()` sempre retorna `datetime` com fuso; se vier sem fuso, tratar como UTC.
+- `chaves_publicas.obter(kid)` devolve a chave pública RSA (objeto aceito por `jwt.decode`) do `kid` informado no cabeçalho do token, ou `None` se o `kid` for desconhecido. Em produção, o adaptador usa `jwt.PyJWKClient` com o endpoint `/.well-known/jwks.json` do serviço de Autenticação e cache de 1 hora; nos testes, uma chave gerada pelo próprio teste. O serviço nunca faz requisição HTTP para obter chaves.
 
 ## 6. Modelo de domínio
 
@@ -143,7 +148,7 @@ Comportamento das portas:
 | Atributo | Tipo | Obrigatório | Restrições / origem |
 |---|---|---|---|
 | fornecimento_id | string | Sim | UUID4 gerado pelo serviço no cadastro. |
-| fornecedor_id | string | Sim | Claim `empresaId` do token. |
+| fornecedor_id | string | Sim | Claim `tenant_id` do token. |
 | produto_id | string | Sim | Corpo da requisição; precisa existir como produto de referência. |
 | unidade | string | Sim | Copiada do produto de referência no cadastro. |
 | preco | valor decimal | Sim | Corpo da requisição; > 0. |
@@ -201,7 +206,7 @@ Rotas públicas (sem token): `/health`, `/health/ready`, `/metrics`, `/docs`, `/
 
 Validação do token, nesta ordem:
 1. Cabeçalho `Authorization` ausente, vazio, ou que não começa com `Bearer ` seguido de texto preenchido → `401 TOKEN_AUSENTE`.
-2. Assinatura inválida com HS256 e `jwt_secret`, token malformado, ou claims ausentes ou inválidos: `sub` e `empresaId` texto preenchido, `perfil` um dos quatro perfis, `exp` inteiro, `type` igual a `"access"` → `401 TOKEN_INVALIDO`.
+2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; ou claims ausentes ou inválidos: `sub` e `tenant_id` precisam ser texto preenchido, `active_scope` precisa ser um dos quatro escopos do glossário e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`group_id`, `roles`, `permissions`) são ignorados.
 3. `exp` menor ou igual a `int(agora.timestamp())` → `401 TOKEN_EXPIRADO`. A expiração é verificada com `clock.now()` (decodificar com `options={"verify_exp": False}` e comparar manualmente).
 
 Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da requisição.
@@ -213,9 +218,9 @@ Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da req
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/fornecimentos` | `fornecedor` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` → 401 `TOKEN_EXPIRADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
-| API-05 | GET | `/api/v1/fornecimentos/{fornecimento_id}` | `comprador`, `fornecedor`, `admin` | 200 | 401 (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `FORNECIMENTO_NAO_ENCONTRADO` |
-| API-06 | GET | `/api/v1/fornecimentos` | `comprador`, `fornecedor`, `admin` | 200 | 401 (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `PAGINACAO_INVALIDA` |
+| API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` → 401 `TOKEN_EXPIRADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
+| API-05 | GET | `/api/v1/fornecimentos/{fornecimento_id}` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401 (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `FORNECIMENTO_NAO_ENCONTRADO` |
+| API-06 | GET | `/api/v1/fornecimentos` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401 (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `PAGINACAO_INVALIDA` |
 
 #### API-01 — Saúde
 Resposta 200: `{"status": "UP", "service": "fornecimentos-service", "timestamp": "2026-10-26T14:00:00Z"}`
@@ -383,11 +388,11 @@ Exemplo de `reserva_estoque_recusada` (chave `"PED-2"`):
 
 ## 8. Requisitos funcionais
 
-Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `perfil` = X, `empresaId` = `"EMP-34"`, `sub` = `"USR-7"` e `exp` uma hora depois de agora, salvo indicação em contrário. O relógio está em `2026-10-26T14:00:00Z`. "Produto PROD-1 conhecido" significa que o handler de `produto_cadastrado` já recebeu uma mensagem válida com `produtoId` "PROD-1", `nome` "Leite integral", `unidade` "L" e `tipoTransporte` "REFRIGERADO". "Fornecimento FORN-1 com D/R" significa um fornecimento de `fornecimento_id` "FORN-1", `fornecedor_id` "EMP-34", `produto_id` "PROD-1", com quantidade disponível D e reservada R, já gravado no repositório. "Pedido válido" segue o exemplo do §7.3, variando só os campos indicados.
+Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `active_scope` = X, `tenant_id` = `"EMP-34"`, `sub` = `"USR-7"` e `exp` uma hora depois de agora, salvo indicação em contrário. O relógio está em `2026-10-26T14:00:00Z`. "Produto PROD-1 conhecido" significa que o handler de `produto_cadastrado` já recebeu uma mensagem válida com `produtoId` "PROD-1", `nome` "Leite integral", `unidade` "L" e `tipoTransporte` "REFRIGERADO". "Fornecimento FORN-1 com D/R" significa um fornecimento de `fornecimento_id` "FORN-1", `fornecedor_id` "EMP-34", `produto_id` "PROD-1", com quantidade disponível D e reservada R, já gravado no repositório. "Pedido válido" segue o exemplo do §7.3, variando só os campos indicados.
 
 ### RF-01 — Cadastrar fornecimento
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando uma empresa com perfil `fornecedor` enviar um fornecimento válido de um produto conhecido para a API-04, o serviço deve gravá-lo com quantidade reservada 0 e publicar `fornecimento_criado`.
+- **Enunciado (EARS):** Quando uma empresa com perfil `SUPPLIER` enviar um fornecimento válido de um produto conhecido para a API-04, o serviço deve gravá-lo com quantidade reservada 0 e publicar `fornecimento_criado`.
 - **Regras aplicáveis:** RN-01, RN-02, RN-03, RN-04, RN-10
 - **Interface:** API-04, tópico `fornecimento_criado`
 
@@ -395,21 +400,21 @@ Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `perf
 ```gherkin
 # CA-01
 Cenário: Fornecedor cadastra oferta
-  Dado o produto PROD-1 conhecido e um token de "fornecedor"
+  Dado o produto PROD-1 conhecido e um token de "SUPPLIER"
   Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 5.5, quantidade_disponivel 15000 e origem "Goiânia-GO"
   Então a resposta é 201 com fornecimento_id UUID4, fornecedor_id "EMP-34", produto_id "PROD-1", unidade "L", preco 5.5, quantidade_disponivel 15000, quantidade_reservada 0, origem "Goiânia-GO", criado_por_usuario_id "USR-7", criado_em e atualizado_em "2026-10-26T14:00:00Z"
-  E GET /api/v1/fornecimentos/{fornecimento_id} com um token de "comprador" retorna 200 com o mesmo corpo
+  E GET /api/v1/fornecimentos/{fornecimento_id} com um token de "BUYER" retorna 200 com o mesmo corpo
 
 # CA-02
 Cenário: Perfis sem permissão de cadastro
   Dado o produto PROD-1 conhecido
-  Quando tokens de "comprador", "transportadora" e "admin" enviam POST /api/v1/fornecimentos com um corpo válido
+  Quando tokens de "BUYER", "CARRIER" e "TENANT_ADMIN" enviam POST /api/v1/fornecimentos com um corpo válido
   Então as três respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
   E nenhum fornecimento é gravado e nenhuma mensagem é publicada
 
 # CA-03
 Cenário: Dados inválidos (partição de equivalência e valor-limite)
-  Dado o produto PROD-1 conhecido e um token de "fornecedor"
+  Dado o produto PROD-1 conhecido e um token de "SUPPLIER"
   Quando envia POST /api/v1/fornecimentos com corpos que diferem do corpo do CA-01 só em:
     | caso                              | alteração                                 |
     | preço zero                        | "preco": 0                                |
@@ -430,20 +435,20 @@ Cenário: Dados inválidos (partição de equivalência e valor-limite)
 
 # CA-04
 Cenário: Produto desconhecido
-  Dado um token de "fornecedor" e nenhum produto conhecido com id "PROD-X"
+  Dado um token de "SUPPLIER" e nenhum produto conhecido com id "PROD-X"
   Quando envia POST /api/v1/fornecimentos com produto_id "PROD-X" e os demais campos do CA-01
   Então a resposta é 422 com codigo "PRODUTO_INEXISTENTE"
   E nenhuma mensagem é publicada
 
 # CA-05
 Cenário: Fornecedor vem do token e valores no limite são aceitos
-  Dado o produto PROD-1 conhecido e um token de "fornecedor" com empresaId "EMP-34"
+  Dado o produto PROD-1 conhecido e um token de "SUPPLIER" com tenant_id "EMP-34"
   Quando envia POST /api/v1/fornecimentos com produto_id "PROD-1", preco 9999999999.99, quantidade_disponivel 0.01, origem "  Anápolis-GO  " e fornecedor_id "EMP-99"
   Então a resposta é 201 com fornecedor_id "EMP-34", preco 9999999999.99, quantidade_disponivel 0.01 e origem "Anápolis-GO"
 
 # CA-06
 Cenário: Falha do repositório
-  Dado o produto PROD-1 conhecido, um token de "fornecedor" e um repositório cujo inserir_fornecimento lança exceção
+  Dado o produto PROD-1 conhecido, um token de "SUPPLIER" e um repositório cujo inserir_fornecimento lança exceção
   Quando envia o corpo do CA-01
   Então a resposta é 500 com codigo "ERRO_INTERNO"
   E nenhuma mensagem é publicada
@@ -451,7 +456,7 @@ Cenário: Falha do repositório
 
 ### RF-02 — Consultar fornecimento
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando uma empresa com perfil `comprador`, `fornecedor` ou `admin` consultar a API-05 com um `fornecimento_id` existente, o serviço deve retornar o fornecimento com os saldos atuais.
+- **Enunciado (EARS):** Quando uma empresa com perfil `BUYER`, `SUPPLIER` ou `TENANT_ADMIN` consultar a API-05 com um `fornecimento_id` existente, o serviço deve retornar o fornecimento com os saldos atuais.
 - **Regras aplicáveis:** RN-05, RN-06
 - **Interface:** API-05
 
@@ -460,24 +465,24 @@ Cenário: Falha do repositório
 # CA-07
 Cenário: Consulta mostra os saldos atuais
   Dado o fornecimento FORN-1 com 70/30
-  Quando um token de "admin" consulta GET /api/v1/fornecimentos/FORN-1
+  Quando um token de "TENANT_ADMIN" consulta GET /api/v1/fornecimentos/FORN-1
   Então a resposta é 200 com quantidade_disponivel 70 e quantidade_reservada 30
 
 # CA-08
 Cenário: Fornecimento inexistente
-  Quando um token de "comprador" consulta GET /api/v1/fornecimentos/FORN-X
+  Quando um token de "BUYER" consulta GET /api/v1/fornecimentos/FORN-X
   Então a resposta é 404 com codigo "FORNECIMENTO_NAO_ENCONTRADO"
 
 # CA-09
 Cenário: Transportadora não consulta ofertas
   Dado o fornecimento FORN-1 com 100/0
-  Quando um token de "transportadora" consulta GET /api/v1/fornecimentos/FORN-1 e GET /api/v1/fornecimentos
+  Quando um token de "CARRIER" consulta GET /api/v1/fornecimentos/FORN-1 e GET /api/v1/fornecimentos
   Então as duas respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
 ```
 
 ### RF-03 — Listar fornecimentos
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando uma empresa com perfil `comprador`, `fornecedor` ou `admin` consultar a API-06, o serviço deve retornar a página pedida, na ordem de cadastro, com o total de fornecimentos que atendem ao filtro.
+- **Enunciado (EARS):** Quando uma empresa com perfil `BUYER`, `SUPPLIER` ou `TENANT_ADMIN` consultar a API-06, o serviço deve retornar a página pedida, na ordem de cadastro, com o total de fornecimentos que atendem ao filtro.
 - **Regras aplicáveis:** RN-05, RN-06
 - **Interface:** API-06
 
@@ -486,7 +491,7 @@ Cenário: Transportadora não consulta ofertas
 # CA-10
 Cenário: Paginação e filtro por produto
   Dado os produtos PROD-1 e PROD-2 conhecidos e 3 fornecimentos cadastrados nesta ordem: origem "A" (PROD-1) às 14:00:00Z, origem "B" (PROD-2) às 14:00:01Z e origem "C" (PROD-1) às 14:00:02Z
-  Quando um token de "comprador" consulta GET /api/v1/fornecimentos?page=1&size=2
+  Quando um token de "BUYER" consulta GET /api/v1/fornecimentos?page=1&size=2
   Então a resposta é 200 com os itens de origem "A" e "B", page 1, size 2 e total 3
   Quando consulta GET /api/v1/fornecimentos?produto_id=PROD-1
   Então a resposta é 200 com os itens de origem "A" e "C" e total 2
@@ -495,7 +500,7 @@ Cenário: Paginação e filtro por produto
 
 # CA-11
 Cenário: Parâmetros de paginação inválidos
-  Quando um token de "comprador" consulta GET /api/v1/fornecimentos com cada um dos parâmetros: size=101, size=0, page=0, page=abc
+  Quando um token de "BUYER" consulta GET /api/v1/fornecimentos com cada um dos parâmetros: size=101, size=0, page=0, page=abc
   Então cada resposta é 422 com codigo "PAGINACAO_INVALIDA"
   Quando consulta GET /api/v1/fornecimentos?size=100
   Então a resposta é 200
@@ -535,7 +540,7 @@ Cenário: Requisição recusada não publica
 Cenário: Produto passa a ser aceito em ofertas
   Dado que PROD-9 não é conhecido
   Quando o handler recebe produto_cadastrado válido com produtoId "PROD-9", nome "Soja", unidade "TON" e tipoTransporte "GRANEL"
-  Então POST /api/v1/fornecimentos com produto_id "PROD-9" e um token de "fornecedor" retorna 201 com unidade "TON"
+  Então POST /api/v1/fornecimentos com produto_id "PROD-9" e um token de "SUPPLIER" retorna 201 com unidade "TON"
   E o handler não publica nenhuma mensagem
 
 # CA-15
@@ -685,19 +690,19 @@ Cenário: Token ausente
 
 # CA-32
 Cenário: Token com assinatura de outra chave
-  Dado um token de "fornecedor" assinado com a chave "outra-chave"
+  Dado um token de "SUPPLIER" assinado com uma chave RSA diferente da que chaves_publicas devolve para o kid do token
   Quando envia POST /api/v1/fornecimentos com o corpo do CA-01
   Então a resposta é 401 com codigo "TOKEN_INVALIDO"
 
 # CA-33
 Cenário: Claims inválidos
-  Dado tokens assinados com a chave correta, cada um com um problema: sem empresaId; perfil "gerente"; type "refresh"; sub ""
+  Dado tokens, cada um com um problema: sem tenant_id; active_scope "GERENTE"; active_scope "supplier" (minúsculas); sub ""; assinado com HS256 em vez de RS256; kid desconhecido (chaves_publicas.obter devolve None)
   Quando cada um consulta GET /api/v1/fornecimentos
   Então cada resposta é 401 com codigo "TOKEN_INVALIDO"
 
 # CA-34
 Cenário: Token expirado no limite
-  Dado um token de "comprador" com exp igual a 2026-10-26T14:00:00Z e o relógio em 2026-10-26T14:00:00Z
+  Dado um token de "BUYER" com exp igual a 2026-10-26T14:00:00Z e o relógio em 2026-10-26T14:00:00Z
   Quando consulta GET /api/v1/fornecimentos
   Então a resposta é 401 com codigo "TOKEN_EXPIRADO"
   Dado o mesmo token e o relógio em 2026-10-26T13:59:59Z
@@ -715,7 +720,7 @@ Cenário: Token expirado no limite
 ```gherkin
 # CA-35
 Cenário: Correlation id na API
-  Quando GET /api/v1/fornecimentos/FORN-X é enviado com um token de "comprador" e X-Correlation-Id "corr-404"
+  Quando GET /api/v1/fornecimentos/FORN-X é enviado com um token de "BUYER" e X-Correlation-Id "corr-404"
   Então a resposta é 404, tem o cabeçalho X-Correlation-Id "corr-404" e o corpo tem correlationId "corr-404"
   Quando GET /health é enviado sem X-Correlation-Id
   Então a resposta tem o cabeçalho X-Correlation-Id com um UUID4 novo
@@ -759,16 +764,16 @@ Cenário: Métricas
 
 | ID | Regra | Exemplo concreto |
 |---|---|---|
-| RN-01 | Apenas o perfil `fornecedor` cadastra fornecimentos. `comprador`, `transportadora` e `admin` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403. |
+| RN-01 | Apenas o perfil `SUPPLIER` cadastra fornecimentos. `BUYER`, `CARRIER` e `TENANT_ADMIN` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403. |
 | RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` string com 1 a 255 caracteres depois de `strip()`. Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` → aceito. |
 | RN-03 | O `produto_id` precisa existir como produto de referência; senão → 422 `PRODUTO_INEXISTENTE`. A `unidade` do fornecimento é copiada do produto de referência. | PROD-X desconhecido → 422. |
 | RN-04 | Requisição recusada (qualquer 4xx ou 5xx) não grava nada e não publica evento. | 403 → nenhuma mensagem. |
-| RN-05 | Consulta e listagem: perfis `comprador`, `fornecedor` e `admin`; `transportadora` → 403 `PERFIL_NAO_PERMITIDO`. `fornecimento_id` inexistente → 404 `FORNECIMENTO_NAO_ENCONTRADO`. | Transportadora em GET → 403. |
+| RN-05 | Consulta e listagem: perfis `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` → 403 `PERFIL_NAO_PERMITIDO`. `fornecimento_id` inexistente → 404 `FORNECIMENTO_NAO_ENCONTRADO`. | Transportadora em GET → 403. |
 | RN-06 | Paginação: `page` inteiro ≥ 1 (padrão 1); `size` inteiro de 1 a 100 (padrão 10); fora disso → 422 `PAGINACAO_INVALIDA`. `offset = (page − 1) × size`. | `size=101` → 422. |
 | RN-07 | `produto_cadastrado` válido exige `payload.produtoId`, `payload.nome`, `payload.unidade` e `payload.tipoTransporte` como texto preenchido e `timestamp` como instante válido. Se o `produtoId` já for conhecido, a mensagem é ignorada (não sobrescreve, não publica). | 2ª mensagem para PROD-1 com outra unidade → unidade mantida. |
 | RN-08 | Idempotência por `eventId`: depois que uma mensagem válida é processada, o `eventId` é registrado na mesma transação das alterações. Mensagem válida com `eventId` já registrado é ignorada sem publicar. A validação (RN-09) vem **antes** da verificação de `eventId`. | Mesmo `pedido_criado` duas vezes → 1 reserva. |
 | RN-09 | Mensagem consumida é inválida se: não for objeto; faltar `eventId` como texto preenchido; faltar `payload` ou ele não for objeto; faltar campo obrigatório do payload ou ele tiver tipo ou valor inválido (RN-07, RN-13, RN-15). Mensagem inválida não altera estado, não registra `eventId` e é publicada em `fornecimentos.dlt` (formato do §7.4, `stackTrace` `""`). Exceção lançada pelo repositório durante o processamento: a transação é desfeita, o `eventId` não é registrado e a mensagem é publicada em `fornecimentos.dlt` com o *traceback* em `stackTrace`. O handler nunca propaga exceção. | Quantidade 0 → DLT. |
-| RN-10 | `fornecimento_id` (UUID4), `fornecedor_id` (claim `empresaId`), `criado_por_usuario_id` (claim `sub`), `criado_em` e `atualizado_em` (`clock.now()`) são definidos pelo serviço; valores enviados no corpo para esses campos são ignorados. `quantidade_reservada` começa em 0. | Corpo com `fornecedor_id` "EMP-99" e token de "EMP-34" → gravado "EMP-34". |
+| RN-10 | `fornecimento_id` (UUID4), `fornecedor_id` (claim `tenant_id`), `criado_por_usuario_id` (claim `sub`), `criado_em` e `atualizado_em` (`clock.now()`) são definidos pelo serviço; valores enviados no corpo para esses campos são ignorados. `quantidade_reservada` começa em 0. | Corpo com `fornecedor_id` "EMP-99" e token de "EMP-34" → gravado "EMP-34". |
 | RN-11 | Toda mudança de quantidade usa `aplicar_movimento` (§5.1). Nenhuma quantidade fica negativa. | Reservar 80 com 70 disponível → `aplicar_movimento` retorna `None`. |
 | RN-12 | Nenhum evento, resposta ou log contém o token. Eventos identificam quem agiu só por `empresaId` e `usuarioId`. O correlation id é repassado conforme o glossário. | — |
 | RN-13 | `pedido_criado` válido exige `payload.pedidoId`, `payload.fornecimentoId`, `payload.produtoId`, `payload.fornecedorId` e `payload.status` como texto preenchido, e `payload.quantidade` como número JSON (não booleano) > 0 com no máximo 2 casas decimais. Os demais campos são ignorados. | Sem `fornecimentoId` → DLT. |
@@ -778,7 +783,7 @@ Cenário: Métricas
 
 ## 10. Catálogo de erros
 
-Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura), com `Content-Type: application/problem+json`:
+Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457, citada pelo grupo de Autenticação, substitui a 7807 com o mesmo formato), com `Content-Type: application/problem+json`:
 ```json
 {
   "type": "https://portal-b2b.corp/erros/fornecimento-nao-encontrado",
@@ -836,9 +841,9 @@ Respostas fora do catálogo: nenhuma. A documentação automática do framework 
 ```gherkin
 # CA-40
 Cenário: Formato de erro, inclusive para rota e método fora do contrato
-  Quando GET /api/v1/inexistente é enviado com um token de "comprador"
+  Quando GET /api/v1/inexistente é enviado com um token de "BUYER"
   Então a resposta é 404 com codigo "ROTA_NAO_ENCONTRADA"
-  Quando DELETE /api/v1/fornecimentos/FORN-1 é enviado com um token de "fornecedor"
+  Quando DELETE /api/v1/fornecimentos/FORN-1 é enviado com um token de "SUPPLIER"
   Então a resposta é 405 com codigo "METODO_NAO_PERMITIDO"
   E para cada resposta 4xx e 5xx produzida por este e pelos demais cenários de erro deste documento
   Então o Content-Type é "application/problem+json" e o corpo tem type, title, status, detail, instance, codigo, correlationId e timestamp, todos não vazios, status igual ao código HTTP e type igual a "https://portal-b2b.corp/erros/" seguido do codigo em minúsculas com "_" trocado por "-"
@@ -912,7 +917,8 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 
 | ID | Tipo | Descrição | Decisão |
 |---|---|---|---|
-| Q-01 | Decisão | Onde o token é validado; nome do claim da empresa (P-33). | No serviço, com HS256 e `jwt_secret`; claim `empresaId`, como no código do kit. |
+| Q-01 | Decisão | Validação do token e nomes dos claims (P-04, P-33). | No serviço, com RS256 e a chave pública do `kid` obtida pela porta `ChavesPublicas` (JWKS do serviço de Autenticação). Claims `sub`, `tenant_id` e `active_scope`, como definido pelo grupo de Autenticação na issue #2 (2026-11-09). Substitui o HS256 com chave compartilhada do kit, que permitia a qualquer serviço emitir tokens. |
+| Q-15 | Decisão | Nomes dos campos de erro: o grupo de Autenticação usa `code` e `correlation_id` (RFC 9457); o kit usa `correlationId`; esta ESP usa `codigo` e `correlationId`. | Mantidos `codigo` e `correlationId` até a turma definir um padrão único (pergunta feita na issue #2). Se mudar, esta ESP muda de versão. |
 | Q-02 | Decisão | Persistência em memória (como no exemplo ESP-NEG-001) ou banco. | Porta `RepositorioFornecimentos` (§5.1). O Grupo de Teste injeta uma implementação em memória; em produção, o adaptador usa o schema `fornecimentos` do PostgreSQL com o DDL proposto em `docs/banco/`. |
 | Q-03 | Decisão | Como garantir que reservas simultâneas não deixem o saldo negativo, inclusive entre duas instâncias do serviço. | `aplicar_movimento` condicional e atômico (§5.1), equivalente ao `UPDATE` condicional testado em PostgreSQL 16 (teste T11 da proposta de DDL). |
 | Q-04 | Decisão | Valores dos status de cancelamento e venda concluída em `pedido_atualizado` (P-02). | `"CANCELADO"` e `"VENDA_CONCLUIDA"`. Se o grupo de Pedidos definir outros valores, esta ESP muda de versão. |
@@ -921,7 +927,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-07 | Decisão | Cancelamento que chega antes da criação do pedido (tópicos diferentes não garantem ordem). | Reserva `CANCELADA_SEM_RESERVA`; a criação posterior é ignorada (§6.2, CA-29). |
 | Q-08 | Decisão | Venda concluída sem reserva. | Ignorada e não registrada como reserva. Na prática não ocorre, porque a venda é concluída muito depois da criação do pedido. |
 | Q-09 | Decisão | Comparar `fornecedorId` e `produtoId` do pedido com os do fornecimento. | Não comparar na versão 1.0 (§3.2). |
-| Q-10 | Decisão | Quem consulta ofertas (P-07). | `comprador`, `fornecedor` e `admin`; `transportadora` não. Só `fornecedor` cadastra (o Grupo de Teste testa comprador criando fornecimento → 403, kit seção 10.2). |
+| Q-10 | Decisão | Quem consulta ofertas (P-07). | `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` não. Só `SUPPLIER` cadastra (o Grupo de Teste testa comprador criando fornecimento → 403, kit seção 10.2). |
 | Q-11 | Decisão | Valores monetários em JSON: string (exemplo do Grupo de Teste) ou número (kit e Contrato de Eventos). | Número JSON, convertido para `Decimal` com `Decimal(str(valor))`. Mantém o padrão do kit usado pelos outros grupos e evita erro de arredondamento nas contas (CA-41). |
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
 | Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real usa *transactional outbox* (ADR-010). |
@@ -960,3 +966,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Versão | Data | Autor | Mudança |
 |---|---|---|---|
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4, do Contrato de Eventos v1.0, da proposta de DDL e do kit de infraestrutura. |
+| 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
