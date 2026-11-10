@@ -17,6 +17,7 @@ O DDL é responsabilidade do grupo de Banco de Dados, conforme o guia do kit de 
 | Tabela `produto_referencia` e chave estrangeira | Cópia local dos produtos, alimentada pelo evento `produto_cadastrado`, já que Fornecimentos não pode ler o schema `produtos`. A chave estrangeira impede fornecimento de produto inexistente | RF-16, RN-03 |
 | `pedido_id` em `movimento_estoque` | Liga cada movimento de estoque ao pedido que o causou (auditoria) | RF-14 |
 | Tabelas `outbox` | O evento é gravado na mesma transação da alteração e publicado depois. Evita perder evento quando o Redpanda está fora | ADR-010 |
+| Colunas `cadastrado_por_empresa_id` e `cadastrado_por_usuario_id` em `produto`; `unidade` e `criado_por_usuario_id` em `fornecimento` | Atributos exigidos pelas ESPs que as tabelas do kit não têm (incluídos na versão 1.1, 10/11/2026) | ESP-PRD-001 e ESP-FRN-001, §6.1 |
 | `atualizado_em` e índices | Data da última alteração e índices para as listagens filtradas por produto, fornecedor e categoria | RF-02, RF-10 |
 | Permissões refeitas | No `01-init.sql` do kit, os `GRANT` rodam antes do `CREATE TABLE`, e `svc_produtos` e `svc_fornecimentos` ficam sem acesso às próprias tabelas. A proposta concede só DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`), como pede a seção 5.2 do guia, e define permissões padrão para tabelas futuras | RNF-24, P-32 |
 
@@ -49,3 +50,10 @@ O T11 confirma o comportamento descrito no ADR-006 do Relatório Técnico: no Po
 - **Exclusão de produto (P-09):** se for lógica, `produtos.produto` precisa de uma coluna `ativo`. Ficou fora até a decisão.
 - **Descrição do produto (RD-02):** proposta do grupo, ainda não confirmada. Ficou fora.
 - **Empresa com vários perfis (P-31):** afeta o schema `usuarios`, que não é nosso.
+
+## Versão 1.1 (10/11/2026)
+
+- Novas colunas exigidas pelas ESPs (tabela acima).
+- A tabela `reserva` deixou de ter chave estrangeira para `fornecimento`: um cancelamento pode chegar para um fornecimento que não existe e precisa ser registrado como `CANCELADA_SEM_RESERVA`.
+- A proposta passou a ser testada automaticamente pelos testes de integração dos serviços (`servicos/*/tests/test_postgres.py`), que aplicam o script do kit e este DDL num PostgreSQL 16 e usam o banco com os usuários `svc_produtos` e `svc_fornecimentos`. Em 10/11/2026: 7 testes aprovados, inclusive reservas concorrentes com 5 conexões.
+

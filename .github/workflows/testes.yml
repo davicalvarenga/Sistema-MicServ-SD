@@ -1,0 +1,42 @@
+name: Testes dos serviços
+
+on:
+  push:
+    branches: [main]
+    paths: ["servicos/**", "docs/banco/**", ".github/workflows/testes.yml"]
+  pull_request:
+    paths: ["servicos/**", "docs/banco/**", ".github/workflows/testes.yml"]
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: [produtos-service, fornecimentos-service]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    defaults:
+      run:
+        working-directory: servicos/${{ matrix.servico }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install -r requirements-dev.txt
+      - name: Baixar o script do banco do kit de infraestrutura
+        run: git clone --depth 1 https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra "$RUNNER_TEMP/kit"
+      - name: Testes de conformidade e de integração com PostgreSQL
+        env:
+          PG_ADMIN_DSN: host=localhost port=5432 dbname=postgres user=postgres
+          KIT_INIT_SQL: ${{ runner.temp }}/kit/database/01-init.sql
+        run: python -m pytest -v

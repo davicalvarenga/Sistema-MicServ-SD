@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.4 (esboço)
+**Versão:** 0.5 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -60,7 +60,10 @@ O portal conecta empresas compradoras, fornecedoras e transportadoras. O fluxo p
 
 ### 2.2 Papel do grupo no fluxo
 
-> **A preencher:** um parágrafo por passo em que o grupo atua (1, 3, 7 e 8), dizendo qual serviço participa, qual evento é publicado ou consumido e qual requisito é atendido.
+- **Passo 1 (fornecedor publica fornecimento):** o `fornecimentos-service` recebe o cadastro da oferta (`POST /api/v1/fornecimentos`), valida o produto na cópia local e publica `fornecimento_criado` para o Mercado.
+- **Passo 3 (eventos no Kafka):** o `produtos-service` publica `produto_cadastrado`; o `fornecimentos-service` consome esse evento e os de pedido, e publica `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
+- **Passo 7 (pedido criado):** o `fornecimentos-service` reserva a quantidade ao consumir `pedido_criado`, libera em cancelamento e dá baixa na venda concluída (`pedido_atualizado`).
+- **Passo 8 (logística):** o tipo de transporte do produto viaja no `produto_cadastrado`; como a Logística vai obtê-lo ainda está em aberto (P-27).
 
 ---
 
@@ -88,7 +91,16 @@ O gateway distribui as requisições entre as duas instâncias de cada serviço.
 
 ### 3.2 Responsabilidades de cada serviço
 
-> **A preencher:** para cada serviço, a lista de responsabilidades, os endpoints que expõe, os eventos que publica e consome e as tabelas que usa. Referência: ADR-001.
+As responsabilidades, endpoints, eventos e regras de cada serviço estão nas especificações [ESP-PRD-001](especificacoes/ESP-PRD-001_Produtos.md) e [ESP-FRN-001](especificacoes/ESP-FRN-001_Fornecimentos.md), que são a fonte única. Organização do código, igual nos dois serviços:
+
+| Caminho | Conteúdo |
+|---|---|
+| `app/main.py` | `create_app(...)`: domínio, API e handlers de eventos. Só conhece as portas (§5.1 das ESPs) |
+| `app/http_comum.py` | Autenticação RS256, erros RFC 7807, correlation id, métricas, paginação e envelope de eventos |
+| `adaptadores/` | Implementações de produção das portas: PostgreSQL, Kafka, JWKS e relógio |
+| `servidor.py` | Monta os adaptadores a partir de variáveis de ambiente e sobe o uvicorn |
+| `tests/test_conformidade.py` | Um teste por critério de aceitação da ESP, com dublês das portas |
+| `tests/test_postgres.py` | Integração com PostgreSQL usando o script do kit e a proposta de DDL |
 
 ### 3.3 Stack tecnológico
 
@@ -176,7 +188,7 @@ Nenhuma operação pode deixar a quantidade disponível negativa (RN-11).
 
 ## 5. API REST
 
-> **A preencher:** a tabela final de endpoints, com método, caminho, perfil exigido, corpo, respostas e códigos de status. A documentação gerada pelo FastAPI em `/docs` serve de referência.
+A tabela final de endpoints, com perfis, códigos e ordem de verificação dos erros, está no §7.2 de cada ESP. A documentação gerada pelo FastAPI fica em `/docs` de cada serviço.
 
 Proposta do grupo, seguindo o padrão do kit (ADR-020):
 
@@ -217,7 +229,7 @@ Os tópicos de negócio têm 3 partições, fator de replicação 3 e retenção
 
 O conteúdo (`payload`) de cada evento, com JSON Schema e exemplo validado, está no [Contrato de Eventos](contrato-eventos.md).
 
-> **A preencher:** o nome do grupo de consumidores de cada serviço.
+Cada serviço consome com o grupo de consumidores igual ao nome do serviço (`produtos-service` e `fornecimentos-service`), definido em `servidor.py`.
 
 ### 6.2 Fluxo de reserva de estoque
 
@@ -256,7 +268,7 @@ sequenceDiagram
 | Falha no processamento | 3 tentativas com espera de 1, 2 e 4 segundos, depois envio ao tópico de falha | ADR-019, RNF-10 |
 | Envelope | `eventId`, `eventType`, `eventVersion`, `timestamp`, `source`, `correlationId`, `aggregateId`, `payload` | ADR-015, RNF-13 |
 
-> **A preencher:** onde cada configuração está no código e como o commit de offset foi feito.
+Produtor e consumidor ficam em `adaptadores/kafka.py`. O consumidor usa `enable.auto.commit=False` e confirma o offset (`commit` síncrono) depois que todos os handlers da mensagem terminam. Como os handlers nunca propagam exceção, uma mensagem com problema vai para a DLT e o consumo segue.
 
 ---
 
@@ -273,7 +285,7 @@ Referências: ADR-012, ADR-018 e ADR-020. Requisitos: RNF-01, RNF-02, RNF-03, RN
 
 O token é um JWT assinado com RS256 pelo serviço de Autenticação e validado em cada serviço com a chave pública obtida do endpoint `/.well-known/jwks.json` (ADR-012). Ele substitui o HS256 com chave compartilhada do kit. O access token vale 15 minutos. O serviço lê do token o usuário (`sub`), a empresa e o `perfil`.
 
-> **A preencher:** onde a verificação está no código e a tabela final de perfis por rota.
+A verificação está em `app/http_comum.py` (`autenticar` e `exigir_escopo`). Perfis por rota: cadastro de produto, `SUPPLIER` e `BUYER`; consulta e listagem de produtos, todos os escopos; cadastro de fornecimento, `SUPPLIER`; consulta e listagem de fornecimentos, `BUYER`, `SUPPLIER` e `TENANT_ADMIN`.
 
 ---
 
@@ -287,7 +299,7 @@ Referências: ADR-003, ADR-004, ADR-006, ADR-007, ADR-010.
 
 A proposta de DDL enviada ao grupo de Banco de Dados está em [`banco/`](banco/README.md): `quantidade_reservada`, tabela `reserva`, tabela `produto_referencia`, tabelas `outbox`, verificações de estoque não negativo e permissões corrigidas. Ela foi testada em PostgreSQL 16, inclusive com duas reservas simultâneas (teste T11), o que confirma o comportamento do ADR-006.
 
-> **A preencher:** o esquema final aprovado pelo grupo de Banco de Dados, o código da reserva e como banco e Kafka são mantidos consistentes.
+Até a aprovação do grupo de Banco de Dados, os serviços usam a proposta de DDL v1.1 (`docs/banco/`). A reserva está em `processar_pedido_criado` (`fornecimentos-service/app/main.py`) e em `aplicar_movimento` (`adaptadores/postgres.py`). A consistência entre banco e Kafka segue a seção 13.
 
 ---
 
@@ -312,7 +324,19 @@ O ambiente local segue o kit:
 2. `make infra-up` (sobe PostgreSQL, Redpanda, gateway, PgAdmin na porta 5050, Kafka UI na porta 8090 e os front-ends).
 3. Executar cada serviço com `uvicorn main:app --reload --port 8102` (Produtos) ou `--port 8103` (Fornecimentos), ou subir a pilha completa com `make up`.
 
-> **A preencher:** variáveis de ambiente de cada serviço (incluindo `DB_USER` e `DB_PASSWORD`, seção 3.4, K2), ajustes feitos no Dockerfile e no contexto de build (K4) e evidência de execução com duas instâncias.
+Variáveis de ambiente lidas por `servidor.py`:
+
+| Variável | Padrão | Uso |
+|---|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_NAME` | `pg-primary`, `5432`, `portal_b2b` | Conexão com o PostgreSQL |
+| `DB_USER` | `svc_produtos` ou `svc_fornecimentos` | Usuário só com DML no próprio schema (K2 da seção 3.4) |
+| `DB_PASSWORD` | obrigatória | Senha do usuário do banco |
+| `DB_POOL_MAX` | `5` | Máximo de conexões por instância |
+| `KAFKA_BOOTSTRAP_SERVERS` | `rp-0:9092` | Brokers do Redpanda |
+| `AUTH_JWKS_URL` | `http://gateway:8080/.well-known/jwks.json` | Chaves públicas do serviço de Autenticação |
+| `PORT` | `8102` ou `8103` | Porta HTTP |
+
+Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Os Dockerfiles não foram construídos no ambiente de desenvolvimento, que não tinha Docker. O servidor de produção foi executado com PostgreSQL real e sem Kafka: `/health` respondeu 200 e `/health/ready` respondeu 503, como esperado.
 
 ---
 
@@ -320,11 +344,19 @@ O ambiente local segue o kit:
 
 Os critérios de aceitação CA-01 a CA-19 do Documento de Requisitos são a base dos testes do grupo. O Grupo de Teste roda, de forma independente, testes de contrato, carga (k6) e caos, com as metas do RNF-25. Dois testes previstos pelo Grupo de Teste cobrem diretamente o nosso serviço: comprador tentando criar fornecimento deve receber 403, e evento repetido deve ser ignorado.
 
-> **A preencher:** tipos de teste executados pelo grupo, ferramentas, resultado de cada critério de aceitação e como rodar os testes.
+| Tipo | Onde | Resultado em 10/11/2026 |
+|---|---|---|
+| Conformidade (um teste por critério de aceitação, com dublês das portas) | `tests/test_conformidade.py` | Produtos: CA-01 a CA-27, 34 casos aprovados. Fornecimentos: CA-01 a CA-47, 68 casos aprovados |
+| Mutação manual (falhas injetadas para confirmar que os testes as detectam) | Fora do repositório | 4 de 4 falhas detectadas: escopo não verificado, sinal da reserva invertido, cancelamento antes da reserva ignorado e `Decimal` criado a partir de `float` |
+| Integração com PostgreSQL 16, script do kit e proposta de DDL | `tests/test_postgres.py` | Produtos: 1 aprovado. Fornecimentos: 6 aprovados, inclusive reservas concorrentes com 5 conexões |
+| Execução do servidor de produção | Manual | `/health` 200, `/health/ready` 503 sem Kafka, 401 sem token |
+
+A verificação automática no GitHub (`.github/workflows/testes.yml`) roda as duas suítes, com PostgreSQL 16 de serviço, a cada mudança em `servicos/` ou `docs/banco/`. Para rodar localmente: `pip install -r requirements-dev.txt` e `python -m pytest` na pasta do serviço; os testes de integração exigem `PG_ADMIN_DSN` e `KIT_INIT_SQL`.
 
 | Critério | Teste que o cobre | Resultado |
 |---|---|---|
-| CA-01 a CA-19 | A preencher | A preencher |
+| ESP-PRD-001, CA-01 a CA-27 | `servicos/produtos-service/tests/test_conformidade.py::test_CA01` a `test_CA27` | Aprovados |
+| ESP-FRN-001, CA-01 a CA-47 | `servicos/fornecimentos-service/tests/test_conformidade.py::test_CA01` a `test_CA47` | Aprovados |
 
 ---
 
@@ -358,12 +390,12 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 013 | Eventos de alteração e exclusão de produto | Pendente |
 | 014 | Exclusão de produto lógica ou física | Pendente |
 | 015 | Eventos em JSON com envelope canônico | Aceita |
-| 016 | Python com FastAPI | Proposta |
+| 016 | Python com FastAPI | Aceita |
 | 017 | Front-ends feitos pelo grupo de UX/UI | Aceita |
 | 018 | Eventos não carregam token de acesso | Proposta |
 | 019 | Tópicos de falha `produtos.dlt` e `fornecimentos.dlt` | Aceita |
 | 020 | Padrão de API do kit de infraestrutura | Aceita |
-| 021 | Uso do kit como base, com as correções da seção 3.4 | Proposta |
+| 021 | Uso do kit como base, com as correções da seção 3.4 | Substituída (seção 14) |
 | 022 | Estoque alterado só por eventos de pedido | Proposta |
 
 ---
@@ -374,7 +406,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** implementar dois serviços independentes, seguindo o diagrama e o kit.
 - **Alternativas consideradas:** um único serviço com os dois domínios. Seria mais simples de implementar, mas diverge da arquitetura definida pelo professor.
 - **Consequências:** cada serviço pode evoluir e ser implantado separadamente. A relação entre fornecimento e produto passa a cruzar serviços, o que exige o ADR-011.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/produtos-service/` e `servicos/fornecimentos-service/`, cada um com o próprio pacote `app`, adaptadores, `Dockerfile` e testes.
 - **Status:** Aceita
 
 ### ADR-002: Comunicação entre módulos por eventos no Redpanda
@@ -382,7 +414,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** a turma definiu o Kafka como meio de comunicação entre os microsserviços. O kit usa o Redpanda, compatível com a API do Kafka, em 3 brokers com fator de replicação 3. O guia do kit proíbe chamadas síncronas entre APIs nos fluxos de negócio.
 - **Decisão:** toda comunicação de negócio com outros serviços acontece por eventos. REST fica restrito a front-end, gateway e serviço.
 - **Consequências:** os serviços ficam desacoplados no tempo, porque um pode estar fora do ar sem bloquear o outro. Em troca, a consistência entre serviços passa a ser eventual, e o tratamento de duplicidade e de ordem fica a cargo de cada serviço (ADR-007 e ADR-008).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `adaptadores/kafka.py` (`BarramentoKafka`) nos dois serviços; o domínio só conhece a porta `EventBus` (`app/main.py`).
 - **Status:** Aceita
 
 ### ADR-003: Um schema por serviço no PostgreSQL 16
@@ -391,7 +423,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** usar os schemas `produtos` e `fornecimentos`, com os usuários `svc_produtos` e `svc_fornecimentos`, e no máximo 5 conexões por instância.
 - **Alternativas consideradas:** um servidor de banco por serviço. Isola melhor as falhas, mas não é o que o kit oferece.
 - **Consequências:** o isolamento entre serviços depende das permissões de cada usuário, que hoje estão incorretas no script do kit (seção 3.4, K1). Uma falha do servidor de banco afeta todos os serviços ao mesmo tempo.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `adaptadores/postgres.py` dos dois serviços (schemas `produtos` e `fornecimentos`, usuários `svc_*`, pool de até 5 conexões em `servidor.py`). Tabelas: `docs/banco/01-proposta-ddl-produtos-fornecimentos.sql`. Testado em `tests/test_postgres.py` contra o script real do kit.
 - **Status:** Aceita
 
 ### ADR-004: Estoque controlado por fornecimento
@@ -400,7 +432,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** cada fornecimento tem a sua quantidade disponível e a sua quantidade reservada.
 - **Alternativas consideradas:** estoque único por produto. Não permite saber de qual fornecedor sai a quantidade de um pedido.
 - **Consequências:** o pedido precisa identificar o fornecimento. O exemplo de `pedido_criado` do kit traz `fornecedorId` e `produtoId`, mas não o `fornecimentoId` (P-02).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` (`processar_pedido_criado`, `processar_pedido_atualizado`); colunas `quantidade_disponivel` e `quantidade_reservada` da tabela `fornecimento`.
 - **Status:** Proposta ([issue #5](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/5))
 
 ### ADR-005: Reserva de estoque como Saga coreografada com compensação
@@ -409,7 +441,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** usar o padrão Saga (microservices.io; Garcia-Molina e Salem, 1987) na forma coreografada. Cada serviço reage aos eventos do outro: `pedido_criado` provoca a reserva, o cancelamento provoca a liberação (ação de compensação) e a venda concluída provoca a baixa.
 - **Alternativas consideradas:** Saga orquestrada, com um coordenador central que comanda cada passo. Facilita acompanhar o fluxo, mas exige um componente a mais e um dono para ele. Com só dois participantes (Pedidos e Fornecimentos), a coreografia é suficiente.
 - **Consequências:** existe um intervalo em que o pedido já existe e a reserva ainda não foi feita. Se a reserva falhar, Pedidos precisa ser avisado (P-16). O momento em que o pedido é criado também muda o comportamento: se for depois da negociação fechada, como no kit, o estoque não fica bloqueado durante o leilão (P-29).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py`: reserva em `pedido_criado`, liberação e baixa em `pedido_atualizado`, `reserva_estoque_recusada` quando falta saldo. Critérios CA-17 a CA-30 da ESP-FRN-001.
 - **Status:** Proposta ([issue #1](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/1))
 
 ### ADR-006: Reserva atômica por atualização condicional
@@ -421,7 +453,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
   - Controle otimista com coluna de versão: evita bloqueio, mas obriga a repetir a operação quando há conflito, o que é frequente justamente no cenário de alta disputa citado pelo professor.
 - **Justificativa:** o banco confirmado pelo kit é o PostgreSQL 16. No nível de isolamento padrão (Read Committed), uma segunda atualização concorrente sobre a mesma linha espera a primeira terminar e reavalia a condição `WHERE` sobre a versão nova da linha (documentação do PostgreSQL, seção *Transaction Isolation*). Assim, a segunda reserva vê o saldo já reduzido. Os parâmetros (`%s`) evitam injeção de SQL.
 - **Verificação:** em 26/10/2026, duas sessões tentaram reservar 60 unidades de um fornecimento com 100, ao mesmo tempo. A segunda esperou a primeira, reavaliou a condição e não reservou nada (`UPDATE 0`). O estoque terminou com 40 disponíveis e 60 reservadas (teste T11 em [`banco/README.md`](banco/README.md)).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/adaptadores/postgres.py`, método `aplicar_movimento` (UPDATE condicional). Teste `test_reservas_concorrentes_nao_deixam_saldo_negativo` (5 conexões, 20 tentativas, 10 reservas) e CA-42.
 - **Status:** Proposta ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10))
 
 ### ADR-007: Idempotência por registro de eventos processados no banco
@@ -430,7 +462,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** gravar o `eventId` de cada evento consumido na tabela `processed_events` do próprio schema, na mesma transação da alteração de dados. Se o `eventId` já existir, o evento é ignorado e o fato é registrado no log.
 - **Alternativas consideradas:** o controle em memória da biblioteca comum do kit (`services/common/consumer.py`). Foi descartado porque se perde quando o serviço reinicia e não é compartilhado entre as instâncias `app1` e `app2`.
 - **Consequências:** a gravação no banco e o registro do evento são atômicos. Se o processo cair entre os dois, nenhum dos dois acontece.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py`, função `ao_receber`: verificação e registro do `eventId` na mesma transação. CA-18 e CA-26 (falha desfaz a transação e não registra o evento).
 - **Status:** Aceita
 
 ### ADR-008: `aggregateId` como chave das mensagens
@@ -438,7 +470,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** o Kafka só garante ordem dentro de uma partição, e mensagens com a mesma chave vão para a mesma partição (documentação do Apache Kafka). O catálogo do kit define a chave de cada tópico.
 - **Decisão:** usar `produtoId` nos eventos de produto e `fornecimentoId` em `fornecimento_criado` e `estoque_atualizado`, como no `CONTRACTS.md` e no código do kit. O guia do kit cita `produto_id` para esses dois tópicos, divergência registrada na P-33.
 - **Consequências:** os eventos de um mesmo fornecimento chegam na ordem em que foram publicados, dentro de cada tópico.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `app/http_comum.py` (`envelope`) e chamadas de `publish` em `app/main.py`: `produtoId`, `fornecimentoId` e `pedidoId` como chave. CA-12 (Produtos) e CA-46 (Fornecimentos).
 - **Status:** Aceita
 
 ### ADR-009: Produtor com `acks=all` e idempotência habilitada
@@ -446,7 +478,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** desde o Kafka 3.0 (KIP-679), esses são os valores padrão do produtor Java. Um defeito impediu que fossem aplicados nas versões 3.0.0 e 3.1.0, corrigido em 3.0.1, 3.1.1 e 3.2.0 (notas de atualização do Apache Kafka, KAFKA-13598). A biblioteca comum do kit já configura os dois valores.
 - **Decisão:** manter `acks=all` e `enable_idempotence=True` de forma explícita.
 - **Consequências:** evita mensagens perdidas por falha de um broker e duplicatas causadas por novas tentativas do produtor.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Construtor de `BarramentoKafka` em `adaptadores/kafka.py` (`acks=all`, `enable.idempotence=True`); `publish` só retorna após a confirmação do broker.
 - **Status:** Aceita
 
 ### ADR-010: Consistência entre banco e Kafka
@@ -456,7 +488,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
   - Padrão *Transactional Outbox* (microservices.io): o evento é gravado numa tabela do próprio schema, na mesma transação, e um processo separado o publica no Kafka. Resolve o problema, mas exige uma tabela a mais, que depende do grupo de Banco de Dados, e um publicador.
   - Publicação logo após a gravação, devolvendo erro ao cliente se a publicação falhar: mais simples, mas ainda há uma janela em que o dado foi gravado e o evento não saiu.
 - **Recomendação do grupo:** pedir a tabela de outbox ao grupo de Banco de Dados junto com o ajuste da P-28, já que o PostgreSQL está confirmado.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Não implementado na versão atual. Os serviços publicam logo após o commit da transação (ver seção 13).
 - **Status:** Pendente ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10))
 
 ### ADR-011: Fornecimentos mantém cópia local dos produtos
@@ -465,7 +497,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** Fornecimentos consome `produto_cadastrado` e mantém uma tabela local com os produtos válidos. Alteração e exclusão dependem do ADR-013.
 - **Alternativas consideradas:** consultar o serviço de Produtos por REST a cada novo fornecimento. Cria dependência síncrona, o que contraria o ADR-002.
 - **Consequências:** a cópia local pode ficar alguns instantes atrasada em relação ao serviço de Produtos (consistência eventual). A tabela local também depende do DDL do grupo de Banco de Dados.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` (`processar_produto`) e tabela `produto_referencia`. CA-14 a CA-16 da ESP-FRN-001.
 - **Status:** Aceita
 
 ### ADR-012: Validação local do JWT RS256 com chaves públicas (JWKS)
@@ -474,7 +506,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Decisão:** validar o token em cada requisição com a chave pública do `kid` do token, aceitando só o algoritmo RS256. Em produção, as chaves vêm do JWKS do serviço de Autenticação, com cache de 1 hora (`jwt.PyJWKClient`); no código do serviço, elas chegam pela porta `ChavesPublicas` das ESPs, o que permite testar sem rede. Responder 401 ou 403 no formato RFC 7807 (atualizada pela RFC 9457, com o mesmo formato).
 - **Alternativas consideradas:** HS256 com chave compartilhada (definição original do kit), descartada pelo risco de emissão de tokens por qualquer serviço; introspecção no serviço de Autenticação (RFC 7662), que permite revogação imediata, mas exige uma chamada por requisição.
 - **Consequências:** só o serviço de Autenticação emite tokens. Não há chamada de rede por requisição, só a busca das chaves a cada hora. Um token continua válido até expirar (15 minutos). Fixar `algorithms=["RS256"]` impede o ataque de confusão de algoritmo, em que um token HS256 é assinado com a chave pública como segredo. O kit ainda descreve HS256 e precisa ser alinhado (P-34).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `app/http_comum.py` (`autenticar`: RS256 fixo, `kid` obrigatório, claims `sub`, `tenant_id`, `active_scope`, expiração pelo relógio injetado) e `adaptadores/chaves_jwks.py` (`PyJWKClient` com cache de 1 hora). CA-14 a CA-17 (Produtos) e CA-31 a CA-34 (Fornecimentos), incluindo token HS256 recusado.
 - **Status:** Aceita
 
 ### ADR-013: Eventos de alteração e exclusão de produto
@@ -484,7 +516,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
   - Pedir os tópicos `produto_atualizado` e `produto_excluido`. Segue o padrão do kit, mas a ordem entre cadastro e alteração de um mesmo produto não é garantida, porque estão em tópicos diferentes. O consumidor precisaria comparar `timestamp` ou versão.
   - Publicar os três tipos de evento em um único tópico de produto, distinguidos pelo `eventType`. Garante a ordem por `produtoId` (Kleppmann, 2018), mas foge do padrão de um tópico por evento.
 - **Decisão:** a tomar com o grupo de Infraestrutura.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Não implementado: aguarda a P-26.
 - **Status:** Pendente (P-26)
 
 ### ADR-014: Exclusão de produto lógica ou física
@@ -492,7 +524,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** a exclusão de um produto com fornecimentos ativos ou pedidos em andamento não está definida. A tabela `produto` do kit não tem coluna de situação.
 - **Alternativas:** exclusão lógica (o produto é marcado como inativo, o que exige ajuste no DDL) ou exclusão física (o registro é apagado).
 - **Decisão:** a tomar.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Não implementado: aguarda a P-09.
 - **Status:** Pendente ([issue #6](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/6))
 
 ### ADR-015: Eventos em JSON com envelope canônico
@@ -500,7 +532,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** todos os grupos precisam ler os eventos uns dos outros. O kit define o envelope e sobe o Schema Registry do Redpanda com compatibilidade `BACKWARD`.
 - **Decisão:** publicar em JSON com os campos `eventId`, `eventType`, `eventVersion`, `timestamp`, `source`, `correlationId`, `aggregateId` e `payload`.
 - **Pendência:** se o registro dos schemas no Schema Registry é obrigatório (P-08).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `app/http_comum.py` (`envelope`); conteúdo dos eventos conforme `docs/contrato-eventos.md`.
 - **Status:** Aceita
 
 ### ADR-016: Python com FastAPI
@@ -508,15 +540,15 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** a linguagem é livre (aula 2, 21:45). O kit entrega boilerplates em FastAPI com Dockerfile e uma biblioteca comum de autenticação, erros, eventos e logs, e diz que os grupos podem removê-los ou alterá-los.
 - **Decisão proposta:** usar Python 3.12 com FastAPI, aproveitando o boilerplate e a biblioteca comum com as correções da seção 3.4.
 - **Alternativas consideradas:** outra linguagem. Exigiria reimplementar o envelope, o padrão de erros, a validação do token e os endpoints técnicos, com mais risco de divergir dos outros grupos.
-- **Evidência na implementação:** a preencher
-- **Status:** Proposta ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10))
+- **Evidência na implementação:** `servicos/produtos-service/app` e `servicos/fornecimentos-service/app` (FastAPI 0.115.6); imagem `python:3.12-slim` nos `Dockerfile`.
+- **Status:** Aceita (implementada em 10/11/2026)
 
 ### ADR-017: Front-ends feitos pelo grupo de UX/UI
 
 - **Contexto:** o professor exige modo escuro, acessibilidade e responsividade (aula 2). O guia do kit atribui os front-ends ao grupo de UX/UI, incluindo `/app/produtos` ("Catálogo e Gestão de Estoque do Fornecedor").
 - **Decisão:** o grupo entrega a API e os erros no formato RFC 7807, e o grupo de UX/UI faz as telas.
 - **Consequências:** o contrato da API (seção 5 e `/docs`) passa a ser a interface entre os dois grupos.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Não se aplica ao código do grupo: o repositório não tem telas.
 - **Status:** Aceita
 
 ### ADR-018: Eventos não carregam token de acesso
@@ -524,14 +556,14 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** o token é temporário, e o evento fica guardado no Redpanda por 7 dias.
 - **Decisão:** os eventos levam apenas o identificador da empresa e do usuário que executou a ação, nunca o token.
 - **Consequências:** o consumidor não pode usar o token do evento para chamar outros serviços em nome do usuário. Também não há credencial exposta no Redpanda.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** Os payloads montados em `app/main.py` levam só `empresaId` e `usuarioId`. CA-27 e CA-47 verificam que o token não aparece nos eventos nem nos logs.
 - **Status:** Proposta
 
 ### ADR-019: Tópicos de falha `produtos.dlt` e `fornecimentos.dlt`
 
 - **Contexto:** uma mensagem com formato inválido, se não for tratada, faz o consumidor tentar processá-la para sempre e trava as mensagens seguintes da mesma partição. O Apache Kafka não oferece esse recurso para consumidores comuns (ele existe apenas no Kafka Connect), então o envio ao tópico de falha é feito pelo próprio serviço. O kit cria um tópico de falha por serviço.
 - **Decisão:** depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `produtos.dlt` ou `fornecimentos.dlt`, com o evento original e o erro, e o consumo continua.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` (`enviar_dlt`) publica em `fornecimentos.dlt` com `originalEvent`, `error`, `stackTrace` e `failedAtAttempt`. CA-16 e CA-23 a CA-26. As novas tentativas com espera não foram implementadas (seção 14).
 - **Status:** Aceita
 
 ### ADR-020: Padrão de API do kit de infraestrutura
@@ -539,7 +571,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** o guia do kit define um padrão comum para todas as APIs, e o Grupo de Teste vai verificar esse padrão.
 - **Decisão:** rotas com prefixo `/api/v1`, erros no formato RFC 7807 com `correlationId` e `timestamp`, paginação com `page` e `size` (máximo 100), endpoints `/health`, `/health/ready`, `/metrics` e `/docs`, cabeçalho `X-Correlation-Id` repassado aos logs e aos eventos, e logs em JSON na saída padrão.
 - **Consequências:** os front-ends e os testes tratam todos os serviços da mesma forma. O padrão de erros do FastAPI para validação precisa ser substituído (seção 3.4, K9).
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `app/http_comum.py`: `configurar_http` (correlation id, métricas, `/health`, `/health/ready`, tratamento de 404 e 405), `resposta_erro` (RFC 7807 com `codigo`, `correlationId` e `timestamp`) e `paginacao`. CA-18 a CA-23 (Produtos) e CA-35 a CA-40 (Fornecimentos).
 - **Status:** Aceita
 
 ### ADR-021: Uso do kit como base, com correções
@@ -547,36 +579,42 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** o kit acelera o início do trabalho, mas tem os pontos da seção 3.4, alguns dos quais impedem o serviço de funcionar (K1, K3, K4) ou de atender aos requisitos (K5 a K10).
 - **Decisão proposta:** partir do boilerplate e da biblioteca comum do kit, corrigir no nosso código o que é nosso (K5 a K10) e reportar ao grupo de Infraestrutura o que é da plataforma (K1 a K4, K11), com a evidência de cada ponto.
 - **Alternativas consideradas:** escrever os serviços do zero, sem o kit. Daria mais controle, mas perderia a padronização com os outros grupos.
-- **Evidência na implementação:** a preencher
-- **Status:** Proposta
+- **Evidência na implementação:** Divergência registrada na seção 14: o código foi escrito pelo grupo, sem reaproveitar a biblioteca comum do kit.
+- **Status:** Substituída: o grupo seguiu as convenções do kit, mas não reaproveitou o código dele (seção 14)
 
 ### ADR-022: Estoque alterado só por eventos de pedido
 
 - **Contexto:** o boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`, sem autenticação. O fluxo definido pelo professor altera o estoque a partir dos pedidos (RF-14, RF-19, RF-20).
 - **Decisão proposta:** não expor endpoint de baixa. Reserva, liberação e baixa acontecem só pelos eventos de pedido. Uma eventual reposição de quantidade pelo próprio fornecedor depende da P-11.
 - **Consequências:** uma única porta de entrada para alterações de estoque, o que facilita garantir a atomicidade e a auditoria.
-- **Evidência na implementação:** a preencher
+- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` não tem endpoint de baixa; `DELETE` e métodos fora do contrato respondem 405 (CA-40).
 - **Status:** Proposta
 
 ---
 
 ## 13. Limitações conhecidas e itens não implementados
 
-> **A preencher ao longo do projeto.** Cada item diz o que não foi feito, por que e qual o impacto.
+> Atualizado em 10/11/2026.
 
 | Item | Motivo | Impacto |
 |---|---|---|
-| | | |
+| Outbox (ADR-010) | Depende da aprovação do DDL pelo grupo de Banco de Dados e de um publicador separado | Se o Redpanda cair entre o commit e a publicação, o evento se perde. O banco fica correto, mas Mercado pode ver saldo antigo |
+| Adaptador Kafka sem teste automatizado | O ambiente de desenvolvimento não tinha broker nem Docker | `adaptadores/kafka.py` foi verificado só por leitura e importação. Precisa ser testado no ambiente do kit |
+| Dockerfiles não construídos | O ambiente de desenvolvimento não tinha Docker | Precisam ser construídos no ambiente do kit |
+| Alteração e exclusão de produto | Aguardam P-07, P-09 e P-26 | Fora da versão 1.1 das ESPs |
+| Consumo de `empresa_cadastrada` | Não é necessário enquanto o escopo vem no token | Nenhum na versão 1.1 |
 
 ---
 
 ## 14. Divergências entre o planejado e o implementado
 
-> **A preencher ao longo do projeto.** Sempre que a implementação se afastar de um requisito ou de um ADR, registre aqui.
+> Atualizado em 10/11/2026.
 
 | Requisito ou ADR | Planejado | Implementado | Justificativa |
 |---|---|---|---|
-| | | | |
+| ADR-021 | Partir do boilerplate e da biblioteca comum do kit, com correções | Código escrito pelo grupo, seguindo as convenções do kit (envelope, RFC 7807, endpoints técnicos, prefixo `/api/v1`) sem reaproveitar o código dele | Os pontos K3 a K10 da seção 3.4 afetavam quase todos os módulos comuns (publicação, consumo, idempotência, autenticação, erros). Corrigir cada um custaria mais que escrever com testes desde o início |
+| RNF-10, ADR-019 | Três novas tentativas com espera de 1, 2 e 4 segundos antes da DLT | O handler envia à DLT na primeira falha (`failedAtAttempt` 1) | Decisão Q-12 da ESP-FRN-001: as novas tentativas ficam com o adaptador de consumo, ainda não implementadas |
+| RD-02 | Campo de descrição do produto | Não implementado | Proposta do grupo não confirmada; fora da ESP-PRD-001 |
 
 ---
 
@@ -608,6 +646,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | Versão | Data | Descrição |
 |---|---|---|
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
+| 0.5 | 10/11/2026 | Implementação dos dois serviços: evidências dos ADRs, seções 2.2, 3.2, 5, 6, 7, 8, 10, 11, 13 e 14 preenchidas. ADR-016 aceita; ADR-021 substituída |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |
