@@ -149,3 +149,178 @@ def test_fluxo_completo_com_o_servico(repo):
     assert topicos.count("estoque_atualizado") == 4 and topicos.count("reserva_estoque_recusada") == 1
     lista = cliente.get(f"/api/v1/fornecimentos?produto_id={pid}", headers=auth("BUYER")).json()
     assert lista["total"] == 1 and lista["itens"][0]["fornecimento_id"] == fid
+
+
+# ---------------------------------------------------------------- Outbox (ADR-010)
+
+class KafkaFalso:
+    """Dublê do BarramentoKafka: guarda o que foi publicado e pode simular broker fora ou tópico recusado."""
+
+    def __init__(self, atraso=0.0):
+        self.publicadas = []
+        self.tentativas = 0
+        self.fora = False
+        self.recusados = set()
+        self.handlers = {}
+        self.atraso = atraso
+        self.trava = threading.Lock()
+
+    def publish(self, topic, key, message):
+        with self.trava:
+            self.tentativas += 1
+        if self.atraso:
+            import time
+            time.sleep(self.atraso)
+        if self.fora or topic in self.recusados:
+            raise RuntimeError(f"falha simulada em {topic}")
+        with self.trava:
+            self.publicadas.append((topic, key, message))
+
+    def subscribe(self, topic, handler):
+        self.handlers.setdefault(topic, []).append(handler)
+
+    def disponivel(self):
+        return not self.fora
+
+
+def _mensagem(event_id, n=0):
+    return {"eventId": event_id, "eventType": "teste", "payload": {"n": n, "texto": "ação"}}
+
+
+@pytest.fixture
+def outbox(repo):
+    from adaptadores.outbox import BarramentoOutbox
+    conexao = repo.pool.getconn()
+    try:
+        with conexao, conexao.cursor() as cursor:
+            cursor.execute("DELETE FROM fornecimentos.outbox")
+    finally:
+        repo.pool.putconn(conexao)
+    kafka = KafkaFalso()
+    return BarramentoOutbox(repo.pool, "fornecimentos", kafka), kafka
+
+
+def _pendentes(repo):
+    conexao = repo.pool.getconn()
+    try:
+        with conexao, conexao.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM fornecimentos.outbox WHERE publicado_em IS NULL")
+            return cursor.fetchone()[0]
+    finally:
+        repo.pool.putconn(conexao)
+
+
+def test_outbox_guarda_e_publica_na_ordem(repo, outbox):
+    bus, kafka = outbox
+    for i, chave in enumerate(["F-1", "F-2", "F-1"]):
+        bus.publish("estoque_atualizado", chave, _mensagem(f"e-{i}", i))
+    assert kafka.publicadas == [] and _pendentes(repo) == 3
+    assert bus.publicar_pendentes() == 3
+    assert [(t, k, m["eventId"]) for t, k, m in kafka.publicadas] == [
+        ("estoque_atualizado", "F-1", "e-0"), ("estoque_atualizado", "F-2", "e-1"), ("estoque_atualizado", "F-1", "e-2")]
+    assert kafka.publicadas[0][2] == _mensagem("e-0", 0)
+    assert bus.publicar_pendentes() == 0 and _pendentes(repo) == 0
+
+
+def test_outbox_com_kafka_fora_nao_perde_eventos(repo, outbox):
+    bus, kafka = outbox
+    kafka.fora = True
+    bus.publish("estoque_atualizado", "F-1", _mensagem("k-1"))
+    bus.publish("estoque_atualizado", "F-2", _mensagem("k-2"))
+    assert bus.publicar_pendentes() == 0
+    assert kafka.tentativas == 1 and _pendentes(repo) == 2  # parou na primeira falha
+    kafka.fora = False
+    assert bus.publicar_pendentes() == 2
+    assert [m["eventId"] for _, _, m in kafka.publicadas] == ["k-1", "k-2"]
+
+
+def test_outbox_topico_recusado_nao_trava_os_outros(repo, outbox):
+    bus, kafka = outbox
+    kafka.recusados.add("reserva_estoque_recusada")
+    bus.publish("reserva_estoque_recusada", "PED-1", _mensagem("r-1"))
+    bus.publish("reserva_estoque_recusada", "PED-1", _mensagem("r-2"))
+    bus.publish("estoque_atualizado", "F-9", _mensagem("r-3"))
+    assert bus.publicar_pendentes() == 1
+    assert kafka.tentativas == 2  # r-2 não é tentado, para não passar à frente de r-1
+    kafka.recusados.clear()
+    assert bus.publicar_pendentes() == 2
+    assert [m["eventId"] for _, _, m in kafka.publicadas] == ["r-3", "r-1", "r-2"]
+
+
+def test_outbox_evento_repetido_grava_uma_vez(repo, outbox):
+    bus, kafka = outbox
+    bus.publish("estoque_atualizado", "F-1", _mensagem("d-1"))
+    bus.publish("estoque_atualizado", "F-1", _mensagem("d-1"))
+    assert _pendentes(repo) == 1 and bus.publicar_pendentes() == 1
+
+
+def test_outbox_duas_instancias_publicam_cada_evento_uma_vez(repo, outbox):
+    from adaptadores.outbox import BarramentoOutbox
+    _, _ = outbox
+    kafka = KafkaFalso(atraso=0.002)
+    a = BarramentoOutbox(repo.pool, "fornecimentos", kafka, lote=10)
+    b = BarramentoOutbox(repo.pool, "fornecimentos", kafka, lote=10)
+    for i in range(40):
+        a.publish("estoque_atualizado", f"F-{i % 3}", _mensagem(f"c-{i:02d}", i))
+
+    def drenar(bus):
+        for _ in range(100):
+            if _pendentes(repo) == 0:
+                return
+            bus.publicar_pendentes()
+
+    threads = [threading.Thread(target=drenar, args=(bus,)) for bus in (a, b)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    ids = [m["eventId"] for _, _, m in kafka.publicadas]
+    assert sorted(ids) == [f"c-{i:02d}" for i in range(40)] and len(ids) == len(set(ids))
+    for chave in ("F-0", "F-1", "F-2"):
+        da_chave = [m["eventId"] for _, k, m in kafka.publicadas if k == chave]
+        assert da_chave == sorted(da_chave)  # ordem por chave mantida
+
+
+def test_outbox_thread_publica_sozinha(repo, outbox):
+    import time
+    from adaptadores.outbox import BarramentoOutbox
+    _, kafka = outbox
+    bus = BarramentoOutbox(repo.pool, "fornecimentos", kafka, intervalo=0.05)
+    bus.iniciar()
+    try:
+        bus.publish("estoque_atualizado", "F-1", _mensagem("t-1"))
+        limite = time.monotonic() + 5
+        while not kafka.publicadas and time.monotonic() < limite:
+            time.sleep(0.02)
+    finally:
+        bus.parar()
+    assert [m["eventId"] for _, _, m in kafka.publicadas] == ["t-1"]
+
+
+def test_outbox_fluxo_completo_com_o_servico(repo, outbox):
+    from app.main import create_app
+    from tests.conftest import FakeChaves, FakeClock, auth, pedido_criado, produto
+
+    bus, kafka = outbox
+    cliente = TestClient(create_app(bus, FakeClock(), repo, FakeChaves()))
+    pid = "PROD-OUT-" + uuid.uuid4().hex[:8]
+
+    def entregar_kafka(topico, mensagem):
+        for handler in kafka.handlers[topico]:
+            handler(mensagem)
+
+    entregar_kafka("produto_cadastrado", produto(pid))
+    r = cliente.post("/api/v1/fornecimentos", headers=auth(), json={
+        "produto_id": pid, "preco": 2.5, "quantidade_disponivel": 10, "origem": {"cidade": "Goiânia", "uf": "GO"}})
+    assert r.status_code == 201
+    fid = r.json()["fornecimento_id"]
+    entregar_kafka("pedido_criado", pedido_criado("PED-OUT-" + fid, fid, 4))
+    # mensagem inválida com aggregateId longo: a DLT também passa pelo outbox (chave TEXT, DDL v1.3)
+    entregar_kafka("pedido_criado", {"eventId": "inv-" + fid, "aggregateId": "x" * 200, "payload": {}})
+    assert kafka.publicadas == [] and _pendentes(repo) == 3
+    assert bus.publicar_pendentes() == 3
+    topicos = [(t, k) for t, k, _ in kafka.publicadas]
+    assert topicos == [("fornecimento_criado", fid), ("estoque_atualizado", fid), ("fornecimentos.dlt", "x" * 200)]
+    criado = kafka.publicadas[0][2]
+    assert criado["payload"]["origem"] == {"cidade": "Goiânia", "uf": "GO"} and criado["payload"]["preco"] == 2.5
+    assert kafka.publicadas[1][2]["payload"]["quantidadeReservada"] == 4

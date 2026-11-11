@@ -2,7 +2,7 @@
 
 **De:** grupo de Fornecimento e Produtos
 **Para:** grupo de Banco de Dados (com cópia ao grupo de Infraestrutura)
-**Data:** 26/10/2026 (versão 1.2: 10/11/2026)
+**Data:** 26/10/2026 (versão 1.3: 11/11/2026)
 **Script:** [`01-proposta-ddl-produtos-fornecimentos.sql`](01-proposta-ddl-produtos-fornecimentos.sql)
 
 O DDL é responsabilidade do grupo de Banco de Dados, conforme o guia do kit de infraestrutura (seção 5). Este arquivo é uma **proposta** para facilitar a revisão. A decisão final é de vocês.
@@ -65,3 +65,8 @@ O T11 confirma o comportamento descrito no ADR-006 do Relatório Técnico: no Po
 - `origem_uf` em `fornecimento` e `peso_unitario_kg` em `produto` (tabela acima), pedidos pelo grupo de Logística/Transporte.
 - O script continua podendo ser executado mais de uma vez: testado duas vezes seguidas sobre o `01-init.sql` do kit, sem erro.
 - Testes de integração dos serviços aprovados com esta versão (PostgreSQL 16).
+
+## Versão 1.3 (11/11/2026)
+
+- A coluna `chave` das tabelas `outbox` passa a `TEXT`. Na DLT, a chave é o `aggregateId` da mensagem recebida de outro serviço, que não tem limite de tamanho garantido. Com `VARCHAR(64)`, uma chave maior faria a gravação falhar.
+- As tabelas `outbox` passaram a ser usadas pelos serviços (`adaptadores/outbox.py`). Testado com PostgreSQL 16 e o usuário de cada serviço, inclusive com duas instâncias publicando ao mesmo tempo.

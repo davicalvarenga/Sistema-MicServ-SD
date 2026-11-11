@@ -37,6 +37,11 @@ class RepositorioFornecimentosPostgres:
         self._pool = ThreadedConnectionPool(1, max_conexoes, dsn)
         self._local = threading.local()
 
+    @property
+    def pool(self) -> ThreadedConnectionPool:
+        """Pool compartilhado com o BarramentoOutbox, para respeitar o limite de conexões (RNF-23)."""
+        return self._pool
+
     @contextmanager
     def transacao(self):
         if getattr(self._local, "conexao", None) is not None:

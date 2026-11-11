@@ -28,6 +28,11 @@ class RepositorioProdutosPostgres:
     def __init__(self, dsn: str, max_conexoes: int = 5):
         self._pool = ThreadedConnectionPool(1, max_conexoes, dsn)
 
+    @property
+    def pool(self) -> ThreadedConnectionPool:
+        """Pool compartilhado com o BarramentoOutbox, para respeitar o limite de conexões (RNF-23)."""
+        return self._pool
+
     def _executar(self, sql: str, parametros=(), buscar: str | None = None):
         conexao = self._pool.getconn()
         try:
