@@ -20,7 +20,9 @@ class BarramentoKafka:
         self._bootstrap = bootstrap_servers
         self._grupo = grupo_consumidor
         self._timeout = timeout_publicacao
-        self._produtor = Producer({"bootstrap.servers": bootstrap_servers, "acks": "all", "enable.idempotence": True})
+        # "logger": os logs da librdkafka passam pelo logging do Python (JSON, como o resto do serviço)
+        self._produtor = Producer({"bootstrap.servers": bootstrap_servers, "acks": "all", "enable.idempotence": True,
+                                   "logger": logger})
         self._handlers: dict[str, list] = {}
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
@@ -66,6 +68,7 @@ class BarramentoKafka:
             "group.id": self._grupo,
             "enable.auto.commit": False,
             "auto.offset.reset": "earliest",
+            "logger": logger,
         })
         consumidor.subscribe(list(self._handlers))
         try:

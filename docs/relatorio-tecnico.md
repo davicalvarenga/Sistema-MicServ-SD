@@ -131,6 +131,9 @@ O grupo analisou o kit antes de usá-lo como base. A tabela registra o que foi e
 | K9 | `services/common/errors.py` não inclui `timestamp` no corpo do erro, e os erros de validação do FastAPI (422) usam o formato padrão do framework, não a RFC 7807 | Análise estática | Contraria o RNF-20 | Incluir `timestamp` e registrar um tratador para os erros de validação |
 | K10 | Os boilerplates respondem `/health/ready` sem testar banco e Redpanda, e `/metrics` devolve um número fixo | Análise estática | Contraria o RNF-22 | Implementar as verificações e as métricas reais |
 | K11 | O guia, o `CONTRACTS.md`, o script de tópicos e o código divergem em nomes de tópico, chaves, campo de versão do envelope e nome do claim da empresa | Comparação dos arquivos | Risco de cada grupo seguir um arquivo diferente | Seguir o que está implementado e pedir a unificação (P-33) |
+| K12 | O `pg-primary` sobe com `synchronous_commit=on` e `synchronous_standby_names='pg_replica'`. Na inicialização, o PostgreSQL só escuta o socket local, a réplica não se conecta e o `CREATE DATABASE "portal_b2b"` espera por ela para sempre | Execução do kit com Docker (11/11/2026), `wait_event` `SyncRep` | O banco `portal_b2b` nunca é criado; nenhum serviço do kit consegue usar o banco | Contorno opcional para teste local em `servicos/integracao-kit/`; correção pedida à Infraestrutura |
+| K13 | O gateway não tem a rota `/.well-known/jwks.json` | Execução do kit com Docker | Os serviços não conseguem validar os tokens RS256 da Autenticação | Rota pedida pela Autenticação à Infraestrutura; nos testes, servidor JWKS de teste |
+| K14 | O tópico `reserva_estoque_recusada` não está no script de tópicos, e o Redpanda em modo `dev-container` cria tópicos sozinhos com 1 partição | Execução do kit com Docker (`auto_create_topics_enabled` = `true`, `default_topic_partitions` = `1`) | O tópico sairia fora do padrão de 3 partições e replicação 3 | Criar à mão até o script ser atualizado (issue #12) |
 
 ---
 
@@ -322,11 +325,7 @@ Até a aprovação do grupo de Banco de Dados, os serviços usam a proposta de D
 
 ## 10. Implantação
 
-O ambiente local segue o kit:
-
-1. `make env` (copia `.env.example` para `.env`).
-2. `make infra-up` (sobe PostgreSQL, Redpanda, gateway, PgAdmin na porta 5050, Kafka UI na porta 8090 e os front-ends).
-3. Executar cada serviço com `uvicorn main:app --reload --port 8102` (Produtos) ou `--port 8103` (Fornecimentos), ou subir a pilha completa com `make up`.
+Os serviços rodam dentro do kit, com duas instâncias de cada um, por um arquivo de override do Docker Compose que não altera nenhum arquivo do kit: [`servicos/integracao-kit/`](../servicos/integracao-kit/README.md). O README dessa pasta tem o passo a passo (variáveis no `.env`, banco com a proposta de DDL, tópicos, servidor JWKS de teste, subida das quatro instâncias e teste de fumaça) e foi seguido do início ao fim em 11/11/2026.
 
 Variáveis de ambiente lidas por `servidor.py`:
 
@@ -340,7 +339,7 @@ Variáveis de ambiente lidas por `servidor.py`:
 | `AUTH_JWKS_URL` | `http://gateway:8080/.well-known/jwks.json` | Chaves públicas do serviço de Autenticação |
 | `PORT` | `8102` ou `8103` | Porta HTTP |
 
-Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Os Dockerfiles não foram construídos no ambiente de desenvolvimento, que não tinha Docker. O servidor de produção foi executado com PostgreSQL real e sem Kafka: `/health` respondeu 200 e `/health/ready` respondeu 503, como esperado.
+Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Em 11/11/2026, as imagens foram construídas e rodaram no kit com Docker: as quatro instâncias ficaram saudáveis, o teste de fumaça passou nas 13 verificações e o teste de queda do Redpanda confirmou o outbox (seção 11).
 
 ---
 
@@ -348,18 +347,20 @@ Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviç
 
 Os critérios de aceitação CA-01 a CA-19 do Documento de Requisitos são a base dos testes do grupo. O Grupo de Teste roda, de forma independente, testes de contrato, carga (k6) e caos, com as metas do RNF-25. Dois testes previstos pelo Grupo de Teste cobrem diretamente o nosso serviço: comprador tentando criar fornecimento deve receber 403, e evento repetido deve ser ignorado.
 
-| Tipo | Onde | Resultado em 10/11/2026 |
+| Tipo | Onde | Resultado em 11/11/2026 |
 |---|---|---|
-| Conformidade (um teste por critério de aceitação, com dublês das portas) | `tests/test_conformidade.py` | Produtos: CA-01 a CA-27, 34 casos aprovados. Fornecimentos: CA-01 a CA-47, 68 casos aprovados |
+| Conformidade (um teste por critério de aceitação, com dublês das portas) | `tests/test_conformidade.py` | Produtos: CA-01 a CA-28, 41 casos aprovados. Fornecimentos: CA-01 a CA-47, 72 casos aprovados |
 | Mutação manual (falhas injetadas para confirmar que os testes as detectam) | Fora do repositório | 4 de 4 falhas detectadas: escopo não verificado, sinal da reserva invertido, cancelamento antes da reserva ignorado e `Decimal` criado a partir de `float` |
-| Integração com PostgreSQL 16, script do kit e proposta de DDL | `tests/test_postgres.py` | Produtos: 1 aprovado. Fornecimentos: 6 aprovados, inclusive reservas concorrentes com 5 conexões |
-| Execução do servidor de produção | Manual | `/health` 200, `/health/ready` 503 sem Kafka, 401 sem token |
+| Integração com PostgreSQL 16, script do kit e proposta de DDL | `tests/test_postgres.py` | Produtos: 2 aprovados. Fornecimentos: 13 aprovados, inclusive reservas concorrentes com 5 conexões e o outbox (ordem, Kafka fora, tópico recusado, evento repetido, duas instâncias) |
+| Mutação manual do outbox | Fora do repositório | 4 de 4 falhas detectadas: sem a trava entre instâncias, ordem trocada, sem bloqueio por chave e sem parar com o broker fora |
+| Integração no kit com Docker (duas instâncias de cada serviço, PostgreSQL e Redpanda do kit) | `servicos/integracao-kit/teste_fumaca.py`, manual | 13 de 13 verificações: prontidão, token HS256 recusado, cadastro numa instância e consulta na outra, `produto_cadastrado` chegando ao Fornecimentos pelo Redpanda, reserva e liberação por `pedido_criado` e `pedido_atualizado` e eventos lidos no Redpanda |
+| Queda do Redpanda | Manual, passo 7 do README de `integracao-kit` | Cadastro 201 e prontidão 503 com o Redpanda fora; evento pendente no outbox, publicado de 6 a 25 segundos depois da volta; consumidor reconectado sozinho |
 
 A verificação automática no GitHub (`.github/workflows/testes.yml`) roda as duas suítes, com PostgreSQL 16 de serviço, a cada mudança em `servicos/` ou `docs/banco/`. Para rodar localmente: `pip install -r requirements-dev.txt` e `python -m pytest` na pasta do serviço; os testes de integração exigem `PG_ADMIN_DSN` e `KIT_INIT_SQL`.
 
 | Critério | Teste que o cobre | Resultado |
 |---|---|---|
-| ESP-PRD-001, CA-01 a CA-27 | `servicos/produtos-service/tests/test_conformidade.py::test_CA01` a `test_CA27` | Aprovados |
+| ESP-PRD-001, CA-01 a CA-28 | `servicos/produtos-service/tests/test_conformidade.py::test_CA01` a `test_CA28` | Aprovados |
 | ESP-FRN-001, CA-01 a CA-47 | `servicos/fornecimentos-service/tests/test_conformidade.py::test_CA01` a `test_CA47` | Aprovados |
 
 ---
@@ -615,8 +616,9 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | Item | Motivo | Impacto |
 |---|---|---|
 | Limpeza da tabela `outbox` | Não implementada: os eventos publicados ficam na tabela | A tabela cresce com o uso. Uma limpeza periódica dos eventos publicados há mais de 7 dias (retenção dos tópicos no kit) fica para depois |
-| Adaptador Kafka sem teste automatizado | O ambiente de desenvolvimento não tinha broker nem Docker | `adaptadores/kafka.py` foi verificado só por leitura e importação. Precisa ser testado no ambiente do kit |
-| Dockerfiles não construídos | O ambiente de desenvolvimento não tinha Docker | Precisam ser construídos no ambiente do kit |
+| Teste no kit fora do CI | Exige Docker com o kit completo; o CI do GitHub roda só os testes com PostgreSQL | O teste de fumaça e o de queda do Redpanda precisam ser repetidos à mão (`servicos/integracao-kit/`) a cada mudança relevante |
+| Kit ainda com defeitos (K12 a K14) | Correções dependem da Infraestrutura | Sem o contorno de teste local, o banco do kit não sobe |
+| Log de acesso do uvicorn em texto | Formato padrão do uvicorn | As linhas de acesso HTTP não saem em JSON; os registros do serviço e dos adaptadores saem |
 | Alteração e exclusão de produto | Aguardam P-07, P-09 e P-26 | Fora da versão 1.1 das ESPs |
 | Consumo de `empresa_cadastrada` | Não é necessário enquanto o escopo vem no token | Nenhum na versão 1.1 |
 
@@ -665,7 +667,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
 | 0.5 | 10/11/2026 | Implementação dos dois serviços: evidências dos ADRs, seções 2.2, 3.2, 5, 6, 7, 8, 10, 11, 13 e 14 preenchidas. ADR-016 aceita; ADR-021 substituída |
 | 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados. Moeda do preço (BRL) registrada na seção 5 |
-| 0.7 | 11/11/2026 | Outbox implementado no adaptador: ADR-010 aceito com ressalva, seções 9, 13 e 14 atualizadas |
+| 0.7 | 11/11/2026 | Outbox implementado no adaptador: ADR-010 aceito com ressalva. Serviços executados no kit com Docker (seções 10 e 11), novos pontos K12 a K14 na seção 3.4. Seções 9, 13 e 14 atualizadas |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

@@ -59,6 +59,6 @@ Os testes criam um banco temporário, aplicam o script do kit e a [proposta de D
 ## Situação
 
 - Testes de conformidade e de integração com PostgreSQL aprovados.
-- O adaptador Kafka e os Dockerfiles ainda não foram executados num ambiente com Redpanda e Docker.
+- Os serviços rodam dentro do kit de infraestrutura, com duas instâncias de cada um: passo a passo, teste de fumaça e problemas encontrados no kit em [`integracao-kit/`](integracao-kit/README.md).
 - Os eventos passam pela tabela `outbox` do schema antes do Kafka (`adaptadores/outbox.py`, ADR-010): com o Redpanda fora, eles esperam na tabela e saem quando ele voltar.
 - Novas tentativas antes da DLT não foram implementadas. Detalhes nas seções 13 e 14 do [Relatório Técnico](../docs/relatorio-tecnico.md).

@@ -1,5 +1,6 @@
 """Ponto de entrada de produção do produtos-service: monta os adaptadores e sobe o uvicorn."""
 
+import logging
 import os
 
 import uvicorn
@@ -29,6 +30,11 @@ def main() -> None:
         repositorio,
         ChavesJwks(os.environ.get("AUTH_JWKS_URL", "http://gateway:8080/.well-known/jwks.json")),
     )
+    # Os adaptadores (Kafka, outbox) usam o mesmo formato JSON de log do serviço
+    logs_adaptadores = logging.getLogger("adaptadores")
+    logs_adaptadores.handlers = list(logging.getLogger(NOME_SERVICO).handlers)
+    logs_adaptadores.setLevel(logging.INFO)
+    logs_adaptadores.propagate = False
     kafka.iniciar()
     barramento.iniciar()
     try:
