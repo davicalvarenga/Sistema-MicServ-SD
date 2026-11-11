@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 1.2 |
+| Versão | 1.3 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -137,7 +137,7 @@ Comportamento das portas:
 - `salvar_produto_referencia` e `salvar_reserva` inserem ou substituem pelo identificador (`produto_id`; par `pedido_id` + `fornecimento_id`).
 - `listar_fornecimentos` devolve `(itens, total)`: no máximo `limite` itens a partir de `offset`, na ordem de `criado_em` crescente e, em empate, `fornecimento_id` crescente; `total` é o número de fornecimentos que atendem ao filtro. `produto_id=None` significa sem filtro.
 - Valores de preço e quantidade circulam entre o serviço e o repositório como `Decimal`.
-- `publish` é síncrono e pode, no mesmo fluxo, chamar handlers inscritos; o serviço não pode entrar em deadlock nesse caso. Ordem dentro de uma escrita: validar → gravar (dentro da transação) → publicar **depois** que a transação terminar. Falhas lançadas por `publish` estão fora do escopo (o adaptador real usa *transactional outbox*, ADR-010).
+- `publish` é síncrono e pode, no mesmo fluxo, chamar handlers inscritos; o serviço não pode entrar em deadlock nesse caso. Ordem dentro de uma escrita: validar → gravar (dentro da transação) → publicar **depois** que a transação terminar. Falhas lançadas por `publish` estão fora do escopo (o adaptador real grava o evento numa tabela de outbox e o publica depois, ADR-010).
 - `clock.now()` sempre retorna `datetime` com fuso; se vier sem fuso, tratar como UTC.
 - `chaves_publicas.obter(kid)` devolve a chave pública RSA (objeto aceito por `jwt.decode`) do `kid` informado no cabeçalho do token, ou `None` se o `kid` for desconhecido. Em produção, o adaptador usa `jwt.PyJWKClient` com o endpoint `/.well-known/jwks.json` do serviço de Autenticação e cache de 1 hora; nos testes, uma chave gerada pelo próprio teste. O serviço nunca faz requisição HTTP para obter chaves.
 
@@ -935,7 +935,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-10 | Decisão | Quem consulta ofertas (P-07). | `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` não. Só `SUPPLIER` cadastra (o Grupo de Teste testa comprador criando fornecimento → 403, kit seção 10.2). |
 | Q-11 | Decisão | Valores monetários em JSON: string (exemplo do Grupo de Teste) ou número (kit e Contrato de Eventos). | Número JSON, convertido para `Decimal` com `Decimal(str(valor))`. Mantém o padrão do kit usado pelos outros grupos e evita erro de arredondamento nas contas (CA-41). |
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
-| Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real usa *transactional outbox* (ADR-010). |
+| Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (ADR-010). |
 | Q-14 | Premissa | Momento em que o pedido é criado: o professor fala na entrada do leilão; o kit, depois de `negociacao_fechada` (P-29). | O serviço reserva quando receber `pedido_criado`, seja qual for o momento escolhido pelos grupos. A decisão não muda esta ESP. |
 | Q-16 | Decisão | Formato da origem (P-05). O kit guardava texto livre; a Logística pediu cidade e UF para usar como ponto de coleta (2026-11-10). | Objeto com `cidade` e `uf` (glossário), no mesmo formato do campo `origem` que a Logística propôs para o `pedido_criado`. UF validada contra a lista do IBGE. |
 
@@ -974,3 +974,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4, do Contrato de Eventos v1.0, da proposta de DDL e do kit de infraestrutura. |
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
 | 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | `origem` passa de texto livre a objeto com `cidade` e `uf` (glossário, §6.1, RN-02, CA-01, CA-03, CA-05, CA-10, CA-12, Q-16). Mudança incompatível com a versão 1.1 no corpo da API-04, nas respostas e no `fornecimento_criado`. Motivo: pedido do grupo de Logística/Transporte (P-05). Moeda do preço registrada como real (BRL), sem mudança de comportamento (P-15). |
+| 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |

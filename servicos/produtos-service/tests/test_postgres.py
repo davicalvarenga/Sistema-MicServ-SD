@@ -50,3 +50,43 @@ def test_fluxo_completo_com_o_servico(dsn_servico):
                          headers=auth()).json()
     assert caixa["peso_unitario_kg"] == 999999999.999
     assert cliente.get(f"/api/v1/produtos/{caixa['produto_id']}", headers=auth("BUYER")).json() == caixa
+
+
+def test_outbox_publica_produto_cadastrado(dsn_servico):
+    """Com o BarramentoOutbox, o evento fica na tabela produtos.outbox até o publicador enviá-lo ao Kafka."""
+    from adaptadores.outbox import BarramentoOutbox
+    from adaptadores.postgres import RepositorioProdutosPostgres
+    from app.main import create_app
+    from tests.conftest import PRODUTO_VALIDO, FakeChaves, FakeClock, auth
+
+    class KafkaFalso:
+        def __init__(self):
+            self.publicadas, self.fora = [], False
+
+        def publish(self, topic, key, message):
+            if self.fora:
+                raise RuntimeError("broker fora")
+            self.publicadas.append((topic, key, message))
+
+        def subscribe(self, topic, handler):
+            raise AssertionError("o produtos-service não consome tópicos")
+
+        def disponivel(self):
+            return not self.fora
+
+    repo = RepositorioProdutosPostgres(dsn_servico)
+    kafka = KafkaFalso()
+    kafka.fora = True
+    bus = BarramentoOutbox(repo.pool, "produtos", kafka)
+    cliente = TestClient(create_app(bus, FakeClock(), repo, FakeChaves()))
+    criado = cliente.post("/api/v1/produtos", json={**PRODUTO_VALIDO, "unidade": "CX", "peso_unitario_kg": 1.5},
+                          headers={**auth(), "X-Correlation-Id": "corr-outbox"})
+    assert criado.status_code == 201  # o Kafka fora não impede o cadastro
+    assert bus.publicar_pendentes() == 0 and kafka.publicadas == []
+    kafka.fora = False
+    assert bus.publicar_pendentes() == 1
+    topico, chave, mensagem = kafka.publicadas[0]
+    pid = criado.json()["produto_id"]
+    assert (topico, chave, mensagem["aggregateId"], mensagem["correlationId"]) == ("produto_cadastrado", pid, pid, "corr-outbox")
+    assert mensagem["payload"]["pesoUnitarioKg"] == 1.5 and mensagem["payload"]["nome"] == "Leite integral"
+    assert bus.publicar_pendentes() == 0

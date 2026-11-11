@@ -6,6 +6,8 @@
 -- Versão: 1.1 (10/11/2026): colunas exigidas pelas ESPs e reserva sem chave estrangeira
 -- Versão: 1.2 (10/11/2026): UF da origem do fornecimento e peso unitário do produto,
 --         pedidos pelo grupo de Logística/Transporte (ESP-FRN-001 v1.2, ESP-PRD-001 v1.2)
+-- Versão: 1.3 (11/11/2026): coluna chave do outbox passa a TEXT. Na DLT, a chave é o
+--         aggregateId recebido de outro serviço, sem limite de tamanho garantido
 --
 -- Executar depois do 01-init.sql do kit, com um usuário que possa assumir a role
 -- portal_ddl (dona das tabelas). O script pode ser executado mais de uma vez.
@@ -113,6 +115,7 @@ CREATE TABLE IF NOT EXISTS fornecimentos.outbox (
 );
 CREATE INDEX IF NOT EXISTS ix_fornecimentos_outbox_pendente
   ON fornecimentos.outbox (criado_em) WHERE publicado_em IS NULL;
+ALTER TABLE fornecimentos.outbox ALTER COLUMN chave TYPE TEXT;
 
 -- ------------------------------------------------------------------------------
 -- 2. Schema produtos
@@ -151,6 +154,7 @@ CREATE TABLE IF NOT EXISTS produtos.outbox (
 );
 CREATE INDEX IF NOT EXISTS ix_produtos_outbox_pendente
   ON produtos.outbox (criado_em) WHERE publicado_em IS NULL;
+ALTER TABLE produtos.outbox ALTER COLUMN chave TYPE TEXT;
 
 RESET ROLE;
 

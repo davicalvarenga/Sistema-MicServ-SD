@@ -6,6 +6,7 @@ import uvicorn
 
 from adaptadores.chaves_jwks import ChavesJwks
 from adaptadores.kafka import BarramentoKafka
+from adaptadores.outbox import BarramentoOutbox
 from adaptadores.postgres import RepositorioFornecimentosPostgres
 from adaptadores.relogio import RelogioSistema
 from app.main import NOME_SERVICO, create_app
@@ -18,18 +19,23 @@ def dsn() -> str:
 
 
 def main() -> None:
-    barramento = BarramentoKafka(os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "rp-0:9092"), NOME_SERVICO)
+    kafka = BarramentoKafka(os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "rp-0:9092"), NOME_SERVICO)
+    repositorio = RepositorioFornecimentosPostgres(dsn(), int(os.environ.get("DB_POOL_MAX", "5")))
+    # Os eventos passam pela tabela fornecimentos.outbox antes do Kafka (ADR-010)
+    barramento = BarramentoOutbox(repositorio.pool, "fornecimentos", kafka)
     app = create_app(
         barramento,
         RelogioSistema(),
-        RepositorioFornecimentosPostgres(dsn(), int(os.environ.get("DB_POOL_MAX", "5"))),
+        repositorio,
         ChavesJwks(os.environ.get("AUTH_JWKS_URL", "http://gateway:8080/.well-known/jwks.json")),
     )
+    kafka.iniciar()
     barramento.iniciar()
     try:
         uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8103")), log_level="info")
     finally:
         barramento.parar()
+        kafka.parar()
 
 
 if __name__ == "__main__":

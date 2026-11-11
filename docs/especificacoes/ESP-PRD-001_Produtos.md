@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 1.2 |
+| Versão | 1.3 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -118,7 +118,7 @@ class ProdutoRepositorio(Protocol):
 - `disponivel()` informa se a dependência responde. É usado apenas pelo `/health/ready`.
 - O serviço não chama `subscribe` (não consome tópicos).
 - As implementações concretas das portas são fornecidas por quem chama `create_app`; o serviço não as implementa.
-- `publish` é síncrono. Ordem dentro de uma escrita: validar → `repositorio.inserir` → `event_bus.publish`. Se `inserir` lançar exceção, nada é publicado e a resposta é `500 ERRO_INTERNO`. Falhas lançadas por `publish` estão fora do escopo (o adaptador real usa *transactional outbox*, ADR-010 do Relatório Técnico).
+- `publish` é síncrono. Ordem dentro de uma escrita: validar → `repositorio.inserir` → `event_bus.publish`. Se `inserir` lançar exceção, nada é publicado e a resposta é `500 ERRO_INTERNO`. Falhas lançadas por `publish` estão fora do escopo (o adaptador real grava o evento numa tabela de outbox e o publica depois, ADR-010 do Relatório Técnico).
 - `clock.now()` sempre retorna `datetime` com fuso; se vier sem fuso, tratar como UTC.
 - `chaves_publicas.obter(kid)` devolve a chave pública RSA (objeto aceito por `jwt.decode`) do `kid` informado no cabeçalho do token, ou `None` se o `kid` for desconhecido. Em produção, o adaptador usa `jwt.PyJWKClient` com o endpoint `/.well-known/jwks.json` do serviço de Autenticação e cache de 1 hora; nos testes, uma chave gerada pelo próprio teste. O serviço nunca faz requisição HTTP para obter chaves.
 
@@ -657,7 +657,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-06 | Decisão | Alteração e exclusão de produto (P-07, P-09, P-26). | Fora do escopo da versão 1.0 (§3.2). |
 | Q-07 | Decisão | Formato de erro: o exemplo do Grupo de Teste usa `{"erro": {...}}`, e o kit exige RFC 7807. | RFC 7807 com o membro de extensão `codigo` (§10), que permite comparação literal nos testes. |
 | Q-08 | Decisão | Persistência em memória (como no exemplo ESP-NEG-001) ou banco. | Porta `ProdutoRepositorio` (§5.1). O Grupo de Teste injeta uma implementação em memória; em produção, o adaptador usa o schema `produtos` do PostgreSQL. Atende ao requisito de serviços sem estado em memória do kit. |
-| Q-09 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real usa *transactional outbox* (Relatório Técnico, ADR-010). |
+| Q-09 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (Relatório Técnico, ADR-010). |
 | Q-10 | Premissa | O gateway encaminha as requisições `/api/v1/produtos` ao serviço sem alterar o cabeçalho `Authorization`. | Confirmado pela configuração do gateway do kit. |
 | Q-11 | Decisão | Peso da carga quando a unidade não é de massa. A Logística pediu um campo opcional de peso unitário (2026-11-10). | Campo opcional `peso_unitario_kg` (RN-08), com até 3 casas decimais (precisão de 1 grama). O cálculo do peso da carga (`pesoKg` do `pedido_criado`) é do grupo de Pedidos. |
 
@@ -696,3 +696,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.0 | 2026-10-26 | Grupo de Fornecimento e Produtos | Criação a partir do modelo ERS-LLM v1.2 do Grupo de Teste, do Documento de Requisitos v0.4 e do kit de infraestrutura. |
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
 | 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | Campo opcional `peso_unitario_kg` no produto e `pesoUnitarioKg` no evento (RN-08, CA-04, CA-28, Q-11). Listas de unidade e de tipo de transporte confirmadas (Q-05). Motivo: resposta do grupo de Logística/Transporte sobre P-06 e P-27. |
+| 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |

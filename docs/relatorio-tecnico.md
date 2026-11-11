@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.6 (esboço)
+**Versão:** 0.7 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -315,7 +315,7 @@ Até a aprovação do grupo de Banco de Dados, os serviços usam a proposta de D
 | Evento com formato inválido ou erro persistente | Enviado ao tópico de falha após 3 tentativas | ADR-019, RNF-10 |
 | Pedidos simultâneos para o mesmo fornecimento | Reserva atômica, sem ultrapassar a quantidade disponível | ADR-006, RNF-14 |
 | Pedido maior que o disponível | Reserva recusada. A forma de avisar Pedidos está em aberto | RN-11, P-16 |
-| Redpanda indisponível no momento da publicação | Depende do ADR-010. A biblioteca comum do kit perde o evento em silêncio (seção 3.4, K6) | ADR-010 |
+| Redpanda indisponível no momento da publicação | O evento fica na tabela `outbox` e é publicado quando o Redpanda voltar. O cliente da API não recebe erro por isso | ADR-010 |
 | Banco ou Redpanda fora do ar | `/health/ready` responde 503 | RNF-22 |
 
 ---
@@ -388,7 +388,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 007 | Idempotência por registro de eventos processados no banco | Aceita |
 | 008 | `aggregateId` como chave das mensagens | Aceita |
 | 009 | Produtor com `acks=all` e idempotência habilitada | Aceita |
-| 010 | Consistência entre banco e Kafka | Pendente |
+| 010 | Consistência entre banco e Kafka | Aceita, com ressalva (seção 14) |
 | 011 | Fornecimentos mantém cópia local dos produtos a partir dos eventos | Aceita |
 | 012 | Validação local do JWT RS256 com chaves públicas (JWKS) | Aceita |
 | 013 | Eventos de alteração e exclusão de produto | Pendente |
@@ -492,9 +492,11 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Alternativas:**
   - Padrão *Transactional Outbox* (microservices.io): o evento é gravado numa tabela do próprio schema, na mesma transação, e um processo separado o publica no Kafka. Resolve o problema, mas exige uma tabela a mais, que depende do grupo de Banco de Dados, e um publicador.
   - Publicação logo após a gravação, devolvendo erro ao cliente se a publicação falhar: mais simples, mas ainda há uma janela em que o dado foi gravado e o evento não saiu.
-- **Recomendação do grupo:** pedir a tabela de outbox ao grupo de Banco de Dados junto com o ajuste da P-28, já que o PostgreSQL está confirmado.
-- **Evidência na implementação:** Não implementado na versão atual. Os serviços publicam logo após o commit da transação (ver seção 13).
-- **Status:** Pendente ([issue #10](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/10))
+- **Decisão:** outbox no adaptador. A porta `EventBus` de produção (`BarramentoOutbox`) grava o envelope na tabela `outbox` do schema e retorna. Uma thread lê os pendentes na ordem de gravação, publica no Kafka e marca `publicado_em`. Só uma instância publica de cada vez (advisory lock do PostgreSQL), o que mantém a ordem por `aggregateId` mesmo com duas instâncias do serviço. Se um tópico recusar um evento, os eventos seguintes da mesma chave esperam, e os das outras chaves seguem.
+- **Ressalva:** o envelope é gravado logo depois do commit da alteração, e não na mesma transação, porque as ESPs mandam publicar depois da transação (ESP-FRN-001, §5.1). A regra existe porque o barramento em memória usado nos testes pode chamar os handlers no mesmo fluxo da publicação (mesmo parágrafo da ESP). Fica uma janela pequena: se o processo cair entre o commit e a gravação no outbox, o evento se perde (seção 14).
+- **Consequências:** o Redpanda fora do ar não perde eventos nem gera erro para o cliente da API. A entrega passa a ser "pelo menos uma vez": se o processo cair depois de publicar e antes de marcar, o evento sai de novo, e os consumidores o descartam pelo `eventId` (ADR-007).
+- **Evidência na implementação:** `servicos/*/adaptadores/outbox.py` (idêntico nos dois serviços), ligado em `servidor.py`. Testes de integração com PostgreSQL 16 em `servicos/*/tests/test_postgres.py`: ordem, Kafka fora, tópico recusado, evento repetido, duas instâncias ao mesmo tempo, publicação pela thread e fluxo completo com o serviço. Quatro defeitos introduzidos de propósito no adaptador foram detectados pelos testes.
+- **Status:** Aceita, com a ressalva acima
 
 ### ADR-011: Fornecimentos mantém cópia local dos produtos
 
@@ -608,11 +610,11 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 
 ## 13. Limitações conhecidas e itens não implementados
 
-> Atualizado em 10/11/2026.
+> Atualizado em 11/11/2026.
 
 | Item | Motivo | Impacto |
 |---|---|---|
-| Outbox (ADR-010) | Depende da aprovação do DDL pelo grupo de Banco de Dados e de um publicador separado | Se o Redpanda cair entre o commit e a publicação, o evento se perde. O banco fica correto, mas Mercado pode ver saldo antigo |
+| Limpeza da tabela `outbox` | Não implementada: os eventos publicados ficam na tabela | A tabela cresce com o uso. Uma limpeza periódica dos eventos publicados há mais de 7 dias (retenção dos tópicos no kit) fica para depois |
 | Adaptador Kafka sem teste automatizado | O ambiente de desenvolvimento não tinha broker nem Docker | `adaptadores/kafka.py` foi verificado só por leitura e importação. Precisa ser testado no ambiente do kit |
 | Dockerfiles não construídos | O ambiente de desenvolvimento não tinha Docker | Precisam ser construídos no ambiente do kit |
 | Alteração e exclusão de produto | Aguardam P-07, P-09 e P-26 | Fora da versão 1.1 das ESPs |
@@ -622,13 +624,14 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 
 ## 14. Divergências entre o planejado e o implementado
 
-> Atualizado em 10/11/2026.
+> Atualizado em 11/11/2026.
 
 | Requisito ou ADR | Planejado | Implementado | Justificativa |
 |---|---|---|---|
 | ADR-021 | Partir do boilerplate e da biblioteca comum do kit, com correções | Código escrito pelo grupo, seguindo as convenções do kit (envelope, RFC 7807, endpoints técnicos, prefixo `/api/v1`) sem reaproveitar o código dele | Os pontos K3 a K10 da seção 3.4 afetavam quase todos os módulos comuns (publicação, consumo, idempotência, autenticação, erros). Corrigir cada um custaria mais que escrever com testes desde o início |
 | RNF-10, ADR-019 | Três novas tentativas com espera de 1, 2 e 4 segundos antes da DLT | O handler envia à DLT na primeira falha (`failedAtAttempt` 1) | Decisão Q-12 da ESP-FRN-001: as novas tentativas ficam com o adaptador de consumo, ainda não implementadas |
 | RD-02 | Campo de descrição do produto | Não implementado | Proposta do grupo não confirmada; fora da ESP-PRD-001 |
+| ADR-010 | Evento gravado no outbox na mesma transação da alteração | Evento gravado no outbox logo depois do commit, pelo adaptador | As ESPs mandam publicar depois da transação (ESP-FRN-001, §5.1). Mudar isso exigiria nova versão das ESPs, combinada com o Grupo de Teste. Risco que sobra: o evento se perde se o processo cair entre o commit e a gravação no outbox |
 
 ---
 
@@ -662,6 +665,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.1 | 09/10/2026 | Esboço inicial com estrutura, diagramas e registro de 19 decisões (aceitas, propostas e pendentes) |
 | 0.5 | 10/11/2026 | Implementação dos dois serviços: evidências dos ADRs, seções 2.2, 3.2, 5, 6, 7, 8, 10, 11, 13 e 14 preenchidas. ADR-016 aceita; ADR-021 substituída |
 | 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados. Moeda do preço (BRL) registrada na seção 5 |
+| 0.7 | 11/11/2026 | Outbox implementado no adaptador: ADR-010 aceito com ressalva, seções 9, 13 e 14 atualizadas |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |
