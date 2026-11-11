@@ -1,0 +1,74 @@
+# ==============================================================================
+# Encaixe dos serviços do grupo de Fornecimento e Produtos no kit de infraestrutura
+# (Printf-PedroCardoso/portal-b2b-kit-infra, commit 630515c)
+#
+# Uso, a partir da pasta do kit (instruções completas em README.md, nesta pasta):
+#   docker compose -f docker-compose.yml \
+#     -f ../Sistema-MicServ-SD/servicos/integracao-kit/docker-compose.override.yml up -d
+#
+# Os caminhos relativos são resolvidos a partir da pasta do kit. Se o nosso
+# repositório não estiver ao lado dele, defina REPO_FORNECIMENTO_PRODUTOS no .env.
+# ==============================================================================
+
+x-produtos: &produtos
+  build:
+    context: ${REPO_FORNECIMENTO_PRODUTOS:-../Sistema-MicServ-SD}/servicos/produtos-service
+  environment: &ambiente-produtos
+    SERVICE_NAME: produtos-service
+    PORT: "8102"
+    DB_HOST: pg-primary
+    DB_PORT: "5432"
+    DB_NAME: portal_b2b
+    DB_USER: svc_produtos
+    DB_PASSWORD: ${SVC_PRODUTOS_DB_PASSWORD:?defina SVC_PRODUTOS_DB_PASSWORD no .env do kit}
+    DB_POOL_MAX: "5"
+    AUTH_JWKS_URL: ${AUTH_JWKS_URL:-http://gateway:8080/.well-known/jwks.json}
+  depends_on: [pg-primary, rp-0]
+
+x-fornecimentos: &fornecimentos
+  build:
+    context: ${REPO_FORNECIMENTO_PRODUTOS:-../Sistema-MicServ-SD}/servicos/fornecimentos-service
+  environment: &ambiente-fornecimentos
+    SERVICE_NAME: fornecimentos-service
+    PORT: "8103"
+    DB_HOST: pg-primary
+    DB_PORT: "5432"
+    DB_NAME: portal_b2b
+    DB_USER: svc_fornecimentos
+    DB_PASSWORD: ${SVC_FORNECIMENTOS_DB_PASSWORD:?defina SVC_FORNECIMENTOS_DB_PASSWORD no .env do kit}
+    DB_POOL_MAX: "5"
+    AUTH_JWKS_URL: ${AUTH_JWKS_URL:-http://gateway:8080/.well-known/jwks.json}
+  depends_on: [pg-primary, rp-0]
+
+services:
+  # Cada instância usa um broker diferente como ponto de entrada, como no kit
+  app1-produtos:
+    <<: *produtos
+    environment:
+      <<: *ambiente-produtos
+      INSTANCE: app1
+      KAFKA_BOOTSTRAP_SERVERS: rp-0:9092
+  app2-produtos:
+    <<: *produtos
+    environment:
+      <<: *ambiente-produtos
+      INSTANCE: app2
+      KAFKA_BOOTSTRAP_SERVERS: rp-1:9092
+  app1-fornecimentos:
+    <<: *fornecimentos
+    environment:
+      <<: *ambiente-fornecimentos
+      INSTANCE: app1
+      KAFKA_BOOTSTRAP_SERVERS: rp-0:9092
+  app2-fornecimentos:
+    <<: *fornecimentos
+    environment:
+      <<: *ambiente-fornecimentos
+      INSTANCE: app2
+      KAFKA_BOOTSTRAP_SERVERS: rp-1:9092
+
+  # Proposta de DDL do grupo (docs/banco/), aplicada na primeira inicialização do
+  # banco, depois do 01-init.sql do kit. Só roda com o volume do banco vazio.
+  pg-primary:
+    volumes:
+      - ${REPO_FORNECIMENTO_PRODUTOS:-../Sistema-MicServ-SD}/docs/banco/01-proposta-ddl-produtos-fornecimentos.sql:/docker-entrypoint-initdb.d/02-fornecimento-produtos.sql:ro
