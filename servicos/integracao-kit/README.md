@@ -77,14 +77,22 @@ Resultado esperado: os quatro contêineres `Up` e `(healthy)`. Se algum ficar `u
 docker compose $F run --rm --no-deps -v "$PWD/teste-chaves:/t:ro" -v "$PWD/../Sistema-MicServ-SD/servicos/integracao-kit:/script:ro" app1-produtos python /script/teste_fumaca.py executar
 ```
 
-Resultado esperado: 13 linhas `OK` e `RESULTADO: TUDO OK`. O teste:
+Resultado esperado: 14 linhas `OK` e `RESULTADO: TUDO OK`. O teste:
 
 - confere a prontidão das quatro instâncias;
-- recusa um token HS256;
+- recusa um token HS256 e um token do login ainda sem empresa (403);
 - cadastra um produto numa instância e o consulta na outra;
 - espera o `produto_cadastrado` chegar ao Fornecimentos pelo Redpanda e cadastra um fornecimento;
 - publica `pedido_criado` e `pedido_atualizado` (cancelamento) e confere a reserva e a liberação do estoque;
 - lê no Redpanda os eventos publicados.
+
+Se a verificação "produto chegou ao fornecimentos" falhar logo depois do passo 5, confira se o grupo consumidor já está estável e rode o teste de novo:
+
+```bash
+docker exec portal-b2b-rp-0 rpk group describe fornecimentos-service --brokers rp-0:9092
+```
+
+O esperado é `STATE Stable` e `MEMBERS 2`. Em 12/11/2026, essa verificação falhou uma vez, logo depois de subir as instâncias, e não se repetiu em outras três rodadas completas. A causa não foi confirmada; a suspeita é o tempo de entrada das instâncias no grupo consumidor.
 
 **7. Outbox com o Redpanda fora (opcional).** Com o Redpanda parado, o cadastro continua respondendo 201 e o evento espera na tabela `produtos.outbox`. Quando o Redpanda volta, o evento é publicado sozinho.
 
@@ -120,6 +128,7 @@ Em 11/11/2026, com Docker 29 e as imagens do kit (`postgres:16.3-alpine` e `redp
 
 - As imagens dos dois serviços foram construídas com os nossos Dockerfiles, sem alteração.
 - O banco foi criado com o script do kit e a nossa DDL. Os quatro contêineres ficaram saudáveis.
-- O teste de fumaça passou nas 13 verificações.
+- O teste de fumaça passou nas 13 verificações da época. Em 12/11/2026, com a validação de token da versão 1.4 das ESPs, passou nas 14 verificações atuais em três de quatro rodadas (veja o passo 6).
+- Com o servidor de chaves parado, uma instância sem a chave em cache respondeu 503 `DEPENDENCIA_INDISPONIVEL`, e uma instância com a chave em cache continuou respondendo 200. Quando o servidor de chaves voltou, a primeira instância voltou a responder 200 sem reiniciar.
 - No teste de queda do Redpanda, o cadastro respondeu 201 e a prontidão respondeu 503. O evento ficou no outbox e foi publicado de 6 a 25 segundos depois que o Redpanda voltou. O consumidor do Fornecimentos se reconectou sozinho e processou o evento.
 - Os logs dos dois serviços saem em JSON, inclusive os da biblioteca do Kafka. A exceção é o log de acesso do uvicorn.

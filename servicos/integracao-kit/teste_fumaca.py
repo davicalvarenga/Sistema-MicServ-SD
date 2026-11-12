@@ -40,8 +40,13 @@ def gerar_chaves(pasta: str) -> None:
     print(f"chaves de teste criadas em {destino}")
 
 
-def token(escopo: str = "SUPPLIER", tenant: str = "EMP-1") -> str:
-    claims = {"sub": "USR-1", "tenant_id": tenant, "active_scope": escopo, "exp": int(time.time()) + 600}
+def token(escopo: str | None = "SUPPLIER", tenant: str | None = "EMP-1") -> str:
+    """Token no formato do Identity-Service: iss, aud e, depois do switch-context, empresa e escopo."""
+    claims = {"sub": "USR-1", "iss": "identity-service", "aud": "b2b-platform", "exp": int(time.time()) + 600}
+    if tenant is not None:
+        claims["tenant_id"] = tenant
+    if escopo is not None:
+        claims["active_scope"] = escopo
     return jwt.encode(claims, pathlib.Path("/t/privada.pem").read_text(), algorithm="RS256", headers={"kid": KID})
 
 
@@ -85,6 +90,8 @@ def executar() -> int:
     falso = jwt.encode({"sub": "x"}, "segredo-compartilhado", algorithm="HS256")
     s, c, _ = http("GET", P1 + "/api/v1/produtos", tok=falso)
     verificar("token HS256 recusado (401 TOKEN_INVALIDO)", s == 401 and c["codigo"] == "TOKEN_INVALIDO")
+    s, c, _ = http("GET", P1 + "/api/v1/produtos", tok=token(None, None))
+    verificar("token do login, sem empresa, recusado (403 CONTEXTO_NAO_SELECIONADO)", s == 403 and c["codigo"] == "CONTEXTO_NAO_SELECIONADO")
 
     corr = "fumaca-" + uuid.uuid4().hex[:8]
     s, produto, h = http("POST", P1 + "/api/v1/produtos", {

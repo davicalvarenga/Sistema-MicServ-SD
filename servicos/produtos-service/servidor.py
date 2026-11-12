@@ -10,6 +10,7 @@ from adaptadores.kafka import BarramentoKafka
 from adaptadores.outbox import BarramentoOutbox
 from adaptadores.postgres import RepositorioProdutosPostgres
 from adaptadores.relogio import RelogioSistema
+from app.http_comum import AUDIENCIA_PADRAO, EMISSOR_PADRAO
 from app.main import NOME_SERVICO, create_app
 
 
@@ -29,6 +30,8 @@ def main() -> None:
         RelogioSistema(),
         repositorio,
         ChavesJwks(os.environ.get("AUTH_JWKS_URL", "http://gateway:8080/.well-known/jwks.json")),
+        emissor=os.environ.get("JWT_ISSUER", EMISSOR_PADRAO),
+        audiencia=os.environ.get("JWT_AUDIENCE", AUDIENCIA_PADRAO),
     )
     # Os adaptadores (Kafka, outbox) usam o mesmo formato JSON de log do serviço
     logs_adaptadores = logging.getLogger("adaptadores")

@@ -54,6 +54,7 @@ Os testes criam um banco temporário, aplicam o script do kit e a [proposta de D
 | `DB_POOL_MAX` | `5` | Conexões por instância |
 | `KAFKA_BOOTSTRAP_SERVERS` | `rp-0:9092` | Redpanda |
 | `AUTH_JWKS_URL` | `http://gateway:8080/.well-known/jwks.json` | Chaves públicas do serviço de Autenticação |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | `identity-service`, `b2b-platform` | Emissor (`iss`) e audiência (`aud`) esperados no token |
 | `PORT` | `8102` / `8103` | Porta HTTP |
 
 ## Situação

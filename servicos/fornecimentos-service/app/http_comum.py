@@ -27,12 +27,16 @@ class ChavesPublicas(Protocol):
 
 
 ESCOPOS = ("SUPPLIER", "BUYER", "CARRIER", "TENANT_ADMIN")
+# Emissor e audiência dos tokens do Identity-Service (§7.1). Podem ser trocados em create_app.
+EMISSOR_PADRAO = "identity-service"
+AUDIENCIA_PADRAO = "b2b-platform"
 
 TITULOS = {
     "TOKEN_AUSENTE": "Não Autenticado",
     "TOKEN_INVALIDO": "Token Inválido",
     "TOKEN_EXPIRADO": "Token Expirado",
     "PERFIL_NAO_PERMITIDO": "Acesso Negado",
+    "CONTEXTO_NAO_SELECIONADO": "Contexto Não Selecionado",
     "PRODUTO_NAO_ENCONTRADO": "Produto Não Encontrado",
     "FORNECIMENTO_NAO_ENCONTRADO": "Fornecimento Não Encontrado",
     "ROTA_NAO_ENCONTRADA": "Rota Não Encontrada",
@@ -96,7 +100,8 @@ def resposta_erro(request: Request, clock: Clock, status: int, codigo: str, deta
     return JSONResponse(corpo, status_code=status, media_type="application/problem+json")
 
 
-def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock) -> dict:
+def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock,
+               emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> dict:
     """Valida o token na ordem do §7.1 e devolve os claims."""
     cabecalho = request.headers.get("authorization")
     if cabecalho is None or not cabecalho.startswith("Bearer ") or not preenchido(cabecalho[7:]):
@@ -112,8 +117,8 @@ def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock) -> dict:
     try:
         chave = chaves.obter(kid)
     except Exception:
-        # DECISÃO: falha ao obter a chave é tratada como chave desconhecida (token não pode ser verificado).
-        chave = None
+        # Serviço de chaves fora do ar: 503 (tentar de novo), não 401, para a tela não deslogar o usuário
+        raise ErroApi(503, "DEPENDENCIA_INDISPONIVEL", "Não foi possível obter as chaves do serviço de Autenticação.")
     if chave is None:
         raise ErroApi(401, "TOKEN_INVALIDO", "Chave do token desconhecida.")
     try:
@@ -121,21 +126,28 @@ def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock) -> dict:
             token,
             chave,
             algorithms=["RS256"],
-            options={"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": False, "verify_iss": False},
+            issuer=emissor,
+            audience=audiencia,
+            options={"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": True, "verify_iss": True},
         )
     except jwt.InvalidTokenError:
-        raise ErroApi(401, "TOKEN_INVALIDO", "Assinatura do token inválida.")
+        raise ErroApi(401, "TOKEN_INVALIDO", "Assinatura, emissor ou audiência do token inválidos.")
     exp = claims.get("exp")
+    escopo = claims.get("active_scope")
+    empresa = claims.get("tenant_id")
     if (
         not preenchido(claims.get("sub"))
-        or not preenchido(claims.get("tenant_id"))
-        or claims.get("active_scope") not in ESCOPOS
+        or (escopo is not None and escopo not in ESCOPOS)
+        or (empresa is not None and not isinstance(empresa, str))
         or not isinstance(exp, int)
         or isinstance(exp, bool)
     ):
         raise ErroApi(401, "TOKEN_INVALIDO", "Claims do token ausentes ou inválidos.")
     if exp <= int(agora_utc(clock).timestamp()):
         raise ErroApi(401, "TOKEN_EXPIRADO", "O token está expirado.")
+    if not preenchido(empresa) or escopo is None:
+        # Token do login, antes da escolha de empresa e escopo (switch-context): válido, mas sem contexto
+        raise ErroApi(403, "CONTEXTO_NAO_SELECIONADO", "Selecione a empresa e o escopo de atuação antes de usar o serviço.")
     return claims
 
 
@@ -282,7 +294,7 @@ def criar_logger(nome: str):
 
 
 __all__ = [
-    "ChavesPublicas", "Clock", "ErroApi", "ESCOPOS", "ROTAS_PUBLICAS", "Response", "agora_utc", "autenticar",
+    "AUDIENCIA_PADRAO", "ChavesPublicas", "Clock", "EMISSOR_PADRAO", "ErroApi", "ESCOPOS", "ROTAS_PUBLICAS", "Response", "agora_utc", "autenticar",
     "configurar_http", "corpo_json", "correlation_id", "criar_logger", "envelope", "exigir_escopo",
     "filtro_texto", "instante", "paginacao", "preenchido", "resposta_erro",
 ]

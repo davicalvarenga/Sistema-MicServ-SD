@@ -134,7 +134,7 @@ class FakeRepoFornecimentos:
 
 
 def token(escopo="SUPPLIER", tenant="EMP-34", sub="USR-7", exp=None, chave=PRIVADA, kid=KID, algoritmo="RS256", **extras):
-    claims = {"sub": sub, "tenant_id": tenant, "active_scope": escopo,
+    claims = {"sub": sub, "tenant_id": tenant, "active_scope": escopo, "iss": "identity-service", "aud": "b2b-platform",
               "exp": int((exp or T0 + timedelta(hours=1)).timestamp())}
     claims.update(extras)
     for nome in [n for n, v in extras.items() if v is None]:

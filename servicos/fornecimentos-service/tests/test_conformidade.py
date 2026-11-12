@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-FRN-001 v1.2: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-FRN-001 v1.4: um teste por critério de aceitação."""
 
 import ast
 import copy
@@ -386,7 +386,6 @@ def test_CA32(amb):
 def test_CA33(amb):
     exp = int((T0 + timedelta(hours=1)).timestamp())
     tokens = [
-        jwt.encode({"sub": "USR-7", "active_scope": "BUYER", "exp": exp}, PRIVADA, algorithm="RS256", headers={"kid": KID}),
         token("GERENTE"), token("supplier"), token("BUYER", sub=""),
         jwt.encode({"sub": "USR-7", "tenant_id": "EMP-34", "active_scope": "BUYER", "exp": exp}, "segredo-compartilhado",
                    algorithm="HS256", headers={"kid": KID}),
@@ -572,3 +571,35 @@ def test_CA47(amb, caplog):
         amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers={"Authorization": "Bearer " + valor})
     assert valor not in str(amb.bus.publicadas)
     assert all(valor not in registro.getMessage() for registro in caplog.records)
+
+
+# §7.1: emissor, audiência, contexto e serviço de chaves (v1.4)
+
+def test_CA48(amb):
+    for t in (token("BUYER", iss="falsificador"), token("BUYER", aud="outro-sistema"), token("BUYER", iss=None), token("BUYER", aud=None)):
+        r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + t})
+        assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_INVALIDO"
+    r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + token("BUYER", aud=["b2b-platform", "outro-sistema"])})
+    assert r.status_code == 200
+
+
+def test_CA49(amb):
+    sem_contexto = (token(None, tenant=None), token("BUYER", tenant=""), token(None))
+    for t in sem_contexto:
+        r = amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers={"Authorization": "Bearer " + t})
+        assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
+        assert r.headers["content-type"].startswith("application/problem+json")
+    r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + token(None, tenant=None, exp=T0)})
+    assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_EXPIRADO"
+    assert amb.repo.estado["fornecimentos"] == {} and amb.bus.publicadas == []
+
+
+def test_CA50(amb):
+    class ChavesForaDoAr:
+        def obter(self, kid):
+            raise ConnectionError("JWKS indisponível")
+
+    cliente = TestClient(create_app(amb.bus, amb.clock, amb.repo, ChavesForaDoAr()))
+    r = cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth())
+    assert r.status_code == 503 and r.json()["codigo"] == "DEPENDENCIA_INDISPONIVEL"
+    assert amb.repo.estado["fornecimentos"] == {} and amb.bus.publicadas == []
