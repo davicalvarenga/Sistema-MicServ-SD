@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 1.3 |
+| Versão | 1.4 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -81,7 +81,7 @@ Front-end ─► Gateway ─REST─► produtos-service ──[produto_cadastrad
 | Dependências permitidas | Biblioteca padrão do Python, `fastapi`, `pydantic`, `starlette`, `PyJWT` (importado como `jwt`) e `cryptography` (exigida pelo PyJWT para RS256). Nenhuma outra. |
 | Persistência | Somente pela porta `ProdutoRepositorio` (§5.1). Proibido guardar produtos em variáveis do módulo ou da aplicação. |
 | Estrutura de arquivos | `app/__init__.py` e `app/main.py` obrigatórios; outros módulos dentro de `app/` são permitidos. |
-| Ponto de entrada | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositorio, chaves_publicas: ChavesPublicas) -> fastapi.FastAPI` |
+| Ponto de entrada | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositorio, chaves_publicas: ChavesPublicas, emissor: str = "identity-service", audiencia: str = "b2b-platform") -> fastapi.FastAPI`. `emissor` e `audiencia` são opcionais e definem o `iss` e o `aud` esperados no token (§7.1) |
 | Formato de data/hora | Instante (ver glossário). |
 | Formato monetário | Não se aplica (o serviço não tem valores monetários). |
 
@@ -151,8 +151,9 @@ Rotas públicas (sem token): `/health`, `/health/ready`, `/metrics`, `/docs`, `/
 
 Validação do token, nesta ordem (o primeiro problema encontrado define a resposta):
 1. Cabeçalho `Authorization` ausente, vazio, ou que não começa com `Bearer ` seguido de texto preenchido → `401 TOKEN_AUSENTE`.
-2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; ou claims ausentes ou inválidos: `sub` e `tenant_id` precisam ser texto preenchido, `active_scope` precisa ser um dos quatro escopos do glossário e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`group_id`, `roles`, `permissions`) são ignorados.
+2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; `iss` ausente ou diferente de `emissor`; `aud` ausente ou que não contém `audiencia` (`aud` pode ser texto ou lista); ou claims inválidos: `sub` precisa ser texto preenchido, `active_scope`, quando presente e não nulo, precisa ser um dos quatro escopos do glossário, `tenant_id`, quando presente e não nulo, precisa ser string, e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Se `chaves_publicas.obter(kid)` lançar exceção (serviço de chaves indisponível) → `503 DEPENDENCIA_INDISPONIVEL`, e não 401, para que a tela não encerre a sessão do usuário por uma falha da plataforma. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`group_id`, `roles`, `permissions`) são ignorados.
 3. `exp` (segundos desde a época Unix, UTC) menor ou igual a `int(agora.timestamp())` → `401 TOKEN_EXPIRADO`. A verificação de expiração usa `clock.now()`, nunca o relógio do sistema (decodificar com `options={"verify_exp": False}` e comparar manualmente).
+4. `tenant_id` ausente, nulo ou que não é texto preenchido, ou `active_scope` ausente ou nulo → `403 CONTEXTO_NAO_SELECIONADO`. É o token devolvido pelo login antes da escolha de empresa e escopo (`switch-context` do serviço de Autenticação): ele é válido, mas ainda não diz em nome de qual empresa e perfil o usuário age.
 
 Toda resposta, de sucesso ou de erro, inclui o cabeçalho `X-Correlation-Id` com o correlation id da requisição.
 
@@ -163,9 +164,9 @@ Toda resposta, de sucesso ou de erro, inclui o cabeçalho `X-Correlation-Id` com
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` → 401 `TOKEN_EXPIRADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
-| API-05 | GET | `/api/v1/produtos/{produto_id}` | todos | 200 | 401 (como API-04) → 404 `PRODUTO_NAO_ENCONTRADO` |
-| API-06 | GET | `/api/v1/produtos` | todos | 200 | 401 (como API-04) → 422 `PAGINACAO_INVALIDA` |
+| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
+| API-05 | GET | `/api/v1/produtos/{produto_id}` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 404 `PRODUTO_NAO_ENCONTRADO` |
+| API-06 | GET | `/api/v1/produtos` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 422 `PAGINACAO_INVALIDA` |
 
 #### API-01 — Saúde
 Resposta 200:
@@ -290,7 +291,7 @@ Exemplo (`event_bus.publish("produto_cadastrado", "6f1d2c3b-4a59-4e6f-8a7b-9c0d1
 
 ## 8. Requisitos funcionais
 
-Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `active_scope` = X, `tenant_id` = `"EMP-34"`, `sub` = `"USR-7"` e `exp` uma hora depois de agora, salvo indicação em contrário. O relógio está em `2026-10-26T14:00:00Z`.
+Nos critérios abaixo, "token de X" significa um token válido (§7.1) com `active_scope` = X, `iss` = `"identity-service"`, `aud` = `"b2b-platform"`, `tenant_id` = `"EMP-34"`, `sub` = `"USR-7"` e `exp` uma hora depois de agora, salvo indicação em contrário. O relógio está em `2026-10-26T14:00:00Z`.
 
 ### RF-01 — Cadastrar produto
 - **Prioridade:** Must
@@ -465,7 +466,7 @@ Cenário: Token com assinatura de outra chave
 
 # CA-16
 Cenário: Claims inválidos
-  Dado tokens, cada um com um problema: sem tenant_id; active_scope "GERENTE"; active_scope "supplier" (minúsculas); sub ""; assinado com HS256 em vez de RS256; kid desconhecido (chaves_publicas.obter devolve None)
+  Dado tokens, cada um com um problema: active_scope "GERENTE"; active_scope "supplier" (minúsculas); sub ""; assinado com HS256 em vez de RS256; kid desconhecido (chaves_publicas.obter devolve None)
   Quando cada um consulta GET /api/v1/produtos
   Então cada resposta é 401 com codigo "TOKEN_INVALIDO"
 
@@ -477,6 +478,32 @@ Cenário: Token expirado no limite (valor-limite)
   Dado o mesmo token e o relógio em 2026-10-26T13:59:59Z
   Quando consulta GET /api/v1/produtos
   Então a resposta é 200
+
+# CA-29
+Cenário: Emissor e audiência do token
+  Dado tokens de "SUPPLIER", cada um com um problema: iss "falsificador"; aud "outro-sistema"; sem iss; sem aud
+  Quando cada um consulta GET /api/v1/produtos
+  Então cada resposta é 401 com codigo "TOKEN_INVALIDO"
+  Dado um token de "SUPPLIER" com aud ["b2b-platform", "outro-sistema"]
+  Quando consulta GET /api/v1/produtos
+  Então a resposta é 200
+
+# CA-30
+Cenário: Token sem empresa ou sem escopo selecionado
+  Dado tokens válidos, cada um sem contexto: sem tenant_id e sem active_scope (token do login); tenant_id ""; sem active_scope
+  Quando cada um envia POST /api/v1/produtos com um corpo válido
+  Então cada resposta é 403 com codigo "CONTEXTO_NAO_SELECIONADO"
+  E nenhum produto é gravado e nenhuma mensagem é publicada
+  Dado um token sem tenant_id e sem active_scope, com exp igual a 2026-10-26T14:00:00Z
+  Quando consulta GET /api/v1/produtos
+  Então a resposta é 401 com codigo "TOKEN_EXPIRADO"
+
+# CA-31
+Cenário: Serviço de chaves indisponível
+  Dado uma porta chaves_publicas cuja obter lança exceção
+  Quando envia POST /api/v1/produtos com um corpo válido
+  Então a resposta é 503 com codigo "DEPENDENCIA_INDISPONIVEL"
+  E nenhum produto é gravado e nenhuma mensagem é publicada
 ```
 
 ### RF-06 — Propagar o identificador de correlação
@@ -562,6 +589,7 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | TOKEN_AUSENTE | 401 | Não Autenticado | §7.1, item 1. |
 | TOKEN_INVALIDO | 401 | Token Inválido | §7.1, item 2. |
 | TOKEN_EXPIRADO | 401 | Token Expirado | §7.1, item 3. |
+| CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 4. |
 | PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01. |
 | PRODUTO_NAO_ENCONTRADO | 404 | Produto Não Encontrado | RN-05. |
 | ROTA_NAO_ENCONTRADA | 404 | Rota Não Encontrada | Rota inexistente. |
@@ -569,19 +597,20 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | DADOS_INVALIDOS | 422 | Dados Inválidos | RN-02, RN-08. |
 | PAGINACAO_INVALIDA | 422 | Paginação Inválida | RN-06. |
 | ERRO_INTERNO | 500 | Erro Interno | Exceção não prevista, inclusive do repositório. O `detail` não expõe a mensagem da exceção. |
-| DEPENDENCIA_INDISPONIVEL | 503 | Dependência Indisponível | API-02 com dependência indisponível. |
+| DEPENDENCIA_INDISPONIVEL | 503 | Dependência Indisponível | API-02 com dependência indisponível; §7.1, item 2 (serviço de chaves indisponível). |
 
 Respostas fora do catálogo: nenhuma. Rota inexistente e método não permitido também usam este formato. A documentação automática do framework (`/docs`, `/openapi.json`) permanece habilitada e não faz parte da avaliação.
 
-**Ordem de verificação:** quando mais de um erro se aplica, retorna-se o primeiro da lista. A validação do corpo e dos parâmetros **não** pode ocorrer antes das verificações 1 a 4 (não use validação automática de corpo ou de parâmetros do framework que responda antes delas; leia o corpo bruto e valide manualmente):
+**Ordem de verificação:** quando mais de um erro se aplica, retorna-se o primeiro da lista. A validação do corpo e dos parâmetros **não** pode ocorrer antes das verificações 1 a 5 (não use validação automática de corpo ou de parâmetros do framework que responda antes delas; leia o corpo bruto e valide manualmente):
 1. ROTA_NAO_ENCONTRADA / METODO_NAO_PERMITIDO
 2. TOKEN_AUSENTE
-3. TOKEN_INVALIDO
+3. TOKEN_INVALIDO / DEPENDENCIA_INDISPONIVEL (serviço de chaves)
 4. TOKEN_EXPIRADO
-5. PERFIL_NAO_PERMITIDO
-6. DADOS_INVALIDOS / PAGINACAO_INVALIDA
-7. PRODUTO_NAO_ENCONTRADO
-8. ERRO_INTERNO
+5. CONTEXTO_NAO_SELECIONADO
+6. PERFIL_NAO_PERMITIDO
+7. DADOS_INVALIDOS / PAGINACAO_INVALIDA
+8. PRODUTO_NAO_ENCONTRADO
+9. ERRO_INTERNO
 
 ## 11. Requisitos não funcionais
 
@@ -638,7 +667,7 @@ Cenário: Token não vaza
 | RF-02 | RN-05 | API-05 | CA-07, CA-08 |
 | RF-03 | RN-05, RN-06 | API-06 | CA-09 a CA-11 |
 | RF-04 | RN-03, RN-04, RN-07, RN-08 | `produto_cadastrado` | CA-12, CA-13, CA-28 |
-| RF-05 | RN-01, RN-04 | API-04 a API-06 | CA-14 a CA-17 |
+| RF-05 | RN-01, RN-04 | API-04 a API-06 | CA-14 a CA-17, CA-29 a CA-31 |
 | RF-06 | RN-07 | todas | CA-18, CA-19 |
 | RF-07 | — | API-01 a API-03 | CA-20 a CA-22 |
 | RNF-01 a RNF-05 | — | todas | CA-23 a CA-27 |
@@ -649,7 +678,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 
 | ID | Tipo | Descrição | Decisão |
 |---|---|---|---|
-| Q-01 | Decisão | Validação do token e nomes dos claims (P-04, P-33). | No serviço, com RS256 e a chave pública do `kid` obtida pela porta `ChavesPublicas` (JWKS do serviço de Autenticação). Claims `sub`, `tenant_id` e `active_scope`, como definido pelo grupo de Autenticação na issue #2 (2026-11-09). Substitui o HS256 com chave compartilhada do kit, que permitia a qualquer serviço emitir tokens. |
+| Q-01 | Decisão | Validação do token e nomes dos claims (P-04, P-33). | No serviço, com RS256 e a chave pública do `kid` obtida pela porta `ChavesPublicas` (JWKS do serviço de Autenticação). Claims `sub`, `tenant_id` e `active_scope`, como definido pelo grupo de Autenticação na issue #2 (2026-11-09). Substitui o HS256 com chave compartilhada do kit, que permitia a qualquer serviço emitir tokens. Versão 1.4: `iss` (`identity-service`) e `aud` (`b2b-platform`) conferidos, token sem contexto → 403 `CONTEXTO_NAO_SELECIONADO` e serviço de chaves indisponível → 503, alinhado ao grupo de Logística, que leu o código do Identity-Service (F12 do Documento de Requisitos). |
 | Q-02 | Decisão | Nomes dos campos de erro: o grupo de Autenticação usa `code` e `correlation_id` (RFC 9457); o kit usa `correlationId`; esta ESP usa `codigo` e `correlationId`. | Mantidos `codigo` e `correlationId` até a turma definir um padrão único (pergunta feita na issue #2). Se mudar, esta ESP muda de versão. |
 | Q-03 | Decisão | O comprador pode cadastrar produto? O professor disse que sim (aula 2, 1:17 a 1:49); o guia do kit restringe o comprador (P-30). | Segue o professor: `BUYER` cadastra (RN-01). Revisar se o professor decidir diferente. |
 | Q-04 | Decisão | Permissões do `TENANT_ADMIN` (P-07). | Na versão 1.0, `TENANT_ADMIN` consulta e lista, mas não cadastra. |
@@ -697,3 +726,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.1 | 2026-11-10 | Grupo de Fornecimento e Produtos | Token RS256 validado com a porta `ChavesPublicas` (JWKS do serviço de Autenticação) no lugar de HS256 e `jwt_secret`; claims `tenant_id` e `active_scope`; escopos `SUPPLIER`, `BUYER`, `CARRIER` e `TENANT_ADMIN`; novos casos de token inválido (HS256, kid desconhecido, escopo em minúsculas). Motivo: definições do grupo de Autenticação nas issues #2 e #13. |
 | 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | Campo opcional `peso_unitario_kg` no produto e `pesoUnitarioKg` no evento (RN-08, CA-04, CA-28, Q-11). Listas de unidade e de tipo de transporte confirmadas (Q-05). Motivo: resposta do grupo de Logística/Transporte sobre P-06 e P-27. |
 | 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |
+| 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-29 a CA-31 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-30. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |

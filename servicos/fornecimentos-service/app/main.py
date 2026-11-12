@@ -1,4 +1,4 @@
-"""fornecimentos-service: implementação da ESP-FRN-001 v1.2."""
+"""fornecimentos-service: implementação da ESP-FRN-001 v1.4."""
 
 import traceback
 import uuid
@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .http_comum import (
+    AUDIENCIA_PADRAO,
+    EMISSOR_PADRAO,
     ChavesPublicas,
     Clock,
     ErroApi,
@@ -112,8 +114,9 @@ def projecao(fornecimento: dict) -> dict:
     return resposta
 
 
-def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas) -> FastAPI:
-    app = FastAPI(title="Fornecimentos API", version="1.2", docs_url="/docs", openapi_url="/openapi.json")
+def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas,
+               emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> FastAPI:
+    app = FastAPI(title="Fornecimentos API", version="1.4", docs_url="/docs", openapi_url="/openapi.json")
     logger = criar_logger(NOME_SERVICO)
 
     def prontas() -> bool:
@@ -125,7 +128,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
 
     @app.post("/api/v1/fornecimentos", status_code=201)
     async def cadastrar_fornecimento(request: Request):
-        claims = autenticar(request, chaves_publicas, clock)
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
         exigir_escopo(claims, ESCOPOS_CADASTRO)
         corpo = await corpo_json(request)
         if not isinstance(corpo, dict):
@@ -183,7 +186,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
 
     @app.get("/api/v1/fornecimentos/{fornecimento_id}")
     async def consultar_fornecimento(fornecimento_id: str, request: Request):
-        claims = autenticar(request, chaves_publicas, clock)
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         fornecimento = repositorio.obter_fornecimento(fornecimento_id)
         if fornecimento is None:
@@ -192,7 +195,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
 
     @app.get("/api/v1/fornecimentos")
     async def listar_fornecimentos(request: Request):
-        claims = autenticar(request, chaves_publicas, clock)
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         page, size = paginacao(request)
         itens, total = repositorio.listar_fornecimentos(filtro_texto(request, "produto_id"), (page - 1) * size, size)

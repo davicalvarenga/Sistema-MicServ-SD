@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-PRD-001 v1.2: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-PRD-001 v1.4: um teste por critério de aceitação."""
 
 import ast
 import logging
@@ -181,7 +181,6 @@ def test_CA15(amb):
 def test_CA16(amb):
     exp = int((T0 + timedelta(hours=1)).timestamp())
     tokens = [
-        jwt.encode({"sub": "USR-7", "active_scope": "SUPPLIER", "exp": exp}, PRIVADA, algorithm="RS256", headers={"kid": KID}),
         token("GERENTE"),
         token("supplier"),
         token(sub=""),
@@ -332,3 +331,35 @@ def test_CA28(amb):
     for limite in (0.001, 999999999.999):
         r = cadastrar(amb, {**corpo, "peso_unitario_kg": limite})
         assert r.status_code == 201 and r.json()["peso_unitario_kg"] == limite
+
+
+# §7.1: emissor, audiência, contexto e serviço de chaves (v1.4)
+
+def test_CA29(amb):
+    for t in (token(iss="falsificador"), token(aud="outro-sistema"), token(iss=None), token(aud=None)):
+        r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + t})
+        assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_INVALIDO"
+    r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + token(aud=["b2b-platform", "outro-sistema"])})
+    assert r.status_code == 200
+
+
+def test_CA30(amb):
+    sem_contexto = (token(None, tenant=None), token(tenant=""), token(None))
+    for t in sem_contexto:
+        r = amb.cliente.post(URL, json=PRODUTO_VALIDO, headers={"Authorization": "Bearer " + t})
+        assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
+        assert r.headers["content-type"].startswith("application/problem+json")
+    r = amb.cliente.get(URL, headers={"Authorization": "Bearer " + token(None, tenant=None, exp=T0)})
+    assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_EXPIRADO"
+    assert amb.repo.produtos == {} and amb.bus.publicadas == []
+
+
+def test_CA31(amb):
+    class ChavesForaDoAr:
+        def obter(self, kid):
+            raise ConnectionError("JWKS indisponível")
+
+    cliente = TestClient(create_app(amb.bus, amb.clock, amb.repo, ChavesForaDoAr()))
+    r = cliente.post(URL, json=PRODUTO_VALIDO, headers=auth())
+    assert r.status_code == 503 and r.json()["codigo"] == "DEPENDENCIA_INDISPONIVEL"
+    assert amb.repo.produtos == {} and amb.bus.publicadas == []
