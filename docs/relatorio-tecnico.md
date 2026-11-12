@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.8 (esboço)
+**Versão:** 0.9 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -62,7 +62,7 @@ O portal conecta empresas compradoras, fornecedoras e transportadoras. O fluxo p
 
 - **Passo 1 (fornecedor publica fornecimento):** o `fornecimentos-service` recebe o cadastro da oferta (`POST /api/v1/fornecimentos`), valida o produto na cópia local e publica `fornecimento_criado` para o Mercado.
 - **Passo 3 (eventos no Kafka):** o `produtos-service` publica `produto_cadastrado`; o `fornecimentos-service` consome esse evento e os de pedido, e publica `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
-- **Passo 7 (pedido criado):** o `fornecimentos-service` reserva a quantidade ao consumir `pedido_criado`, libera em cancelamento e dá baixa na venda concluída (`pedido_atualizado`).
+- **Passo 7 (pedido criado):** o `fornecimentos-service` reserva a quantidade ao consumir `pedido_criado`, libera em cancelamento e dá baixa na venda concluída (`pedido_atualizado`). Segundo o professor (12/11/2026), o pedido é criado na abertura do leilão ou da negociação, e não depois do fechamento: o leilão é o "portador do pedido" e só recebe o comprador quando fecha.
 - **Passo 8 (logística):** a Logística recebe o tipo de transporte, o peso da carga e a origem pelo `pedido_criado`, que o grupo de Pedidos monta com os dados de `produto_cadastrado` (tipo de transporte e peso unitário) e de `fornecimento_criado` (origem em cidade e UF). Proposta da Logística ao grupo de Pedidos, ainda sem resposta (ADR-023).
 
 ---
@@ -386,7 +386,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 001 | Dois microsserviços: Produtos e Fornecimentos | Aceita |
 | 002 | Comunicação entre módulos por eventos no Redpanda (API Kafka) | Aceita |
 | 003 | Um schema por serviço no PostgreSQL 16 | Aceita |
-| 004 | Estoque controlado por fornecimento, com quantidade disponível e reservada | Proposta |
+| 004 | Estoque controlado por fornecimento, com quantidade disponível e reservada | Aceita (confirmada pelo professor) |
 | 005 | Reserva de estoque como Saga coreografada com compensação | Proposta |
 | 006 | Reserva atômica por atualização condicional | Proposta |
 | 007 | Idempotência por registro de eventos processados no banco | Aceita |
@@ -442,14 +442,14 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Alternativas consideradas:** estoque único por produto. Não permite saber de qual fornecedor sai a quantidade de um pedido.
 - **Consequências:** o pedido precisa identificar o fornecimento. O exemplo de `pedido_criado` do kit traz `fornecedorId` e `produtoId`, mas não o `fornecimentoId` (P-02).
 - **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` (`processar_pedido_criado`, `processar_pedido_atualizado`); colunas `quantidade_disponivel` e `quantidade_reservada` da tabela `fornecimento`.
-- **Status:** Proposta ([issue #5](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/5))
+- **Status:** Aceita: o professor confirmou em 12/11/2026 que o estoque é por fornecimento, isto é, por produto e por fornecedor ([issue #5](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/5))
 
 ### ADR-005: Reserva de estoque como Saga coreografada com compensação
 
 - **Contexto:** criar um pedido e reservar o estoque são operações em serviços e schemas diferentes, então não cabem em uma única transação de banco. O professor chama a operação de transação e pede que o cancelamento devolva a quantidade (aula 1, 9:18 a 9:42).
 - **Decisão:** usar o padrão Saga (microservices.io; Garcia-Molina e Salem, 1987) na forma coreografada. Cada serviço reage aos eventos do outro: `pedido_criado` provoca a reserva, o cancelamento provoca a liberação (ação de compensação) e a venda concluída provoca a baixa.
 - **Alternativas consideradas:** Saga orquestrada, com um coordenador central que comanda cada passo. Facilita acompanhar o fluxo, mas exige um componente a mais e um dono para ele. Com só dois participantes (Pedidos e Fornecimentos), a coreografia é suficiente.
-- **Consequências:** existe um intervalo em que o pedido já existe e a reserva ainda não foi feita. Se a reserva falhar, Pedidos precisa ser avisado (P-16). O momento em que o pedido é criado também muda o comportamento: se for depois da negociação fechada, como no kit, o estoque não fica bloqueado durante o leilão (P-29).
+- **Consequências:** existe um intervalo em que o pedido já existe e a reserva ainda não foi feita. Se a reserva falhar, Pedidos precisa ser avisado (P-16). O momento em que o pedido é criado foi definido pelo professor em 12/11/2026: na abertura do leilão ou da negociação, o que mantém o estoque bloqueado durante o leilão. O kit, que cria o pedido depois de `negociacao_fechada`, precisa ser alterado pela Infraestrutura. Leilão sem vencedor termina com o pedido cancelado e a reserva liberada.
 - **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py`: reserva em `pedido_criado`, liberação e baixa em `pedido_atualizado`, `reserva_estoque_recusada` quando falta saldo. Critérios CA-17 a CA-30 da ESP-FRN-001.
 - **Status:** Proposta ([issue #1](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/1))
 
@@ -673,6 +673,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.6 | 10/11/2026 | Resposta do grupo de Logística/Transporte: novo ADR-023 (origem em cidade e UF, peso unitário). Passo 8 da seção 2 e modelo de domínio atualizados. Moeda do preço (BRL) registrada na seção 5 |
 | 0.7 | 11/11/2026 | Outbox implementado no adaptador: ADR-010 aceito com ressalva. Serviços executados no kit com Docker (seções 10 e 11), novos pontos K12 a K14 na seção 3.4. Seções 9, 13 e 14 atualizadas |
 | 0.8 | 12/11/2026 | ADR-012 revisado: `iss` e `aud` conferidos, 403 para token sem contexto, 503 para serviço de chaves indisponível, limite de busca do JWKS. Seção 7 atualizada |
+| 0.9 | 12/11/2026 | Respostas do professor: ADR-004 aceito (estoque por fornecimento); momento da reserva definido no ADR-005 e no passo 7 |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 1.4 |
+| Versão | 1.5 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -680,7 +680,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 |---|---|---|---|
 | Q-01 | Decisão | Validação do token e nomes dos claims (P-04, P-33). | No serviço, com RS256 e a chave pública do `kid` obtida pela porta `ChavesPublicas` (JWKS do serviço de Autenticação). Claims `sub`, `tenant_id` e `active_scope`, como definido pelo grupo de Autenticação na issue #2 (2026-11-09). Substitui o HS256 com chave compartilhada do kit, que permitia a qualquer serviço emitir tokens. Versão 1.4: `iss` (`identity-service`) e `aud` (`b2b-platform`) conferidos, token sem contexto → 403 `CONTEXTO_NAO_SELECIONADO` e serviço de chaves indisponível → 503, alinhado ao grupo de Logística, que leu o código do Identity-Service (F12 do Documento de Requisitos). |
 | Q-02 | Decisão | Nomes dos campos de erro: o grupo de Autenticação usa `code` e `correlation_id` (RFC 9457); o kit usa `correlationId`; esta ESP usa `codigo` e `correlationId`. | Mantidos `codigo` e `correlationId` até a turma definir um padrão único (pergunta feita na issue #2). Se mudar, esta ESP muda de versão. |
-| Q-03 | Decisão | O comprador pode cadastrar produto? O professor disse que sim (aula 2, 1:17 a 1:49); o guia do kit restringe o comprador (P-30). | Segue o professor: `BUYER` cadastra (RN-01). Revisar se o professor decidir diferente. |
+| Q-03 | Decisão | O comprador pode cadastrar produto? O professor disse que sim (aula 2, 1:17 a 1:49); o guia do kit restringe o comprador (P-30). | `BUYER` cadastra (RN-01). Confirmado pelo professor em 2026-11-12: fornecedor e comprador cadastram produto. |
 | Q-04 | Decisão | Permissões do `TENANT_ADMIN` (P-07). | Na versão 1.0, `TENANT_ADMIN` consulta e lista, mas não cadastra. |
 | Q-05 | Decisão | Listas de unidade e de tipo de transporte (P-06). | As sugeridas pelo boilerplate do kit, confirmadas pelo grupo de Logística/Transporte em 2026-11-10 (são as que ele usa na cotação e no cadastro de veículos). |
 | Q-06 | Decisão | Alteração e exclusão de produto (P-07, P-09, P-26). | Fora do escopo da versão 1.0 (§3.2). |
@@ -727,3 +727,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | Campo opcional `peso_unitario_kg` no produto e `pesoUnitarioKg` no evento (RN-08, CA-04, CA-28, Q-11). Listas de unidade e de tipo de transporte confirmadas (Q-05). Motivo: resposta do grupo de Logística/Transporte sobre P-06 e P-27. |
 | 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |
 | 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-29 a CA-31 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-30. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |
+| 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-03 confirmada pelo professor (comprador cadastra produto). Só texto, sem mudança de comportamento nem de critérios. |
