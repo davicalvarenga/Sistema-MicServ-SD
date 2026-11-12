@@ -1,7 +1,7 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 1.2 (proposta para revisão dos grupos que integram com a gente)
+**Versão:** 1.3 (proposta para revisão dos grupos que integram com a gente)
 **Data:** 10/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
@@ -172,7 +172,7 @@ O schema [`pedido_criado.schema.json`](contratos/schemas/pedido_criado.schema.js
 | `fornecedorId` | Sim | Presente |
 | `quantidade` | Sim | Presente |
 | `status` | Sim | Presente |
-| `negociacaoId`, `compradorId`, `valorTotal` | Não | Presentes |
+| `negociacaoId`, `compradorId`, `valorTotal` | Não | Presentes. O `compradorId` pode vir `null` ou ausente: segundo o professor, o pedido é criado na abertura do leilão e o comprador só é definido quando ele fecha |
 
 Validamos o exemplo do guia do kit contra este schema, e ele é rejeitado justamente por faltar `fornecimentoId`.
 
@@ -242,3 +242,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 1.0 | 26/10/2026 | Primeira proposta |
 | 1.1 | 10/11/2026 | `pesoUnitarioKg` em `produto_cadastrado` e `produto_atualizado`; `origem` de `fornecimento_criado` como objeto com `cidade` e `uf`; listas de unidade e tipo de transporte confirmadas. Motivo: resposta do grupo de Logística/Transporte |
 | 1.2 | 10/11/2026 | `empresa_cadastrada` em camelCase (`tenantId`, `groupId`, `legalName`, `branchType`, `geoLat`, `geoLng`), conforme a resposta do grupo de Autenticação na issue #2 |
+| 1.3 | 12/11/2026 | `compradorId` do `pedido_criado` pode ser `null`, porque o pedido passa a ser criado na abertura do leilão (resposta do professor) |

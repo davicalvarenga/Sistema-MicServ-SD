@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 1.4 |
+| Versão | 1.5 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -965,7 +965,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-11 | Decisão | Valores monetários em JSON: string (exemplo do Grupo de Teste) ou número (kit e Contrato de Eventos). | Número JSON, convertido para `Decimal` com `Decimal(str(valor))`. Mantém o padrão do kit usado pelos outros grupos e evita erro de arredondamento nas contas (CA-41). |
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
 | Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (ADR-010). |
-| Q-14 | Premissa | Momento em que o pedido é criado: o professor fala na entrada do leilão; o kit, depois de `negociacao_fechada` (P-29). | O serviço reserva quando receber `pedido_criado`, seja qual for o momento escolhido pelos grupos. A decisão não muda esta ESP. |
+| Q-14 | Premissa | Momento em que o pedido é criado (P-29). | Definido pelo professor em 2026-11-12: na abertura do leilão ou da negociação, antes do fechamento. O serviço reserva quando receber `pedido_criado`; o `compradorId` pode vir vazio até o leilão fechar e não é usado pelo serviço. Esta ESP não muda de comportamento. |
 | Q-16 | Decisão | Formato da origem (P-05). O kit guardava texto livre; a Logística pediu cidade e UF para usar como ponto de coleta (2026-11-10). | Objeto com `cidade` e `uf` (glossário), no mesmo formato do campo `origem` que a Logística propôs para o `pedido_criado`. UF validada contra a lista do IBGE. |
 
 ### 13.1 Casos de borda obrigatórios
@@ -1005,3 +1005,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.2 | 2026-11-10 | Grupo de Fornecimento e Produtos | `origem` passa de texto livre a objeto com `cidade` e `uf` (glossário, §6.1, RN-02, CA-01, CA-03, CA-05, CA-10, CA-12, Q-16). Mudança incompatível com a versão 1.1 no corpo da API-04, nas respostas e no `fornecimento_criado`. Motivo: pedido do grupo de Logística/Transporte (P-05). Moeda do preço registrada como real (BRL), sem mudança de comportamento (P-15). |
 | 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |
 | 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-48 a CA-50 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-49. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |
+| 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-14 confirmada pelo professor (pedido criado na abertura do leilão ou da negociação; `compradorId` pode vir vazio). Só texto, sem mudança de comportamento nem de critérios. |

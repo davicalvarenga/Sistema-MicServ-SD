@@ -92,9 +92,13 @@
           "maxLength": 64
         },
         "compradorId": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1,
-          "maxLength": 64
+          "maxLength": 64,
+          "description": "Vazio (null ou ausente) enquanto o leilão está aberto: o pedido é criado na abertura do leilão e o comprador só é definido quando ele fecha (professor, 12/11/2026). Não é usado pelo fornecimentos-service."
         },
         "valorTotal": {
           "type": "number",
