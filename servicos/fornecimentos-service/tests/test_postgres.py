@@ -324,3 +324,44 @@ def test_outbox_fluxo_completo_com_o_servico(repo, outbox):
     criado = kafka.publicadas[0][2]
     assert criado["payload"]["origem"] == {"cidade": "Goiânia", "uf": "GO"} and criado["payload"]["preco"] == 2.5
     assert kafka.publicadas[1][2]["payload"]["quantidadeReservada"] == 4
+
+
+def test_alteracao_encerramento_e_vitrine(repo):
+    """ESP-FRN-001 v2.0: preço, reposição, encerramento e vitrine sem ofertas zeradas (DDL v1.4)."""
+    pid = "PROD-ALT-" + uuid.uuid4().hex[:8]
+    fid = "FORN-ALT-" + uuid.uuid4().hex[:8]
+    _fornecimento(repo, fid, pid, "70")
+    agora = datetime(2026, 10, 26, 15, 0, tzinfo=timezone.utc)
+    with repo.transacao():
+        assert repo.aplicar_movimento(fid, Decimal("-30"), Decimal("30"), agora) is not None
+        alterado = repo.alterar_preco(fid, Decimal("0"), agora)
+    assert alterado["preco"] == Decimal("0.00")
+    with repo.transacao():
+        encerrado, havia = repo.zerar_disponivel(fid, agora)
+    assert havia == Decimal("40.00") and encerrado["quantidade_disponivel"] == Decimal("0.00")
+    assert encerrado["quantidade_reservada"] == Decimal("30.00")
+    visiveis, total = repo.listar_fornecimentos(pid, 0, 10, None)
+    assert visiveis == [] and total == 0
+    do_dono, total = repo.listar_fornecimentos(pid, 0, 10, "EMP-34")
+    assert [f["fornecimento_id"] for f in do_dono] == [fid] and total == 1
+    assert repo.zerar_disponivel("nao-existe", agora) is None and repo.alterar_preco("nao-existe", Decimal("1"), agora) is None
+    with pytest.raises(psycopg2.Error):
+        with repo.transacao():
+            repo.alterar_preco(fid, Decimal("-1"), agora)  # CHECK (preco >= 0) da DDL v1.4
+
+
+def test_produto_excluido_desativa_a_referencia(repo):
+    from app.main import create_app
+    from tests.conftest import FakeBus, FakeChaves, FakeClock, auth, evento, produto
+
+    bus = FakeBus()
+    cliente = TestClient(create_app(bus, FakeClock(), repo, FakeChaves()))
+    pid = "PROD-EXC-" + uuid.uuid4().hex[:8]
+    for handler in bus.handlers["produto_cadastrado"]:
+        handler(produto(pid))
+    for handler in bus.handlers["produto_excluido"]:
+        handler(evento("produto_excluido", {"produtoId": pid}, timestamp="2026-10-26T13:59:50Z"))
+    assert repo.obter_produto_referencia(pid)["ativo"] is False
+    r = cliente.post("/api/v1/fornecimentos", headers=auth(), json={
+        "produto_id": pid, "preco": 1, "quantidade_disponivel": 1, "origem": {"cidade": "Goiânia", "uf": "GO"}})
+    assert r.status_code == 422 and r.json()["codigo"] == "PRODUTO_INEXISTENTE"

@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-FRN-001 v1.4: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-FRN-001 v2.0: um teste por critério de aceitação."""
 
 import ast
 import copy
@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from tests.conftest import (
     FORNECIMENTO_VALIDO, KID, OUTRA_PRIVADA, PRIVADA, T0, Ambiente, FakeBus, FakeChaves, FakeClock,
-    FakeRepoFornecimentos, auth, eh_uuid4, entregar, gravar_fornecimento, pedido_atualizado, pedido_criado,
+    FakeRepoFornecimentos, auth, eh_uuid4, entregar, evento, gravar_fornecimento, pedido_atualizado, pedido_criado,
     produto, token,
 )
 
@@ -72,9 +72,9 @@ SEM_PRODUTO = {k: v for k, v in FORNECIMENTO_VALIDO.items() if k != "produto_id"
 
 
 @pytest.mark.parametrize("corpo", [
-    {**FORNECIMENTO_VALIDO, "preco": 0}, {**FORNECIMENTO_VALIDO, "preco": -1}, {**FORNECIMENTO_VALIDO, "preco": "5.50"},
+    {**FORNECIMENTO_VALIDO, "preco": -0.01}, {**FORNECIMENTO_VALIDO, "preco": -1}, {**FORNECIMENTO_VALIDO, "preco": "5.50"},
     {**FORNECIMENTO_VALIDO, "preco": 5.555}, {**FORNECIMENTO_VALIDO, "preco": 10000000000}, {**FORNECIMENTO_VALIDO, "preco": True},
-    {**FORNECIMENTO_VALIDO, "quantidade_disponivel": 0}, {**FORNECIMENTO_VALIDO, "quantidade_disponivel": 1.234},
+    {**FORNECIMENTO_VALIDO, "quantidade_disponivel": -1}, {**FORNECIMENTO_VALIDO, "quantidade_disponivel": 1.234},
     {**FORNECIMENTO_VALIDO, "origem": "Goiânia-GO"}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "   ", "uf": "GO"}},
     {**FORNECIMENTO_VALIDO, "origem": {"cidade": "a" * 256, "uf": "GO"}}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia"}},
     {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia", "uf": "go"}}, {**FORNECIMENTO_VALIDO, "origem": {"cidade": "Goiânia", "uf": "XX"}},
@@ -174,7 +174,7 @@ def test_CA12(amb):
 def test_CA13(amb):
     for escopo in ("BUYER", "CARRIER", "TENANT_ADMIN"):
         cadastrar(amb, escopo=escopo)
-    cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": 0})
+    cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": -1})
     cadastrar(amb, {**FORNECIMENTO_VALIDO, "produto_id": "PROD-X"})
     amb.cliente.post(URL, json=FORNECIMENTO_VALIDO)
     amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers={"Authorization": "Bearer " + token(chave=OUTRA_PRIVADA)})
@@ -462,7 +462,7 @@ def test_CA40(amb):
     assert r.status_code == 405 and r.json()["codigo"] == "METODO_NAO_PERMITIDO"
     _verificar_erro(r)
     respostas = [
-        cadastrar(amb, escopo="BUYER"), cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": 0}),
+        cadastrar(amb, escopo="BUYER"), cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": -1}),
         cadastrar(amb, {**FORNECIMENTO_VALIDO, "produto_id": "PROD-X"}), amb.cliente.get(f"{URL}?size=101", headers=auth("BUYER")),
         amb.cliente.get(f"{URL}/FORN-X", headers=auth("BUYER")), amb.cliente.post(URL, json=FORNECIMENTO_VALIDO),
         amb.cliente.get(URL, headers={"Authorization": "Bearer " + token("BUYER", exp=T0)}),
@@ -603,3 +603,111 @@ def test_CA50(amb):
     r = cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth())
     assert r.status_code == 503 and r.json()["codigo"] == "DEPENDENCIA_INDISPONIVEL"
     assert amb.repo.estado["fornecimentos"] == {} and amb.bus.publicadas == []
+
+
+# v2.0: valores zero, vitrine, alteração e encerramento de oferta, eventos de alteração e exclusão de produto
+
+def _publicadas(amb, topico):
+    return [p for p in amb.bus.publicadas if p["topic"] == topico]
+
+
+def test_CA51(amb):
+    r = cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": 0, "quantidade_disponivel": 0})
+    assert r.status_code == 201 and (r.json()["preco"], r.json()["quantidade_disponivel"]) == (0, 0)
+    assert len(_publicadas(amb, "fornecimento_criado")) == 1
+
+
+def test_CA52(amb):
+    gravar_fornecimento(amb, 0, fid="FORN-ZERO", criado_em="2026-10-26T13:00:00Z")
+    gravar_fornecimento(amb, 10, fid="FORN-COM", criado_em="2026-10-26T13:00:01Z")
+    lista = amb.cliente.get(URL, headers=auth("BUYER")).json()
+    assert [f["fornecimento_id"] for f in lista["itens"]] == ["FORN-COM"] and lista["total"] == 1
+    lista = amb.cliente.get(URL, headers=auth("SUPPLIER")).json()
+    assert [f["fornecimento_id"] for f in lista["itens"]] == ["FORN-ZERO", "FORN-COM"] and lista["total"] == 2
+    lista = amb.cliente.get(URL, headers=auth("SUPPLIER", tenant="EMP-99")).json()
+    assert [f["fornecimento_id"] for f in lista["itens"]] == ["FORN-COM"]
+    assert amb.cliente.get(f"{URL}/FORN-ZERO", headers=auth("BUYER")).status_code == 200
+
+
+def test_CA53(amb):
+    gravar_fornecimento(amb, 70, reservada=30)
+    amb.clock.agora = T0 + timedelta(minutes=5)
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"repor": 50}, headers={**auth(), "X-Correlation-Id": "corr-repor"})
+    assert r.status_code == 200
+    c = r.json()
+    assert (c["quantidade_disponivel"], c["quantidade_reservada"], c["preco"], c["atualizado_em"]) == (120, 30, 5.5, "2026-10-26T14:05:00Z")
+    [estoque] = _publicadas(amb, "estoque_atualizado")
+    assert estoque["key"] == "FORN-1" and estoque["message"]["correlationId"] == "corr-repor"
+    p = estoque["message"]["payload"]
+    assert (p["operacao"], p["quantidadeMovimentada"], p["quantidadeDisponivel"], p["quantidadeReservada"], p["pedidoId"]) == \
+        ("REPOSICAO", 50, 120, 30, None)
+    [alterado] = _publicadas(amb, "fornecimento_atualizado")
+    assert alterado["key"] == "FORN-1" and alterado["message"]["payload"]["quantidadeDisponivel"] == 120
+
+
+def test_CA54(amb):
+    gravar_fornecimento(amb, 5)
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"preco": 12}, headers=auth())
+    assert r.status_code == 200 and (r.json()["preco"], r.json()["quantidade_disponivel"]) == (12, 5)
+    assert _publicadas(amb, "estoque_atualizado") == []
+    [alterado] = _publicadas(amb, "fornecimento_atualizado")
+    p = alterado["message"]["payload"]
+    assert (p["preco"], p["quantidadeDisponivel"], p["atualizadoPor"]) == (12, 5, {"empresaId": "EMP-34", "usuarioId": "USR-7"})
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"preco": 0, "repor": 5}, headers=auth())
+    assert r.status_code == 200 and (r.json()["preco"], r.json()["quantidade_disponivel"]) == (0, 10)
+    assert [p["message"]["payload"]["operacao"] for p in _publicadas(amb, "estoque_atualizado")] == ["REPOSICAO"]
+    assert len(_publicadas(amb, "fornecimento_atualizado")) == 2
+
+
+def test_CA55(amb):
+    gravar_fornecimento(amb, 70, reservada=30)
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"encerrar": True}, headers=auth())
+    assert r.status_code == 200 and (r.json()["quantidade_disponivel"], r.json()["quantidade_reservada"]) == (0, 30)
+    [estoque] = _publicadas(amb, "estoque_atualizado")
+    assert (estoque["message"]["payload"]["operacao"], estoque["message"]["payload"]["quantidadeMovimentada"]) == ("ENCERRAMENTO", 70)
+    assert len(_publicadas(amb, "fornecimento_atualizado")) == 1
+    assert amb.cliente.get(URL, headers=auth("BUYER")).json()["total"] == 0
+    amb.bus.publicadas.clear()
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"encerrar": True}, headers=auth())
+    assert r.status_code == 200 and amb.bus.publicadas == []
+
+
+@pytest.mark.parametrize("corpo", [
+    {}, {"preco": -1}, {"preco": 1.234}, {"repor": 0}, {"repor": "5"}, {"repor": 10000000000}, {"encerrar": False},
+    {"encerrar": True, "preco": 5}, {"encerrar": True, "repor": 5}, ["x"],
+])
+def test_CA56(amb, corpo):
+    gravar_fornecimento(amb, 70)
+    r = amb.cliente.patch(f"{URL}/FORN-1", json=corpo, headers=auth())
+    assert r.status_code == 422 and r.json()["codigo"] == "DADOS_INVALIDOS"
+    f = amb.repo.estado["fornecimentos"]["FORN-1"]
+    assert (f["quantidade_disponivel"], f["preco"]) == (Decimal("70"), Decimal("5.5")) and amb.bus.publicadas == []
+
+
+def test_CA57(amb):
+    gravar_fornecimento(amb, 70)
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"repor": 1}, headers=auth("BUYER"))
+    assert r.status_code == 403 and r.json()["codigo"] == "PERFIL_NAO_PERMITIDO"
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"repor": 1}, headers=auth(tenant="EMP-99"))
+    assert r.status_code == 403 and r.json()["codigo"] == "FORNECIMENTO_DE_OUTRA_EMPRESA"
+    r = amb.cliente.patch(f"{URL}/FORN-X", json={"repor": 1}, headers=auth())
+    assert r.status_code == 404 and r.json()["codigo"] == "FORNECIMENTO_NAO_ENCONTRADO"
+    assert amb.repo.estado["fornecimentos"]["FORN-1"]["quantidade_disponivel"] == Decimal("70") and amb.bus.publicadas == []
+
+
+def test_CA58(amb):
+    entregar(amb, "produto_atualizado", evento("produto_atualizado", {"produtoId": "PROD-1", "nome": "Leite", "unidade": "KG",
+                                                                       "tipoTransporte": "REFRIGERADO"}, timestamp="2026-10-26T13:59:30Z"))
+    assert cadastrar(amb).json()["unidade"] == "KG"
+    entregar(amb, "produto_atualizado", evento("produto_atualizado", {"produtoId": "PROD-1", "nome": "Leite", "unidade": "L",
+                                                                       "tipoTransporte": "REFRIGERADO"}, timestamp="2026-10-26T13:59:10Z"))
+    assert amb.repo.obter_produto_referencia("PROD-1")["unidade"] == "KG"  # evento mais antigo ignorado
+    entregar(amb, "produto_excluido", evento("produto_excluido", {"produtoId": "PROD-1"}, timestamp="2026-10-26T13:59:40Z"))
+    r = cadastrar(amb)
+    assert r.status_code == 422 and r.json()["codigo"] == "PRODUTO_INEXISTENTE"
+    entregar(amb, "produto_excluido", evento("produto_excluido", {"produtoId": "PROD-9"}, timestamp="2026-10-26T13:59:40Z"))
+    entregar(amb, "produto_cadastrado", produto("PROD-9"))
+    r = cadastrar(amb, {**FORNECIMENTO_VALIDO, "produto_id": "PROD-9"})
+    assert r.status_code == 422 and r.json()["codigo"] == "PRODUTO_INEXISTENTE"
+    entregar(amb, "produto_excluido", {"eventId": "inv-1", "payload": {}})
+    assert [p["topic"] for p in amb.bus.publicadas][-1] == "fornecimentos.dlt"

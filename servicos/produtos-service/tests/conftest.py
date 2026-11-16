@@ -83,6 +83,30 @@ class FakeRepoProdutos:
         itens.sort(key=lambda p: (p["cadastrado_em"], p["produto_id"]))
         return copy.deepcopy(itens[offset:offset + limite]), len(itens)
 
+    def marcar_movimentado(self, produto_id):
+        with self.trava:
+            produto = self.produtos.get(produto_id)
+            if produto is None:
+                return False
+            produto["com_movimentacao"] = True
+            return True
+
+    def atualizar_se_sem_movimentacao(self, produto):
+        with self.trava:
+            atual = self.produtos.get(produto["produto_id"])
+            if atual is None or atual.get("com_movimentacao"):
+                return False
+            self.produtos[produto["produto_id"]] = copy.deepcopy(produto)
+            return True
+
+    def excluir_se_sem_movimentacao(self, produto_id):
+        with self.trava:
+            atual = self.produtos.get(produto_id)
+            if atual is None or atual.get("com_movimentacao"):
+                return False
+            del self.produtos[produto_id]
+            return True
+
     def disponivel(self):
         return self.pronto
 

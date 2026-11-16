@@ -8,6 +8,8 @@
 --         pedidos pelo grupo de Logística/Transporte (ESP-FRN-001 v1.2, ESP-PRD-001 v1.2)
 -- Versão: 1.3 (11/11/2026): coluna chave do outbox passa a TEXT. Na DLT, a chave é o
 --         aggregateId recebido de outro serviço, sem limite de tamanho garantido
+-- Versão: 1.4 (16/11/2026): coluna movimentado no produto (o produto com fornecimento não pode
+--         ser alterado nem excluído) e preço não negativo no fornecimento (preço zero é permitido)
 --
 -- Executar depois do 01-init.sql do kit, com um usuário que possa assumir a role
 -- portal_ddl (dona das tabelas). O script pode ser executado mais de uma vez.
@@ -47,6 +49,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_fornecimento_reservada_nao_negativa') THEN
     ALTER TABLE fornecimentos.fornecimento
       ADD CONSTRAINT ck_fornecimento_reservada_nao_negativa CHECK (quantidade_reservada >= 0);
+  END IF;
+  -- Preço zero é permitido; negativo não (ESP-FRN-001 v2.0, RN-02)
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_fornecimento_preco_nao_negativo') THEN
+    ALTER TABLE fornecimentos.fornecimento
+      ADD CONSTRAINT ck_fornecimento_preco_nao_negativo CHECK (preco >= 0);
   END IF;
   -- Sigla de uma das 27 unidades da federação (IBGE)
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_fornecimento_origem_uf') THEN
@@ -121,8 +128,8 @@ ALTER TABLE fornecimentos.outbox ALTER COLUMN chave TYPE TEXT;
 -- 2. Schema produtos
 -- ------------------------------------------------------------------------------
 
--- 2.1 Data de atualização do produto. A coluna "ativo" só será necessária se a
---     exclusão for lógica (P-09), e por isso não está nesta proposta.
+-- 2.1 Data de atualização, autoria, peso unitário e movimentação do produto. A exclusão de
+--     produto sem movimentação é física (resposta do professor), sem coluna "ativo".
 ALTER TABLE produtos.produto
   ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Quem cadastrou (ESP-PRD-001, §6.1): claims tenant_id e sub do token
@@ -130,7 +137,10 @@ ALTER TABLE produtos.produto
   ADD COLUMN IF NOT EXISTS cadastrado_por_usuario_id VARCHAR(64),
   -- Peso de uma unidade do produto em kg, opcional (ESP-PRD-001, RN-08). Permite a
   -- Logística calcular o peso da carga quando a unidade é UN, CX ou L
-  ADD COLUMN IF NOT EXISTS peso_unitario_kg NUMERIC(12, 3);
+  ADD COLUMN IF NOT EXISTS peso_unitario_kg NUMERIC(12, 3),
+  -- Marcado quando o primeiro fornecimento do produto é criado (evento fornecimento_criado).
+  -- A partir daí, o produto não pode ser alterado nem excluído (ESP-PRD-001 v2.0)
+  ADD COLUMN IF NOT EXISTS movimentado BOOLEAN NOT NULL DEFAULT FALSE;
 
 DO $$
 BEGIN

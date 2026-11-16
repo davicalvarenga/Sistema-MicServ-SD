@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 1.5 |
+| Versão | 2.0 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -24,15 +24,16 @@
 ## 2. Contexto
 
 ### 2.1 Objetivo do serviço
-Manter as ofertas (fornecimentos) que os fornecedores colocam no portal e controlar o estoque de cada oferta: reservar quando um pedido é criado, devolver quando o pedido é cancelado e dar baixa quando a venda é concluída.
+Manter as ofertas (fornecimentos) que os fornecedores colocam no portal e controlar o estoque de cada oferta: reservar quando um pedido é criado, devolver quando o pedido é cancelado e dar baixa quando a venda é concluída. O fornecedor pode repor quantidade, mudar o preço e encerrar a oferta; a oferta com disponível zero não aparece para os compradores.
 
 ### 2.2 Posição na arquitetura
-O fornecedor cria a oferta pela API REST (via gateway), e o serviço publica `fornecimento_criado`, que alimenta o motor de matching de Mercado (passo 1 do fluxo principal). O serviço mantém uma cópia local dos produtos a partir de `produto_cadastrado`. Quando Pedidos cria um pedido (passo 7), o serviço reserva o estoque; quando o pedido é cancelado ou a venda é concluída, libera ou dá baixa. Cada mudança de estoque gera `estoque_atualizado`.
+O fornecedor cria a oferta pela API REST (via gateway), e o serviço publica `fornecimento_criado`, que alimenta o motor de matching de Mercado (passo 1 do fluxo principal). O serviço mantém uma cópia local dos produtos a partir de `produto_cadastrado`, `produto_atualizado` e `produto_excluido`. A alteração e o encerramento de oferta geram `fornecimento_atualizado`. Quando Pedidos cria um pedido (passo 7), o serviço reserva o estoque; quando o pedido é cancelado ou a venda é concluída, libera ou dá baixa. Cada mudança de estoque gera `estoque_atualizado`.
 
 ```text
-produtos-service ──[produto_cadastrado]──┐
+produtos-service ──[produto_cadastrado | produto_atualizado | produto_excluido]──┐
 pedidos-service ───[pedido_criado]───────┼──► fornecimentos-service ──[fornecimento_criado]─────► mercado-service
 pedidos-service ───[pedido_atualizado]───┘          │      ▲         ──[estoque_atualizado]──────► mercado-service
+                                                     │      │         ──[fornecimento_atualizado]─► mercado-service, produtos-service (fornecimento_criado)
 Front-end ─► Gateway ─REST───────────────────────────┘      │         ──[reserva_estoque_recusada]► pedidos-service
                                                             │         ──[fornecimentos.dlt]───────► (operação)
 ```
@@ -41,17 +42,18 @@ Front-end ─► Gateway ─REST────────────────
 
 ### 3.1 Dentro do escopo
 - Cadastro de fornecimento (oferta) por empresas com perfil `SUPPLIER`.
-- Consulta e listagem paginada de fornecimentos, com filtro opcional por produto.
-- Cópia local dos produtos a partir do evento `produto_cadastrado`.
+- Consulta e listagem paginada de fornecimentos, com filtro opcional por produto. Na listagem, a oferta com disponível zero só aparece para o próprio fornecedor.
+- Alteração da oferta pelo fornecedor dono: reposição de quantidade, mudança de preço e encerramento.
+- Cópia local dos produtos a partir de `produto_cadastrado`, `produto_atualizado` e `produto_excluido`.
 - Reserva de estoque a partir de `pedido_criado`; liberação e baixa a partir de `pedido_atualizado`.
-- Publicação de `fornecimento_criado`, `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
+- Publicação de `fornecimento_criado`, `fornecimento_atualizado`, `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
 - Autenticação por JWT, autorização por perfil e propagação do `X-Correlation-Id`.
 - Endpoints técnicos `/health`, `/health/ready` e `/metrics`.
 
 ### 3.2 Fora do escopo (não implementar)
-- Alteração, reposição de quantidade e encerramento de fornecimento (aguardam a P-11 do Documento de Requisitos).
-- Endpoint REST de baixa ou ajuste de estoque. O estoque muda só pelos eventos de pedido (ADR-022 do Relatório Técnico).
-- Consumo de `empresa_cadastrada`: o conteúdo foi definido pelo grupo de Autenticação (issue #2), mas não é necessário na versão 1.1, porque o escopo ativo da empresa já vem no token. Consumo de eventos de alteração ou exclusão de produto (P-26).
+- Endpoint REST de reserva, liberação ou baixa. Essas operações acontecem só pelos eventos de pedido (ADR-022 do Relatório Técnico); o fornecedor só repõe ou encerra (API-07).
+- Cancelar ou apagar a oferta: o histórico precisa ser mantido (o professor, F16 do Documento de Requisitos). O fornecedor encerra a oferta zerando o disponível.
+- Consumo de `empresa_cadastrada`: o conteúdo foi definido pelo grupo de Autenticação (issue #2), mas não é necessário nesta versão, porque o escopo ativo da empresa já vem no token.
 - Comparação entre `fornecedorId`/`produtoId` do pedido e os dados do fornecimento.
 - Emissão de tokens e cadastro de empresas (serviço `usuarios-service`).
 - Novas tentativas (*retry*) com espera em falhas transitórias: responsabilidade do adaptador de consumo.
@@ -62,6 +64,8 @@ Front-end ─► Gateway ─REST────────────────
 | Termo | Definição precisa |
 |---|---|
 | Fornecimento | Oferta de um produto por um fornecedor, identificada por `fornecimento_id`, com preço, quantidades e origem. |
+| Oferta zerada | Fornecimento com `quantidade_disponivel` igual a 0, por encerramento, por reservas ou desde o cadastro. Não aparece na listagem para compradores (RN-18), mas continua guardada e pode ser consultada pelo identificador. |
+| Fornecedor dono | A empresa do fornecimento (`fornecedor_id`). Só ela altera a oferta. |
 | Quantidade disponível | Parte do estoque que pode ser reservada. Nunca negativa. |
 | Quantidade reservada | Parte do estoque bloqueada por pedidos em andamento. Nunca negativa. |
 | Reserva | Registro de quanto um pedido (`pedido_id`) bloqueou de um fornecimento, com uma situação (§6.2). |
@@ -121,7 +125,10 @@ class RepositorioFornecimentos(Protocol):
     def obter_produto_referencia(self, produto_id: str) -> dict | None: ...
     def inserir_fornecimento(self, fornecimento: dict) -> None: ...
     def obter_fornecimento(self, fornecimento_id: str) -> dict | None: ...
-    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int) -> tuple[list[dict], int]: ...
+    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int,
+                             incluir_zeradas_de: str | None) -> tuple[list[dict], int]: ...
+    def alterar_preco(self, fornecimento_id: str, preco: Decimal, atualizado_em: datetime) -> dict | None: ...
+    def zerar_disponivel(self, fornecimento_id: str, atualizado_em: datetime) -> tuple[dict, Decimal] | None: ...
     def aplicar_movimento(self, fornecimento_id: str, delta_disponivel: Decimal,
                           delta_reservada: Decimal, atualizado_em: datetime) -> dict | None: ...
     def obter_reserva(self, pedido_id: str, fornecimento_id: str) -> dict | None: ...
@@ -135,7 +142,8 @@ Comportamento das portas:
 - `transacao()`: tudo o que é feito no repositório dentro de `with repositorio.transacao():` é gravado de forma atômica; se uma exceção sair do bloco, nada é gravado. Toda alteração feita por um handler acontece dentro de uma única transação.
 - `aplicar_movimento` soma `delta_disponivel` à quantidade disponível e `delta_reservada` à quantidade reservada do fornecimento, e grava `atualizado_em`, **de forma atômica e somente se os dois saldos resultantes forem ≥ 0**. Retorna o fornecimento atualizado, ou `None` sem alterar nada se o fornecimento não existir ou se algum saldo ficaria negativo. **Toda mudança de quantidade deve usar esse método**; é proibido ler o fornecimento, calcular o saldo e gravar o resultado. Em produção, o método equivale a `UPDATE ... WHERE quantidade_disponivel + delta >= 0 AND quantidade_reservada + delta >= 0` (ADR-006 do Relatório Técnico), o que garante a regra mesmo com duas instâncias do serviço.
 - `salvar_produto_referencia` e `salvar_reserva` inserem ou substituem pelo identificador (`produto_id`; par `pedido_id` + `fornecimento_id`).
-- `listar_fornecimentos` devolve `(itens, total)`: no máximo `limite` itens a partir de `offset`, na ordem de `criado_em` crescente e, em empate, `fornecimento_id` crescente; `total` é o número de fornecimentos que atendem ao filtro. `produto_id=None` significa sem filtro.
+- `listar_fornecimentos` devolve `(itens, total)`: no máximo `limite` itens a partir de `offset`, na ordem de `criado_em` crescente e, em empate, `fornecimento_id` crescente; `total` é o número de fornecimentos que atendem ao filtro. `produto_id=None` significa sem filtro. Só entram fornecimentos com `quantidade_disponivel > 0` ou cujo `fornecedor_id` seja igual a `incluir_zeradas_de` (`None` = nenhuma oferta zerada).
+- `alterar_preco` grava o novo preço e `atualizado_em` e devolve o fornecimento atualizado (`None` se não existir). `zerar_disponivel` põe `quantidade_disponivel = 0` numa operação atômica e devolve `(fornecimento atualizado, quantidade que havia)`, ou `None` se não existir; a quantidade reservada não muda.
 - Valores de preço e quantidade circulam entre o serviço e o repositório como `Decimal`.
 - `publish` é síncrono e pode, no mesmo fluxo, chamar handlers inscritos; o serviço não pode entrar em deadlock nesse caso. Ordem dentro de uma escrita: validar → gravar (dentro da transação) → publicar **depois** que a transação terminar. Falhas lançadas por `publish` estão fora do escopo (o adaptador real grava o evento numa tabela de outbox e o publica depois, ADR-010).
 - `clock.now()` sempre retorna `datetime` com fuso; se vier sem fuso, tratar como UTC.
@@ -152,13 +160,13 @@ Comportamento das portas:
 | fornecedor_id | string | Sim | Claim `tenant_id` do token. |
 | produto_id | string | Sim | Corpo da requisição; precisa existir como produto de referência. |
 | unidade | string | Sim | Copiada do produto de referência no cadastro. |
-| preco | valor decimal | Sim | Corpo da requisição; > 0. |
-| quantidade_disponivel | valor decimal | Sim | Corpo da requisição no cadastro (> 0); depois, só muda por `aplicar_movimento`; ≥ 0. |
+| preco | valor decimal | Sim | Corpo da requisição; ≥ 0. Muda por `alterar_preco` (API-07); o novo preço vale para todo o estoque da oferta. |
+| quantidade_disponivel | valor decimal | Sim | Corpo da requisição no cadastro (≥ 0); depois, só muda por `aplicar_movimento` (eventos de pedido e reposição) e `zerar_disponivel` (encerramento); ≥ 0. |
 | quantidade_reservada | valor decimal | Sim | `0` no cadastro; só muda por `aplicar_movimento`; ≥ 0. |
 | origem | objeto (`cidade`, `uf`) | Sim | Corpo da requisição; formato do glossário (Origem). Grava só `cidade` e `uf`, depois de `strip()`. |
 | criado_por_usuario_id | string | Sim | Claim `sub` do token. |
 | criado_em | instante | Sim | `clock.now()` no cadastro. |
-| atualizado_em | instante | Sim | `clock.now()` no cadastro e a cada movimento. |
+| atualizado_em | instante | Sim | `clock.now()` no cadastro, a cada movimento e a cada alteração da oferta. |
 
 #### ProdutoReferencia
 | Atributo | Tipo | Obrigatório | Restrições / origem |
@@ -167,7 +175,7 @@ Comportamento das portas:
 | nome | string | Sim | `payload.nome`. |
 | unidade | string | Sim | `payload.unidade`. |
 | tipo_transporte | string | Sim | `payload.tipoTransporte`. |
-| ativo | booleano | Sim | `True` na criação. |
+| ativo | booleano | Sim | `True` na criação; `False` quando chega `produto_excluido` (RN-20). Produto inativo é tratado como inexistente no cadastro de fornecimento. |
 | versao_evento | instante | Sim | `timestamp` do envelope do evento aplicado. |
 
 #### Reserva
@@ -223,6 +231,7 @@ Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da req
 | API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
 | API-05 | GET | `/api/v1/fornecimentos/{fornecimento_id}` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `FORNECIMENTO_NAO_ENCONTRADO` |
 | API-06 | GET | `/api/v1/fornecimentos` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `PAGINACAO_INVALIDA` |
+| API-07 | PATCH | `/api/v1/fornecimentos/{fornecimento_id}` | `SUPPLIER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `FORNECIMENTO_NAO_ENCONTRADO` → 403 `FORNECIMENTO_DE_OUTRA_EMPRESA` → 422 `DADOS_INVALIDOS` (reposição acima do máximo) → 500 `ERRO_INTERNO` |
 
 #### API-01 — Saúde
 Resposta 200: `{"status": "UP", "service": "fornecimentos-service", "timestamp": "2026-10-26T14:00:00Z"}`
@@ -267,7 +276,10 @@ Resposta 200: o fornecimento completo, no formato da resposta 201 da API-04.
 #### API-06 — Listar fornecimentos
 Parâmetros: `page` (inteiro ≥ 1, padrão 1), `size` (inteiro de 1 a 100, padrão 10), `produto_id` (opcional; se ausente ou não for texto preenchido, sem filtro).
 
-Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04.
+Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04. A oferta zerada só aparece quando o token tem escopo `SUPPLIER` e `tenant_id` igual ao `fornecedor_id` dela (RN-18).
+
+#### API-07 — Alterar ou encerrar fornecimento
+Corpo: objeto com pelo menos um destes campos: `preco` (valor decimal ≥ 0, novo preço de todo o estoque da oferta), `repor` (valor decimal > 0, somado ao disponível) ou `encerrar` (só `true`, zera o disponível). `encerrar` não pode vir com `preco` nem com `repor`. Resposta 200: o fornecimento completo depois da alteração. Exemplo: `{"preco": 12, "repor": 5}`.
 
 ### 7.3 Eventos consumidos
 
@@ -276,6 +288,8 @@ Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 
 | `produto_cadastrado` | `produtos-service` | `produtoId` | RF-05 | Publicar em `fornecimentos.dlt` (RN-09) |
 | `pedido_criado` | `pedidos-service` | `pedidoId` | RF-06 | Publicar em `fornecimentos.dlt` (RN-09) |
 | `pedido_atualizado` | `pedidos-service` | `pedidoId` | RF-07 | Publicar em `fornecimentos.dlt` (RN-09) |
+| `produto_atualizado` | `produtos-service` | `produtoId` | RF-05 (RN-20) | Publicar em `fornecimentos.dlt` (RN-09) |
+| `produto_excluido` | `produtos-service` | `produtoId` | RF-05 (RN-20) | Publicar em `fornecimentos.dlt` (RN-09) |
 
 Envelope esperado em todas as mensagens (padrão do kit): `eventId`, `eventType`, `eventVersion`, `timestamp`, `source`, `correlationId`, `aggregateId`, `payload`. Campos extras no envelope ou no payload são ignorados.
 
@@ -337,7 +351,8 @@ Envelope comum:
 | Tópico | Quando | Chave de partição | Payload |
 |---|---|---|---|
 | `fornecimento_criado` | Fornecimento cadastrado (RF-01) | `fornecimento_id` | `fornecimentoId`, `fornecedorId`, `produtoId`, `unidade`, `preco`, `quantidadeDisponivel`, `origem`, `criadoPor` (`empresaId`, `usuarioId`), `criadoEm` |
-| `estoque_atualizado` | Reserva, liberação ou baixa (RF-06, RF-07) | `fornecimento_id` | `fornecimentoId`, `produtoId`, `fornecedorId`, `operacao` (`RESERVA`, `LIBERACAO` ou `BAIXA`), `quantidadeMovimentada`, `quantidadeDisponivel` e `quantidadeReservada` (saldos depois da operação), `pedidoId`, `atualizadoEm` |
+| `fornecimento_atualizado` | Oferta alterada ou encerrada (RF-10), quando houve mudança de preço ou de quantidade | `fornecimento_id` | `fornecimentoId`, `fornecedorId`, `produtoId`, `unidade`, `preco`, `quantidadeDisponivel`, `origem`, `atualizadoPor` (`empresaId`, `usuarioId`), `atualizadoEm`. O tópico ainda não existe no kit (P-37 do Documento de Requisitos) |
+| `estoque_atualizado` | Reserva, liberação, baixa, reposição ou encerramento (RF-06, RF-07, RF-10) | `fornecimento_id` | `fornecimentoId`, `produtoId`, `fornecedorId`, `operacao` (`RESERVA`, `LIBERACAO`, `BAIXA`, `REPOSICAO` ou `ENCERRAMENTO`; nos dois últimos, `pedidoId` é `null`), `quantidadeMovimentada`, `quantidadeDisponivel` e `quantidadeReservada` (saldos depois da operação), `pedidoId`, `atualizadoEm` |
 | `reserva_estoque_recusada` | Reserva não feita (RF-06) | `pedido_id` | `pedidoId`, `fornecimentoId`, `quantidadeSolicitada`, `quantidadeDisponivel` (`null` se o fornecimento não existe), `motivo` (`ESTOQUE_INSUFICIENTE` ou `FORNECIMENTO_INEXISTENTE`), `recusadoEm` |
 | `fornecimentos.dlt` | Mensagem consumida inválida ou com falha (RN-09) | `aggregateId` da mensagem original se for texto preenchido; senão `eventId` original se for texto preenchido; senão `"desconhecido"` | `originalEvent` (a mensagem recebida, intacta), `error` (texto não vazio com o motivo), `stackTrace` (`""` para mensagem inválida; o *traceback* para exceção), `failedAtAttempt` (`1`) |
 
@@ -419,13 +434,13 @@ Cenário: Dados inválidos (partição de equivalência e valor-limite)
   Dado o produto PROD-1 conhecido e um token de "SUPPLIER"
   Quando envia POST /api/v1/fornecimentos com corpos que diferem do corpo do CA-01 só em:
     | caso                              | alteração                                 |
-    | preço zero                        | "preco": 0                                |
+    | preço negativo pequeno            | "preco": -0.01                            |
     | preço negativo                    | "preco": -1                               |
     | preço como string                 | "preco": "5.50"                           |
     | preço com 3 casas                 | "preco": 5.555                            |
     | preço acima do máximo             | "preco": 10000000000                      |
     | preço booleano                    | "preco": true                             |
-    | quantidade zero                   | "quantidade_disponivel": 0                |
+    | quantidade negativa               | "quantidade_disponivel": -1               |
     | quantidade com 3 casas            | "quantidade_disponivel": 1.234            |
     | origem como texto (formato antigo)| "origem": "Goiânia-GO"                    |
     | cidade só com espaços             | "origem": {"cidade": "   ", "uf": "GO"}   |
@@ -458,6 +473,13 @@ Cenário: Falha do repositório
   Quando envia o corpo do CA-01
   Então a resposta é 500 com codigo "ERRO_INTERNO"
   E nenhuma mensagem é publicada
+
+# CA-51
+Cenário: Preço e quantidade zero no cadastro (valor-limite)
+  Dado o produto PROD-1 conhecido e um token de "SUPPLIER"
+  Quando envia POST /api/v1/fornecimentos com o corpo do CA-01, preco 0 e quantidade_disponivel 0
+  Então a resposta é 201 com preco 0 e quantidade_disponivel 0
+  E exatamente 1 mensagem é publicada em "fornecimento_criado"
 ```
 
 ### RF-02 — Consultar fornecimento
@@ -510,6 +532,17 @@ Cenário: Parâmetros de paginação inválidos
   Então cada resposta é 422 com codigo "PAGINACAO_INVALIDA"
   Quando consulta GET /api/v1/fornecimentos?size=100
   Então a resposta é 200
+
+# CA-52
+Cenário: Oferta zerada só aparece para o próprio fornecedor
+  Dado o fornecimento FORN-ZERO (EMP-34, disponível 0, criado às 13:00:00Z) e o fornecimento FORN-COM (EMP-34, disponível 10, criado às 13:00:01Z)
+  Quando um token de "BUYER" consulta GET /api/v1/fornecimentos
+  Então a resposta tem só o item FORN-COM e total 1
+  Quando um token de "SUPPLIER" da empresa "EMP-34" consulta a mesma rota
+  Então a resposta tem os itens FORN-ZERO e FORN-COM e total 2
+  Quando um token de "SUPPLIER" da empresa "EMP-99" consulta a mesma rota
+  Então a resposta tem só o item FORN-COM
+  E GET /api/v1/fornecimentos/FORN-ZERO com token de "BUYER" responde 200
 ```
 
 ### RF-04 — Publicar fornecimento criado
@@ -561,6 +594,22 @@ Cenário: Produto inválido vai para a DLT
   Então o handler não lança exceção
   E é publicada em "fornecimentos.dlt" uma mensagem com key "PROD-8", payload.originalEvent igual à mensagem recebida, payload.error não vazio, payload.stackTrace "" e payload.failedAtAttempt 1
   E POST /api/v1/fornecimentos com produto_id "PROD-8" retorna 422 com codigo "PRODUTO_INEXISTENTE"
+
+# CA-58
+Cenário: Alteração e exclusão de produto na cópia local
+  Dado um produto_atualizado de PROD-1 com unidade "KG" e timestamp 2026-10-26T13:59:30Z
+  Quando o fornecedor cadastra um fornecimento de PROD-1
+  Então a resposta tem unidade "KG"
+  Dado um produto_atualizado de PROD-1 com unidade "L" e timestamp 2026-10-26T13:59:10Z (mais antigo)
+  Então a cópia local continua com unidade "KG"
+  Dado um produto_excluido de PROD-1 com timestamp 2026-10-26T13:59:40Z
+  Quando o fornecedor cadastra outro fornecimento de PROD-1
+  Então a resposta é 422 com codigo "PRODUTO_INEXISTENTE"
+  Dado um produto_excluido de PROD-9 e, depois, o produto_cadastrado de PROD-9 (fora de ordem)
+  Quando o fornecedor cadastra um fornecimento de PROD-9
+  Então a resposta é 422 com codigo "PRODUTO_INEXISTENTE"
+  Quando chega um produto_excluido sem payload.produtoId
+  Então ele é publicado em "fornecimentos.dlt"
 ```
 
 ### RF-06 — Reservar estoque a partir de pedido criado
@@ -742,6 +791,60 @@ Cenário: Serviço de chaves indisponível
   E nenhum fornecimento é gravado e nenhuma mensagem é publicada
 ```
 
+### RF-10 — Alterar e encerrar a oferta
+- **Prioridade:** Must
+- **Enunciado (EARS):** Quando o fornecedor dono enviar uma alteração válida para a API-07, o serviço deve repor a quantidade, mudar o preço de todo o estoque da oferta ou encerrá-la zerando o disponível, e publicar os eventos correspondentes.
+- **Regras aplicáveis:** RN-11, RN-17, RN-18, RN-19
+- **Interface:** API-07, tópicos `estoque_atualizado` e `fornecimento_atualizado`
+
+**Critérios de aceitação**
+```gherkin
+# CA-53
+Cenário: Reposição de quantidade
+  Dado o fornecimento FORN-1 (EMP-34, preço 5.5, disponível 70, reservada 30) e o relógio em 2026-10-26T14:05:00Z
+  Quando um token de "SUPPLIER" da EMP-34 envia PATCH /api/v1/fornecimentos/FORN-1 com {"repor": 50} e X-Correlation-Id "corr-repor"
+  Então a resposta é 200 com quantidade_disponivel 120, quantidade_reservada 30, preco 5.5 e atualizado_em "2026-10-26T14:05:00Z"
+  E exatamente 1 mensagem é publicada em "estoque_atualizado", com key "FORN-1", correlationId "corr-repor" e payload operacao "REPOSICAO", quantidadeMovimentada 50, quantidadeDisponivel 120, quantidadeReservada 30 e pedidoId null
+  E exatamente 1 mensagem é publicada em "fornecimento_atualizado", com key "FORN-1" e quantidadeDisponivel 120
+
+# CA-54
+Cenário: Mudança de preço vale para todo o estoque da oferta
+  Dado o fornecimento FORN-1 (EMP-34, preço 5.5, disponível 5)
+  Quando o fornecedor envia PATCH com {"preco": 12}
+  Então a resposta é 200 com preco 12 e quantidade_disponivel 5
+  E nenhuma mensagem é publicada em "estoque_atualizado" e 1 em "fornecimento_atualizado", com preco 12, quantidadeDisponivel 5 e atualizadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"}
+  Quando envia PATCH com {"preco": 0, "repor": 5}
+  Então a resposta é 200 com preco 0 e quantidade_disponivel 10, com 1 mensagem REPOSICAO e mais 1 fornecimento_atualizado
+
+# CA-55
+Cenário: Encerramento mantém a reserva e tira a oferta da vitrine
+  Dado o fornecimento FORN-1 (EMP-34, disponível 70, reservada 30)
+  Quando o fornecedor envia PATCH com {"encerrar": true}
+  Então a resposta é 200 com quantidade_disponivel 0 e quantidade_reservada 30
+  E é publicada 1 mensagem em "estoque_atualizado" com operacao "ENCERRAMENTO" e quantidadeMovimentada 70, e 1 em "fornecimento_atualizado"
+  E GET /api/v1/fornecimentos com token de "BUYER" tem total 0
+  Quando o fornecedor envia o mesmo PATCH de novo
+  Então a resposta é 200 e nenhuma mensagem é publicada
+
+# CA-56
+Cenário: Corpo inválido na alteração (partição de equivalência)
+  Dado o fornecimento FORN-1 (EMP-34, preço 5.5, disponível 70)
+  Quando o fornecedor envia PATCH com cada corpo: {}, {"preco": -1}, {"preco": 1.234}, {"repor": 0}, {"repor": "5"}, {"repor": 10000000000}, {"encerrar": false}, {"encerrar": true, "preco": 5}, {"encerrar": true, "repor": 5} e ["x"]
+  Então cada resposta é 422 com codigo "DADOS_INVALIDOS"
+  E o fornecimento continua com preço 5.5 e disponível 70, e nenhuma mensagem é publicada
+
+# CA-57
+Cenário: Permissões e fornecimento inexistente na alteração
+  Dado o fornecimento FORN-1 da EMP-34
+  Quando um token de "BUYER" envia PATCH com {"repor": 1}
+  Então a resposta é 403 com codigo "PERFIL_NAO_PERMITIDO"
+  Quando um token de "SUPPLIER" da EMP-99 envia o mesmo PATCH
+  Então a resposta é 403 com codigo "FORNECIMENTO_DE_OUTRA_EMPRESA"
+  Quando o fornecedor da EMP-34 envia o PATCH para FORN-X
+  Então a resposta é 404 com codigo "FORNECIMENTO_NAO_ENCONTRADO"
+  E o FORN-1 continua com disponível 70 e nenhuma mensagem é publicada
+```
+
 ### RF-09 — Propagar o identificador de correlação
 - **Prioridade:** Should
 - **Enunciado (EARS):** O serviço deve devolver o correlation id no cabeçalho `X-Correlation-Id` de toda resposta, no campo `correlationId` de todo erro, e repassá-lo no `correlationId` de todo evento publicado, inclusive os publicados por handlers.
@@ -797,7 +900,7 @@ Cenário: Métricas
 | ID | Regra | Exemplo concreto |
 |---|---|---|
 | RN-01 | Apenas o perfil `SUPPLIER` cadastra fornecimentos. `BUYER`, `CARRIER` e `TENANT_ADMIN` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403. |
-| RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON > 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` objeto no formato do glossário (Origem). Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` → aceito; `"origem": {"cidade": "Goiânia", "uf": "go"}` → 422. |
+| RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) ≥ 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON ≥ 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` objeto no formato do glossário (Origem). Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` e `"preco": 0` → aceitos; `"origem": {"cidade": "Goiânia", "uf": "go"}` → 422. |
 | RN-03 | O `produto_id` precisa existir como produto de referência; senão → 422 `PRODUTO_INEXISTENTE`. A `unidade` do fornecimento é copiada do produto de referência. | PROD-X desconhecido → 422. |
 | RN-04 | Requisição recusada (qualquer 4xx ou 5xx) não grava nada e não publica evento. | 403 → nenhuma mensagem. |
 | RN-05 | Consulta e listagem: perfis `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` → 403 `PERFIL_NAO_PERMITIDO`. `fornecimento_id` inexistente → 404 `FORNECIMENTO_NAO_ENCONTRADO`. | Transportadora em GET → 403. |
@@ -812,6 +915,10 @@ Cenário: Métricas
 | RN-14 | Reserva (§6.2): se já existe reserva para o par (`pedidoId`, `fornecimentoId`), em qualquer situação, nada muda e nada é publicado. Se não existe: com `aplicar_movimento(-q, +q)` bem-sucedido, grava a reserva `RESERVADA` e publica `estoque_atualizado` (`RESERVA`); se o fornecimento não existe ou o saldo é insuficiente, não grava reserva e publica `reserva_estoque_recusada`. | FORN-1 100/0, pedido de 30 → 70/30. |
 | RN-15 | `pedido_atualizado` válido exige `payload.pedidoId`, `payload.fornecimentoId` e `payload.status` como texto preenchido. | Sem `status` → DLT. |
 | RN-16 | Liberação e baixa (§6.2): com reserva `RESERVADA` de quantidade q, `CANCELADO` aplica `(+q, −q)` e muda para `LIBERADA`; `VENDA_CONCLUIDA` aplica `(0, −q)` e muda para `BAIXADA`; as duas publicam `estoque_atualizado`. Sem reserva, `CANCELADO` grava reserva `CANCELADA_SEM_RESERVA` com quantidade 0. Nos demais casos, nada muda e nada é publicado. Em todos os casos válidos, o `eventId` é registrado. | PED-1 RESERVADA 30 + CANCELADO → 100/0. |
+| RN-17 | Alteração da oferta (API-07): só escopo `SUPPLIER` (senão 403 `PERFIL_NAO_PERMITIDO`) e só o fornecedor dono (`fornecedor_id` igual ao claim `tenant_id`; senão 403 `FORNECIMENTO_DE_OUTRA_EMPRESA`). Corpo: ver API-07; violação, nenhum dos três campos, `encerrar` diferente de `true` ou combinado com outro campo → 422 `DADOS_INVALIDOS`. Reposição que levaria o disponível acima de 9999999999.99 → 422. | `{"encerrar": true, "preco": 5}` → 422. |
+| RN-18 | Vitrine: na API-06, a oferta com `quantidade_disponivel` 0 não aparece, salvo para o próprio fornecedor (escopo `SUPPLIER` e `tenant_id` igual ao `fornecedor_id`). A API-05 mostra qualquer oferta. | Oferta encerrada some da lista do comprador. |
+| RN-19 | Efeitos da API-07, numa única transação: `preco` → `alterar_preco`; `repor` q → `aplicar_movimento(+q, 0)` e `estoque_atualizado` com `REPOSICAO` e `quantidadeMovimentada` q; `encerrar` → `zerar_disponivel` e, se havia disponível maior que zero, `estoque_atualizado` com `ENCERRAMENTO` e `quantidadeMovimentada` igual ao que havia. A reserva existente continua. Se houve mudança de preço ou de quantidade, publica também `fornecimento_atualizado`. Encerrar oferta já zerada responde 200 e não publica nada. Os eventos saem depois da transação, com o correlation id da requisição. | Encerrar com 70 disponíveis e 30 reservados → 0 e 30, `ENCERRAMENTO` 70. |
+| RN-20 | `produto_atualizado` válido exige os mesmos campos do RN-07; atualiza a cópia local só se o `timestamp` for mais novo que o último aplicado (`versao_evento`), mantendo `ativo`. `produto_excluido` válido exige `payload.produtoId` e `timestamp`; põe `ativo = False` se o `timestamp` for igual ou mais novo que o último aplicado. Exclusão de produto desconhecido cria a cópia já inativa, para que um `produto_cadastrado` atrasado não o reative. Produto inativo no cadastro de fornecimento → 422 `PRODUTO_INEXISTENTE`. | `produto_atualizado` mais antigo → ignorado. |
 
 ## 10. Catálogo de erros
 
@@ -836,12 +943,13 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | TOKEN_INVALIDO | 401 | Token Inválido | §7.1, item 2. |
 | TOKEN_EXPIRADO | 401 | Token Expirado | §7.1, item 3. |
 | CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 4. |
-| PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01, RN-05. |
+| PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01, RN-05, RN-17. |
+| FORNECIMENTO_DE_OUTRA_EMPRESA | 403 | Fornecimento de Outra Empresa | RN-17. |
 | FORNECIMENTO_NAO_ENCONTRADO | 404 | Fornecimento Não Encontrado | RN-05. |
 | ROTA_NAO_ENCONTRADA | 404 | Rota Não Encontrada | Rota inexistente. |
 | METODO_NAO_PERMITIDO | 405 | Método Não Permitido | Método não aceito pela rota. |
 | DADOS_INVALIDOS | 422 | Dados Inválidos | RN-02. |
-| PRODUTO_INEXISTENTE | 422 | Produto Inexistente | RN-03. |
+| PRODUTO_INEXISTENTE | 422 | Produto Inexistente | RN-03, RN-20 (produto excluído). |
 | PAGINACAO_INVALIDA | 422 | Paginação Inválida | RN-06. |
 | ERRO_INTERNO | 500 | Erro Interno | Exceção não prevista na API, inclusive do repositório. O `detail` não expõe a mensagem da exceção. |
 | DEPENDENCIA_INDISPONIVEL | 503 | Dependência Indisponível | API-02 com dependência indisponível; §7.1, item 2 (serviço de chaves indisponível). |
@@ -857,7 +965,8 @@ Respostas fora do catálogo: nenhuma. A documentação automática do framework 
 6. PERFIL_NAO_PERMITIDO
 7. DADOS_INVALIDOS / PAGINACAO_INVALIDA
 8. PRODUTO_INEXISTENTE / FORNECIMENTO_NAO_ENCONTRADO
-9. ERRO_INTERNO
+9. FORNECIMENTO_DE_OUTRA_EMPRESA
+10. ERRO_INTERNO
 
 ## 11. Requisitos não funcionais
 
@@ -933,15 +1042,16 @@ Cenário: Token não vaza
 
 | Requisito | Regras | Interfaces | Critérios de aceitação |
 |---|---|---|---|
-| RF-01 | RN-01, RN-02, RN-03, RN-04, RN-10 | API-04, `fornecimento_criado` | CA-01 a CA-06 |
+| RF-01 | RN-01, RN-02, RN-03, RN-04, RN-10 | API-04, `fornecimento_criado` | CA-01 a CA-06, CA-51 |
 | RF-02 | RN-05, RN-06 | API-05 | CA-07 a CA-09 |
-| RF-03 | RN-05, RN-06 | API-06 | CA-10, CA-11 |
+| RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52 |
 | RF-04 | RN-04, RN-12 | `fornecimento_criado` | CA-12, CA-13 |
-| RF-05 | RN-07, RN-08, RN-09 | `produto_cadastrado`, `fornecimentos.dlt` | CA-14 a CA-16 |
+| RF-05 | RN-07, RN-08, RN-09, RN-20 | `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimentos.dlt` | CA-14 a CA-16, CA-58 |
 | RF-06 | RN-08, RN-09, RN-11, RN-13, RN-14 | `pedido_criado`, `estoque_atualizado`, `reserva_estoque_recusada`, `fornecimentos.dlt` | CA-17 a CA-26 |
 | RF-07 | RN-08, RN-09, RN-11, RN-15, RN-16 | `pedido_atualizado`, `estoque_atualizado`, `fornecimentos.dlt` | CA-27 a CA-30 |
 | RF-08 | RN-01, RN-04, RN-05 | API-04 a API-06 | CA-31 a CA-34, CA-48 a CA-50 |
 | RF-09 | RN-12 | todas | CA-35, CA-36 |
+| RF-10 | RN-11, RN-17, RN-18, RN-19 | API-07, `estoque_atualizado`, `fornecimento_atualizado` | CA-53 a CA-57 |
 | RF-10 | — | API-01 a API-03 | CA-37 a CA-39 |
 | RNF-01 a RNF-08 | — | todas | CA-40 a CA-47 |
 
@@ -960,13 +1070,16 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-06 | Decisão | Como avisar Pedidos quando falta estoque (P-16). | Tópico `reserva_estoque_recusada`. A criação do tópico no cluster foi pedida ao grupo de Infraestrutura (issue #12). |
 | Q-07 | Decisão | Cancelamento que chega antes da criação do pedido (tópicos diferentes não garantem ordem). | Reserva `CANCELADA_SEM_RESERVA`; a criação posterior é ignorada (§6.2, CA-29). |
 | Q-08 | Decisão | Venda concluída sem reserva. | Ignorada e não registrada como reserva. Na prática não ocorre, porque a venda é concluída muito depois da criação do pedido. |
-| Q-09 | Decisão | Comparar `fornecedorId` e `produtoId` do pedido com os do fornecimento. | Não comparar na versão 1.0 (§3.2). |
+| Q-09 | Decisão | Comparar `fornecedorId` e `produtoId` do pedido com os do fornecimento. | Não comparar (§3.2). |
 | Q-10 | Decisão | Quem consulta ofertas (P-07). | `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` não. Só `SUPPLIER` cadastra (o Grupo de Teste testa comprador criando fornecimento → 403, kit seção 10.2). |
 | Q-11 | Decisão | Valores monetários em JSON: string (exemplo do Grupo de Teste) ou número (kit e Contrato de Eventos). | Número JSON, convertido para `Decimal` com `Decimal(str(valor))`. Mantém o padrão do kit usado pelos outros grupos e evita erro de arredondamento nas contas (CA-41). |
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
 | Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (ADR-010). |
 | Q-14 | Premissa | Momento em que o pedido é criado (P-29). | Definido pelo professor em 2026-11-12: na abertura do leilão ou da negociação, antes do fechamento. O serviço reserva quando receber `pedido_criado`; o `compradorId` pode vir vazio até o leilão fechar e não é usado pelo serviço. Esta ESP não muda de comportamento. |
 | Q-16 | Decisão | Formato da origem (P-05). O kit guardava texto livre; a Logística pediu cidade e UF para usar como ponto de coleta (2026-11-10). | Objeto com `cidade` e `uf` (glossário), no mesmo formato do campo `origem` que a Logística propôs para o `pedido_criado`. UF validada contra a lista do IBGE. |
+| Q-17 | Decisão | Alteração e encerramento de oferta (P-11, respondida pelo professor em aula, F16 do Documento de Requisitos). | Reposição, mudança de preço e encerramento pela API-07 (RN-17 a RN-19). O novo preço vale para todo o estoque, como no exemplo do professor. O encerramento zera só o disponível: a quantidade reservada para pedidos em andamento continua. Se um desses pedidos for cancelado depois, a quantidade volta ao disponível e a oferta reaparece na vitrine; o fornecedor pode encerrar de novo. |
+| Q-18 | Decisão | Preço e quantidade zero (P-21; o trecho sobre preço zero com estoque está truncado na transcrição). | Zero é aceito no cadastro e na alteração (RN-02). A vitrine esconde só a oferta com disponível zero (RN-18); a oferta com preço zero e estoque aparece. Revisar se o professor decidir diferente. |
+| Q-19 | Decisão | Tópico da alteração de oferta (P-37). | `fornecimento_atualizado`, ainda não criado no kit. O Redpanda do kit em modo `dev-container` cria o tópico na primeira publicação, com 1 partição; a criação com 3 partições foi pedida à Infraestrutura. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1006,3 +1119,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.3 | 2026-11-11 | Grupo de Fornecimento e Produtos | Texto sobre a falha de `publish` ajustado ao outbox implementado no adaptador (ADR-010): o evento é gravado numa tabela e publicado depois. Sem mudança de comportamento nem de critérios de aceitação. |
 | 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-48 a CA-50 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-49. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |
 | 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-14 confirmada pelo professor (pedido criado na abertura do leilão ou da negociação; `compradorId` pode vir vazio). Só texto, sem mudança de comportamento nem de critérios. |
+| 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Preço e quantidade zero aceitos (RN-02, CA-51; CA-03 ajustado). Vitrine sem ofertas zeradas para compradores (RN-18, CA-52). Alteração e encerramento de oferta (API-07, RF-10, RN-17, RN-19, CA-53 a CA-57) com `fornecimento_atualizado` e as operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`. Consumo de `produto_atualizado` e `produto_excluido` (RN-20, CA-58). Novo código `FORNECIMENTO_DE_OUTRA_EMPRESA` (403). Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudanças incompatíveis com a 1.x:** zero passa a ser aceito no cadastro, e a listagem do comprador deixa de mostrar ofertas zeradas. |

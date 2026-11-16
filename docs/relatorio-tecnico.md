@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.9 (esboço)
+**Versão:** 0.10 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -133,7 +133,8 @@ O grupo analisou o kit antes de usá-lo como base. A tabela registra o que foi e
 | K11 | O guia, o `CONTRACTS.md`, o script de tópicos e o código divergem em nomes de tópico, chaves, campo de versão do envelope e nome do claim da empresa | Comparação dos arquivos | Risco de cada grupo seguir um arquivo diferente | Seguir o que está implementado e pedir a unificação (P-33) |
 | K12 | O `pg-primary` sobe com `synchronous_commit=on` e `synchronous_standby_names='pg_replica'`. Na inicialização, o PostgreSQL só escuta o socket local, a réplica não se conecta e o `CREATE DATABASE "portal_b2b"` espera por ela para sempre | Execução do kit com Docker (11/11/2026), `wait_event` `SyncRep` | O banco `portal_b2b` nunca é criado; nenhum serviço do kit consegue usar o banco | Contorno opcional para teste local em `servicos/integracao-kit/`; correção pedida à Infraestrutura |
 | K13 | O gateway não tem a rota `/.well-known/jwks.json` | Execução do kit com Docker | Os serviços não conseguem validar os tokens RS256 da Autenticação | Rota pedida pela Autenticação à Infraestrutura; nos testes, servidor JWKS de teste |
-| K14 | O tópico `reserva_estoque_recusada` não está no script de tópicos, e o Redpanda em modo `dev-container` cria tópicos sozinhos com 1 partição | Execução do kit com Docker (`auto_create_topics_enabled` = `true`, `default_topic_partitions` = `1`) | O tópico sairia fora do padrão de 3 partições e replicação 3 | Criar à mão até o script ser atualizado (issue #12) |
+| K14 | Os tópicos `reserva_estoque_recusada`, `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado` não estão no script de tópicos, e o Redpanda em modo `dev-container` cria tópicos sozinhos com 1 partição | Execução do kit com Docker (`auto_create_topics_enabled` = `true`, `default_topic_partitions` = `1`) | O tópico sairia fora do padrão de 3 partições e replicação 3 | Criar à mão até o script ser atualizado (issue #12) |
+| K15 | O script de tópicos ignora as falhas de criação (`|| true`) e informa sucesso. Rodado antes de os três brokers estarem no ar, deixa de criar os primeiros tópicos da lista | Execução do kit com Docker em 16/11/2026 (`empresa_cadastrada` e `produto_cadastrado` não foram criados) | O tópico falta ou é criado sozinho com 1 partição, e um consumidor já inscrito demora até 5 minutos para enxergá-lo. Causa provável da falha da issue #24 | Esperar os três brokers antes de criar os tópicos, como no passo 3 do README da integração |
 
 ---
 
@@ -202,16 +203,17 @@ Proposta do grupo, seguindo o padrão do kit (ADR-020):
 | POST | `/api/v1/produtos` | Fornecedor ou comprador | RF-01, RN-08 | Proposto (perfil comprador: P-30) |
 | GET | `/api/v1/produtos?page=&size=&categoria=` | Autenticado | RF-02, RNF-21 | Proposto |
 | GET | `/api/v1/produtos/{id}` | Autenticado | RF-02 | Proposto |
-| PUT | `/api/v1/produtos/{id}` | A definir (P-07) | RF-03 | Proposto |
-| DELETE | `/api/v1/produtos/{id}` | A definir (P-07) | RF-04 | Proposto |
+| PUT | `/api/v1/produtos/{id}` | Empresa que cadastrou, sem movimentação | RF-03, RN-12 | Implementado (ESP-PRD-001 v2.0) |
+| DELETE | `/api/v1/produtos/{id}` | Empresa que cadastrou, sem movimentação | RF-04, RN-12, RN-13 | Implementado (ESP-PRD-001 v2.0) |
 | POST | `/api/v1/fornecimentos` | Fornecedor | RF-09, RN-02, RN-10 | Proposto |
 | GET | `/api/v1/fornecimentos?page=&size=&produto_id=` | Comprador ou fornecedor | RF-10, RNF-21 | Proposto |
+| PATCH | `/api/v1/fornecimentos/{id}` | Fornecedor dono da oferta | RF-11, RN-14, RN-15 | Implementado (ESP-FRN-001 v2.0) |
 | GET | `/api/v1/fornecimentos/{id}` | Comprador ou fornecedor | RF-10 | Proposto |
 | GET | `/health`, `/health/ready`, `/metrics`, `/docs`, `/openapi.json` | Sem autenticação | RNF-22 | Aceita (F8) |
 
 Códigos de resposta de erro, sempre no formato RFC 7807 (RNF-20): 401 (token ausente, inválido ou expirado), 403 (perfil sem permissão), 404 (recurso inexistente), 422 (dados inválidos, `size` maior que 100, produto inexistente no cadastro de fornecimento ou quantidade maior que a disponível), 429 (limite de requisições do gateway) e 503 (dependência fora do ar em `/health/ready`).
 
-Preços são em reais (BRL), com 2 casas decimais, trafegando como número JSON sem símbolo de moeda (decisão do grupo, P-15, a confirmar com o professor).
+Preços são em reais (BRL), com 2 casas decimais, trafegando como número JSON sem símbolo de moeda (P-15, confirmado: real brasileiro).
 
 O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A proposta do grupo é não manter esse endpoint, porque o estoque muda pelos eventos de pedido (ADR-022).
 
@@ -224,7 +226,9 @@ O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A p
 | Tópico | Serviço | Papel | Chave (`aggregateId`) | Status |
 |---|---|---|---|---|
 | `produto_cadastrado` | Produtos | Publica | `produtoId` | Aceita (F8) |
-| Alteração e exclusão de produto | Produtos | Publica | `produtoId` | Pendente: o kit não tem tópico (ADR-013, P-26) |
+| `produto_atualizado`, `produto_excluido` | Produtos | Publica | `produtoId` | Implementado; o kit ainda não tem os tópicos (ADR-013, P-26) |
+| `fornecimento_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Implementado; o kit ainda não tem o tópico (P-37) |
+| `fornecimento_criado` (consumo) | Produtos | Consome | `fornecimentoId` | Implementado: marca a movimentação do produto (ADR-014) |
 | `produto_cadastrado` | Fornecimentos | Consome | `produtoId` | Aceita (ADR-011) |
 | `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8) |
 | `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8) |
@@ -327,7 +331,7 @@ Até a aprovação do grupo de Banco de Dados, os serviços usam a proposta de D
 
 ## 10. Implantação
 
-Os serviços rodam dentro do kit, com duas instâncias de cada um, por um arquivo de override do Docker Compose que não altera nenhum arquivo do kit: [`servicos/integracao-kit/`](../servicos/integracao-kit/README.md). O README dessa pasta tem o passo a passo (variáveis no `.env`, banco com a proposta de DDL, tópicos, servidor JWKS de teste, subida das quatro instâncias e teste de fumaça) e foi seguido do início ao fim em 11/11/2026.
+Os serviços rodam dentro do kit, com duas instâncias de cada um, por um arquivo de override do Docker Compose que não altera nenhum arquivo do kit: [`servicos/integracao-kit/`](../servicos/integracao-kit/README.md). O README dessa pasta tem o passo a passo (variáveis no `.env`, banco com a proposta de DDL, tópicos, servidor JWKS de teste, subida das quatro instâncias e teste de fumaça) e foi seguido do início ao fim em 11/11/2026 e, com a versão 2.0, de novo em 16/11/2026.
 
 Variáveis de ambiente lidas por `servidor.py`:
 
@@ -342,7 +346,7 @@ Variáveis de ambiente lidas por `servidor.py`:
 | `JWT_ISSUER`, `JWT_AUDIENCE` | `identity-service`, `b2b-platform` | Emissor (`iss`) e audiência (`aud`) esperados no token |
 | `PORT` | `8102` ou `8103` | Porta HTTP |
 
-Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Em 11/11/2026, as imagens foram construídas e rodaram no kit com Docker: as quatro instâncias ficaram saudáveis, o teste de fumaça passou nas 13 verificações e o teste de queda do Redpanda confirmou o outbox (seção 11).
+Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Em 11/11/2026, as imagens foram construídas e rodaram no kit com Docker: as quatro instâncias ficaram saudáveis, o teste de fumaça passou nas 13 verificações e o teste de queda do Redpanda confirmou o outbox (seção 11). Em 16/11/2026, com a versão 2.0, o teste de fumaça passou nas 17 verificações atuais em duas rodadas seguidas, incluindo a marcação de movimentação pelo Kafka, a recusa da alteração do produto (409) e a reposição com novo preço.
 
 ---
 
@@ -395,8 +399,8 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 010 | Consistência entre banco e Kafka | Aceita, com ressalva (seção 14) |
 | 011 | Fornecimentos mantém cópia local dos produtos a partir dos eventos | Aceita |
 | 012 | Validação local do JWT RS256 com chaves públicas (JWKS) | Aceita |
-| 013 | Eventos de alteração e exclusão de produto | Pendente |
-| 014 | Exclusão de produto lógica ou física | Pendente |
+| 013 | Eventos de alteração e exclusão de produto | Aceita |
+| 014 | Exclusão de produto lógica ou física | Aceita (física, só sem movimentação) |
 | 015 | Eventos em JSON com envelope canônico | Aceita |
 | 016 | Python com FastAPI | Aceita |
 | 017 | Front-ends feitos pelo grupo de UX/UI | Aceita |
@@ -404,7 +408,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 019 | Tópicos de falha `produtos.dlt` e `fornecimentos.dlt` | Aceita |
 | 020 | Padrão de API do kit de infraestrutura | Aceita |
 | 021 | Uso do kit como base, com as correções da seção 3.4 | Substituída (seção 14) |
-| 022 | Estoque alterado só por eventos de pedido | Proposta |
+| 022 | Estoque alterado por eventos de pedido e, para repor ou encerrar, pelo fornecedor | Aceita |
 | 023 | Dados de produto e fornecimento que a Logística precisa: origem em cidade e UF e peso unitário | Aceita |
 
 ---
@@ -527,17 +531,19 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Alternativas:**
   - Pedir os tópicos `produto_atualizado` e `produto_excluido`. Segue o padrão do kit, mas a ordem entre cadastro e alteração de um mesmo produto não é garantida, porque estão em tópicos diferentes. O consumidor precisaria comparar `timestamp` ou versão.
   - Publicar os três tipos de evento em um único tópico de produto, distinguidos pelo `eventType`. Garante a ordem por `produtoId` (Kleppmann, 2018), mas foge do padrão de um tópico por evento.
-- **Decisão:** a tomar com o grupo de Infraestrutura.
-- **Evidência na implementação:** Não implementado: aguarda a P-26.
-- **Status:** Pendente (P-26)
+- **Decisão:** tópicos separados `produto_atualizado` e `produto_excluido`, no padrão do kit. A ordem entre tópicos é tratada no consumidor: o `fornecimentos-service` só aplica o evento mais novo que o último aplicado ao produto (`versao_evento`), e uma exclusão que chegue antes do cadastro cria a cópia já inativa. Como o professor só permite alterar ou excluir produto sem movimentação, os casos de corrida ficam raros.
+- **Evidência na implementação:** `alterar_produto` e `excluir_produto` em `servicos/produtos-service/app/main.py` (CA-33 e CA-34); `processar_produto_atualizado` e `processar_produto_excluido` em `servicos/fornecimentos-service/app/main.py` (CA-58). Os tópicos ainda não existem no kit (P-26): o Redpanda em modo `dev-container` os cria com 1 partição, e a criação com 3 partições foi pedida à Infraestrutura.
+- **Status:** Aceita
 
 ### ADR-014: Exclusão de produto lógica ou física
 
-- **Contexto:** a exclusão de um produto com fornecimentos ativos ou pedidos em andamento não está definida. A tabela `produto` do kit não tem coluna de situação.
+- **Contexto:** a exclusão de um produto com fornecimentos ativos ou pedidos em andamento não estava definida. A tabela `produto` do kit não tem coluna de situação.
 - **Alternativas:** exclusão lógica (o produto é marcado como inativo, o que exige ajuste no DDL) ou exclusão física (o registro é apagado).
-- **Decisão:** a tomar.
-- **Evidência na implementação:** Não implementado: aguarda a P-09.
-- **Status:** Pendente ([issue #6](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/6))
+- **Decisão:** definida pelo professor em aula (F16 do Documento de Requisitos). O produto só pode ser alterado ou excluído enquanto não tiver movimentação. O produto sem movimentação que foi cadastrado errado é apagado (exclusão física). Com movimentação, uma especificação diferente é um produto novo.
+- **Como o serviço sabe da movimentação:** o `produtos-service` consome `fornecimento_criado` e marca o produto (coluna `movimentado`, DDL v1.4). Pedido só existe sobre fornecimento, então isso cobre também os pedidos. Alteração e exclusão usam `UPDATE` e `DELETE` condicionais (`WHERE NOT movimentado`): se o evento chegar entre a leitura e a gravação, a operação falha com 409, sem corrida.
+- **Consequências:** o serviço de Produtos passa a consumir um tópico. Fica uma janela de cerca de 1 segundo em que uma oferta pode ser criada enquanto o produto é excluído (seção 13).
+- **Evidência na implementação:** `marcar_movimentado`, `atualizar_se_sem_movimentacao` e `excluir_se_sem_movimentacao` no adaptador PostgreSQL do Produtos; CA-35, CA-37 e CA-38 da ESP-PRD-001 v2.0; teste de integração com PostgreSQL.
+- **Status:** Aceita ([issue #6](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/6))
 
 ### ADR-015: Eventos em JSON com envelope canônico
 
@@ -597,10 +603,10 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 ### ADR-022: Estoque alterado só por eventos de pedido
 
 - **Contexto:** o boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`, sem autenticação. O fluxo definido pelo professor altera o estoque a partir dos pedidos (RF-14, RF-19, RF-20).
-- **Decisão proposta:** não expor endpoint de baixa. Reserva, liberação e baixa acontecem só pelos eventos de pedido. Uma eventual reposição de quantidade pelo próprio fornecedor depende da P-11.
-- **Consequências:** uma única porta de entrada para alterações de estoque, o que facilita garantir a atomicidade e a auditoria.
-- **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` não tem endpoint de baixa; `DELETE` e métodos fora do contrato respondem 405 (CA-40).
-- **Status:** Proposta
+- **Decisão:** não expor endpoint de baixa. Reserva, liberação e baixa acontecem só pelos eventos de pedido. Depois da resposta do professor sobre a P-11, o fornecedor dono pode repor quantidade, mudar o preço (que vale para todo o estoque da oferta) e encerrar a oferta, zerando o disponível, por `PATCH /api/v1/fornecimentos/{id}`. O estoque não é cancelado nem apagado, para manter o histórico, e a oferta zerada sai da vitrine dos compradores.
+- **Consequências:** duas portas de entrada para o estoque (eventos de pedido e alteração do fornecedor), as duas pelo mesmo `aplicar_movimento` condicional ou por um `UPDATE` atômico, o que mantém a atomicidade. O encerramento preserva a quantidade reservada para pedidos em andamento.
+- **Evidência na implementação:** `alterar_fornecimento` em `servicos/fornecimentos-service/app/main.py` e `zerar_disponivel` no adaptador PostgreSQL (um só comando, com `FOR UPDATE`); CA-51 a CA-57 da ESP-FRN-001 v2.0. Não há endpoint de baixa; `DELETE` responde 405 (CA-40).
+- **Status:** Aceita
 
 ### ADR-023: Origem em cidade e UF e peso unitário do produto
 
@@ -621,9 +627,10 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 |---|---|---|
 | Limpeza da tabela `outbox` | Não implementada: os eventos publicados ficam na tabela | A tabela cresce com o uso. Uma limpeza periódica dos eventos publicados há mais de 7 dias (retenção dos tópicos no kit) fica para depois |
 | Teste no kit fora do CI | Exige Docker com o kit completo; o CI do GitHub roda só os testes com PostgreSQL | O teste de fumaça e o de queda do Redpanda precisam ser repetidos à mão (`servicos/integracao-kit/`) a cada mudança relevante |
-| Kit ainda com defeitos (K12 a K14) | Correções dependem da Infraestrutura | Sem o contorno de teste local, o banco do kit não sobe |
+| Kit ainda com defeitos (K12 a K15) | Correções dependem da Infraestrutura | Sem o contorno de teste local, o banco do kit não sobe |
 | Log de acesso do uvicorn em texto | Formato padrão do uvicorn | As linhas de acesso HTTP não saem em JSON; os registros do serviço e dos adaptadores saem |
-| Alteração e exclusão de produto | Aguardam P-07, P-09 e P-26 | Fora da versão 1.1 das ESPs |
+| Oferta criada durante a exclusão do produto | Os dois serviços são separados; a exclusão e o fornecimento podem acontecer no mesmo segundo | Em uma janela de cerca de 1 segundo, a oferta pode ficar sem produto no catálogo. O caso é raro, porque a exclusão só vale para produto cadastrado errado e sem movimentação |
+| Oferta encerrada com reserva | O encerramento zera só o disponível; um pedido cancelado depois devolve a quantidade | A oferta volta a aparecer na vitrine com a quantidade devolvida; o fornecedor pode encerrar de novo (Q-17 da ESP-FRN-001) |
 | Consumo de `empresa_cadastrada` | Não é necessário enquanto o escopo vem no token | Nenhum na versão 1.1 |
 
 ---
@@ -674,6 +681,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.7 | 11/11/2026 | Outbox implementado no adaptador: ADR-010 aceito com ressalva. Serviços executados no kit com Docker (seções 10 e 11), novos pontos K12 a K14 na seção 3.4. Seções 9, 13 e 14 atualizadas |
 | 0.8 | 12/11/2026 | ADR-012 revisado: `iss` e `aud` conferidos, 403 para token sem contexto, 503 para serviço de chaves indisponível, limite de busca do JWKS. Seção 7 atualizada |
 | 0.9 | 12/11/2026 | Respostas do professor: ADR-004 aceito (estoque por fornecimento); momento da reserva definido no ADR-005 e no passo 7 |
+| 0.10 | 16/11/2026 | Respostas do professor em aula: ADR-013, ADR-014 e ADR-022 aceitos (alteração e exclusão de produto só sem movimentação, alteração e encerramento de oferta). Seções 5, 6 e 13 atualizadas. Versão 2.0 executada no kit (seção 10) e novo ponto K15 na seção 3.4 |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

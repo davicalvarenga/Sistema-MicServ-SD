@@ -103,8 +103,9 @@ class FakeRepoFornecimentos:
     def obter_fornecimento(self, fornecimento_id):
         return copy.deepcopy(self.estado["fornecimentos"].get(fornecimento_id))
 
-    def listar_fornecimentos(self, produto_id, offset, limite):
-        itens = [f for f in self.estado["fornecimentos"].values() if produto_id is None or f["produto_id"] == produto_id]
+    def listar_fornecimentos(self, produto_id, offset, limite, incluir_zeradas_de=None):
+        itens = [f for f in self.estado["fornecimentos"].values() if (produto_id is None or f["produto_id"] == produto_id)
+                 and (f["quantidade_disponivel"] > 0 or f["fornecedor_id"] == incluir_zeradas_de)]
         itens.sort(key=lambda f: (f["criado_em"], f["fornecimento_id"]))
         return copy.deepcopy(itens[offset:offset + limite]), len(itens)
 
@@ -122,6 +123,24 @@ class FakeRepoFornecimentos:
                 return None
             f.update(quantidade_disponivel=disponivel, quantidade_reservada=reservada, atualizado_em=atualizado_em)
             return copy.deepcopy(f)
+
+    def alterar_preco(self, fornecimento_id, preco, atualizado_em):
+        assert isinstance(preco, Decimal)
+        with self.trava:
+            f = self.estado["fornecimentos"].get(fornecimento_id)
+            if f is None:
+                return None
+            f.update(preco=preco, atualizado_em=atualizado_em)
+            return copy.deepcopy(f)
+
+    def zerar_disponivel(self, fornecimento_id, atualizado_em):
+        with self.trava:
+            f = self.estado["fornecimentos"].get(fornecimento_id)
+            if f is None:
+                return None
+            havia = f["quantidade_disponivel"]
+            f.update(quantidade_disponivel=Decimal("0"), atualizado_em=atualizado_em)
+            return copy.deepcopy(f), havia
 
     def obter_reserva(self, pedido_id, fornecimento_id):
         return copy.deepcopy(self.estado["reservas"].get((pedido_id, fornecimento_id)))

@@ -9,7 +9,7 @@ from datetime import timezone
 from psycopg2.pool import ThreadedConnectionPool
 
 COLUNAS = ("id, nome, categoria, unidade, tipo_transporte, peso_unitario_kg, cadastrado_por_empresa_id, "
-           "cadastrado_por_usuario_id, criado_em")
+           "cadastrado_por_usuario_id, criado_em, atualizado_em, movimentado")
 
 
 def _instante(momento) -> str:
@@ -20,7 +20,7 @@ def _produto(linha) -> dict:
     return {
         "produto_id": linha[0], "nome": linha[1], "categoria": linha[2], "unidade": linha[3], "tipo_transporte": linha[4],
         "peso_unitario_kg": linha[5], "cadastrado_por_empresa_id": linha[6], "cadastrado_por_usuario_id": linha[7],
-        "cadastrado_em": _instante(linha[8]),
+        "cadastrado_em": _instante(linha[8]), "atualizado_em": _instante(linha[9]), "com_movimentacao": linha[10],
     }
 
 
@@ -48,10 +48,28 @@ class RepositorioProdutosPostgres:
 
     def inserir(self, produto: dict) -> None:
         self._executar(
-            f"INSERT INTO produtos.produto ({COLUNAS}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            f"INSERT INTO produtos.produto ({COLUNAS}) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (produto["produto_id"], produto["nome"], produto["categoria"], produto["unidade"], produto["tipo_transporte"],
-             produto["peso_unitario_kg"], produto["cadastrado_por_empresa_id"], produto["cadastrado_por_usuario_id"], produto["cadastrado_em"]),
+             produto["peso_unitario_kg"], produto["cadastrado_por_empresa_id"], produto["cadastrado_por_usuario_id"],
+             produto["cadastrado_em"], produto["atualizado_em"], produto["com_movimentacao"]),
         )
+
+    def marcar_movimentado(self, produto_id: str) -> bool:
+        linha = self._executar("UPDATE produtos.produto SET movimentado = TRUE WHERE id = %s RETURNING id", (produto_id,), "um")
+        return linha is not None
+
+    def atualizar_se_sem_movimentacao(self, produto: dict) -> bool:
+        """UPDATE condicional: falha se o fornecimento_criado tiver marcado o produto entre a leitura e a gravação."""
+        linha = self._executar(
+            "UPDATE produtos.produto SET nome = %s, categoria = %s, unidade = %s, tipo_transporte = %s, peso_unitario_kg = %s, "
+            "atualizado_em = %s WHERE id = %s AND NOT movimentado RETURNING id",
+            (produto["nome"], produto["categoria"], produto["unidade"], produto["tipo_transporte"], produto["peso_unitario_kg"],
+             produto["atualizado_em"], produto["produto_id"]), "um")
+        return linha is not None
+
+    def excluir_se_sem_movimentacao(self, produto_id: str) -> bool:
+        linha = self._executar("DELETE FROM produtos.produto WHERE id = %s AND NOT movimentado RETURNING id", (produto_id,), "um")
+        return linha is not None
 
     def obter(self, produto_id: str) -> dict | None:
         linha = self._executar(f"SELECT {COLUNAS} FROM produtos.produto WHERE id = %s", (produto_id,), "um")

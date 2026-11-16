@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davicalvarenga/Sistema-MicServ-SD/docs/contratos/schemas/fornecimento_atualizado.schema.json",
+  "title": "fornecimento_atualizado",
+  "description": "Publicado pelo fornecimentos-service quando o fornecedor altera a oferta (preço, reposição ou encerramento). Leva o estado da oferta depois da alteração. O tópico ainda não existe no kit (P-37).",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Usado na idempotência (processed_events)."
+    },
+    "eventType": {
+      "const": "fornecimento_atualizado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento da publicação, ISO-8601 em UTC."
+    },
+    "source": {
+      "const": "fornecimentos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Vem do cabeçalho X-Correlation-Id da requisição ou do evento que originou este. Não é necessariamente UUID: o gateway do kit usa o $request_id do Nginx (32 caracteres hexadecimais) quando o cliente não envia o cabeçalho."
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Chave da mensagem no Kafka: fornecimentoId."
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "fornecimentoId",
+        "fornecedorId",
+        "produtoId",
+        "unidade",
+        "preco",
+        "quantidadeDisponivel",
+        "origem",
+        "atualizadoPor",
+        "atualizadoEm"
+      ],
+      "properties": {
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Empresa do token de quem criou (RN-10)."
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "unidade": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Unidade do produto, copiada da referência local."
+        },
+        "preco": {
+          "type": "number",
+          "description": "Preço por unidade em reais (BRL), maior ou igual a zero. O novo preço vale para todo o estoque da oferta.",
+          "minimum": 0
+        },
+        "quantidadeDisponivel": {
+          "type": "number",
+          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante.",
+          "minimum": 0
+        },
+        "origem": {
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": false,
+          "description": "Ponto de coleta do produto, pedido pela Logística (P-05). Mesmo formato do campo origem que a Logística propôs para o pedido_criado.",
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "uf": {
+              "enum": [
+                "AC",
+                "AL",
+                "AP",
+                "AM",
+                "BA",
+                "CE",
+                "DF",
+                "ES",
+                "GO",
+                "MA",
+                "MT",
+                "MS",
+                "MG",
+                "PA",
+                "PB",
+                "PR",
+                "PE",
+                "PI",
+                "RJ",
+                "RN",
+                "RS",
+                "RO",
+                "RR",
+                "SC",
+                "SP",
+                "SE",
+                "TO"
+              ],
+              "description": "Sigla de uma das 27 unidades da federação (IBGE)."
+            }
+          }
+        },
+        "atualizadoPor": {
+          "type": "object",
+          "required": [
+            "empresaId",
+            "usuarioId"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "empresaId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "usuarioId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "description": "Quem executou a ação. Nunca contém token de acesso (RNF-09)."
+        },
+        "atualizadoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

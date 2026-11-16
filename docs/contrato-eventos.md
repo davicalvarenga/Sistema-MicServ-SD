@@ -1,7 +1,7 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 1.3 (proposta para revisão dos grupos que integram com a gente)
+**Versão:** 2.0 (proposta para revisão dos grupos que integram com a gente)
 **Data:** 10/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
@@ -41,7 +41,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 |---|---|---|
 | `produtoId` | texto | Identificador do produto |
 | `nome` | texto | Nome do produto |
-| `categoria` | texto | Categoria (lista em definição, P-10) |
+| `categoria` | texto | Um valor da lista fixa: `GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS` ou `OUTROS` (o professor definiu lista fixa; o conteúdo é do grupo, P-10) |
 | `unidade` | texto | Unidade de medida: `KG`, `TON`, `UN`, `CX` ou `L` (lista do kit, confirmada pela Logística; P-06 resolvida) |
 | `tipoTransporte` | texto | Como o produto precisa ser transportado: `GRANEL`, `REFRIGERADO`, `CARGA_SECA` ou `PERIGOSO` (lista do kit, confirmada pela Logística; P-06 resolvida) |
 | `pesoUnitarioKg` | número ou `null` | Peso de uma unidade em kg, até 3 casas decimais. Opcional no cadastro: `null` quando não informado. Pedido pela Logística para calcular o peso da carga quando a unidade é `UN`, `CX` ou `L` |
@@ -70,9 +70,12 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 }
 ```
 
-### 2.2 `produto_atualizado` e `produto_excluido` (proposta)
+### 2.2 `produto_atualizado` e `produto_excluido`
 
-O kit ainda não tem tópico para esses eventos (P-26). Se o grupo de Infraestrutura optar por um tópico único de produto, o `payload` continua o mesmo e só o tópico muda.
+- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores:** `fornecimentos-service` (cópia local); `demanda-service` e `mercado-service`, se quiserem manter cópias.
+- **Quando:** a empresa que cadastrou o produto o altera ou exclui. Só é permitido enquanto o produto não tem movimentação, isto é, nenhum fornecimento (resposta do professor). Mudança de especificação de produto com movimentação é um produto novo.
+- **Tópicos:** o kit ainda não tem esses tópicos (P-26). O Redpanda do kit, em modo `dev-container`, os cria na primeira publicação com 1 partição; a criação com 3 partições foi pedida à Infraestrutura.
+
 
 - `produto_atualizado` leva o estado completo do produto depois da alteração (mesmos campos do cadastro, com `atualizadoPor` e `atualizadoEm`). Schema: [`produto_atualizado.schema.json`](contratos/schemas/produto_atualizado.schema.json)
 - `produto_excluido` leva `produtoId`, `excluidoPor` e `excluidoEm`. Schema: [`produto_excluido.schema.json`](contratos/schemas/produto_excluido.schema.json)
@@ -91,15 +94,24 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 | `fornecedorId` | texto | Empresa fornecedora. Vem do token, nunca do corpo da requisição (RN-10) |
 | `produtoId` | texto | Produto ofertado |
 | `unidade` | texto | Unidade do produto, para interpretar quantidade e preço |
-| `preco` | número | Preço por unidade em reais (BRL), maior que zero, com até 2 casas decimais (P-15) |
-| `quantidadeDisponivel` | número | Quantidade ofertada, maior que zero |
+| `preco` | número | Preço por unidade em reais (BRL), maior ou igual a zero, com até 2 casas decimais (P-15) |
+| `quantidadeDisponivel` | número | Quantidade ofertada, maior ou igual a zero |
 | `origem` | objeto | Ponto de coleta: `cidade` (texto) e `uf` (sigla de uma das 27 unidades da federação). Formato pedido pela Logística, igual ao campo `origem` que ela propôs para o `pedido_criado` (P-05) |
 | `criadoPor` | objeto | `empresaId` e `usuarioId` de quem criou |
 | `criadoEm` | data e hora | Momento da criação |
 
 Exemplo: [`exemplos/fornecimento_criado.json`](contratos/exemplos/fornecimento_criado.json)
 
+Preço e quantidade podem ser zero (resposta do professor). A oferta com disponível zero não aparece para os compradores na API, mas o evento sai normalmente.
+
 Na versão 1.0 deste contrato, `origem` era texto livre. A mudança para objeto é incompatível, mas nenhum grupo consumia o evento ainda.
+
+### 2.3.1 `fornecimento_atualizado`
+
+- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor proposto:** `mercado-service`.
+- **Quando:** o fornecedor muda o preço, repõe quantidade ou encerra a oferta (`PATCH /api/v1/fornecimentos/{id}`). O novo preço vale para todo o estoque da oferta, como explicou o professor.
+- **Conteúdo:** os mesmos campos do `fornecimento_criado`, com o estado depois da alteração, trocando `criadoPor`/`criadoEm` por `atualizadoPor`/`atualizadoEm`. Schema: [`fornecimento_atualizado.schema.json`](contratos/schemas/fornecimento_atualizado.schema.json); exemplo: [`exemplos/fornecimento_atualizado.json`](contratos/exemplos/fornecimento_atualizado.json).
+- **Tópico:** não existe no kit (P-37). Pedido à Infraestrutura.
 
 ### 2.4 `estoque_atualizado`
 
@@ -110,11 +122,11 @@ Na versão 1.0 deste contrato, `origem` era texto livre. A mudança para objeto 
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `fornecimentoId`, `produtoId`, `fornecedorId` | texto | Identificação da oferta |
-| `operacao` | `RESERVA`, `LIBERACAO` ou `BAIXA` | `RESERVA`: pedido criado. `LIBERACAO`: pedido cancelado. `BAIXA`: venda concluída |
+| `operacao` | `RESERVA`, `LIBERACAO`, `BAIXA`, `REPOSICAO` ou `ENCERRAMENTO` | `RESERVA`: pedido criado. `LIBERACAO`: pedido cancelado. `BAIXA`: venda concluída. `REPOSICAO`: o fornecedor repôs quantidade. `ENCERRAMENTO`: o fornecedor encerrou a oferta e o disponível foi zerado; a quantidade reservada continua |
 | `quantidadeMovimentada` | número | Quanto a operação movimentou |
 | `quantidadeDisponivel` | número | Saldo disponível **depois** da operação, nunca negativo |
 | `quantidadeReservada` | número | Saldo reservado **depois** da operação |
-| `pedidoId` | texto ou nulo | Pedido que causou a mudança |
+| `pedidoId` | texto ou nulo | Pedido que causou a mudança; nulo em `REPOSICAO` e `ENCERRAMENTO` |
 | `atualizadoEm` | data e hora | Momento da mudança |
 
 O evento traz o saldo completo, e não só a diferença. Assim, quem consome não precisa somar movimentos e não fica com saldo errado se perder um evento.
@@ -192,7 +204,11 @@ A Logística também usa `CANCELADO` e sugeriu ao grupo de Pedidos publicar `VEN
 
 ### 3.3 `produto_cadastrado` (do nosso `produtos-service`)
 
-O `fornecimentos-service` grava o produto na tabela local `produto_referencia` (ADR-011), com `nome`, `unidade` e `tipoTransporte`.
+O `fornecimentos-service` grava o produto na tabela local `produto_referencia` (ADR-011), com `nome`, `unidade` e `tipoTransporte`. Também consome `produto_atualizado` (atualiza a cópia se o evento for mais novo que o último aplicado) e `produto_excluido` (desativa a cópia; o cadastro de oferta desse produto passa a ser recusado).
+
+### 3.3.1 `fornecimento_criado` (do nosso `fornecimentos-service`)
+
+O `produtos-service` consome `fornecimento_criado` e marca o produto como movimentado. A partir daí, o produto não pode mais ser alterado nem excluído. Mensagem inválida vai para `produtos.dlt`.
 
 ### 3.4 `empresa_cadastrada` (do serviço de Autenticação)
 
@@ -228,9 +244,9 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | Grupo | Pedido |
 |---|---|
 | Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
-| Infraestrutura | Criar os tópicos de alteração e exclusão de produto e o de recusa de reserva, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md` |
+| Infraestrutura | Criar, com 3 partições, os tópicos `produto_atualizado`, `produto_excluido`, `fornecimento_atualizado` e `reserva_estoque_recusada`, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado`, `pedido_atualizado`, `produto_atualizado` e `produto_excluido`, e o `produtos-service` como consumidor de `fornecimento_criado`, no `CONTRACTS.md` |
 | Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2): conteúdo de `empresa_cadastrada`, em camelCase. Em aberto: padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
-| Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` |
+| Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`. A categoria passou a ser lista fixa |
 | Logística/Transporte | Respondido em 10/11/2026: listas confirmadas (P-06), tipo de transporte pelo `pedido_criado` (P-27), origem em cidade e UF (P-05) e peso unitário opcional atendidos na versão 1.1 |
 
 ---
@@ -243,3 +259,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 1.1 | 10/11/2026 | `pesoUnitarioKg` em `produto_cadastrado` e `produto_atualizado`; `origem` de `fornecimento_criado` como objeto com `cidade` e `uf`; listas de unidade e tipo de transporte confirmadas. Motivo: resposta do grupo de Logística/Transporte |
 | 1.2 | 10/11/2026 | `empresa_cadastrada` em camelCase (`tenantId`, `groupId`, `legalName`, `branchType`, `geoLat`, `geoLng`), conforme a resposta do grupo de Autenticação na issue #2 |
 | 1.3 | 12/11/2026 | `compradorId` do `pedido_criado` pode ser `null`, porque o pedido passa a ser criado na abertura do leilão (resposta do professor) |
+| 2.0 | 16/11/2026 | Respostas do professor em aula: categoria em lista fixa; `produto_atualizado` e `produto_excluido` passam a ser publicados; `fornecimento_atualizado` novo; operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`; preço e quantidade podem ser zero; `produtos-service` passa a consumir `fornecimento_criado`. **Mudança incompatível:** `categoria` fora da lista é recusada |

@@ -83,13 +83,13 @@
         },
         "preco": {
           "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Preço por unidade em reais (BRL), até 2 casas decimais (P-15)."
+          "description": "Preço por unidade em reais (BRL), maior ou igual a zero, com até 2 casas decimais (P-15, RN-16 do Documento de Requisitos).",
+          "minimum": 0
         },
         "quantidadeDisponivel": {
           "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante."
+          "description": "Até 2 casas decimais (NUMERIC(12,2)). A precisão é validada pelo serviço, não pelo schema, porque multipleOf com decimais falha por arredondamento de ponto flutuante.",
+          "minimum": 0
         },
         "origem": {
           "type": "object",
