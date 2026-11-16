@@ -61,7 +61,7 @@ def test_outbox_publica_produto_cadastrado(dsn_servico):
 
     class KafkaFalso:
         def __init__(self):
-            self.publicadas, self.fora = [], False
+            self.publicadas, self.fora, self.inscricoes = [], False, []
 
         def publish(self, topic, key, message):
             if self.fora:
@@ -69,7 +69,7 @@ def test_outbox_publica_produto_cadastrado(dsn_servico):
             self.publicadas.append((topic, key, message))
 
         def subscribe(self, topic, handler):
-            raise AssertionError("o produtos-service não consome tópicos")
+            self.inscricoes.append(topic)
 
         def disponivel(self):
             return not self.fora
@@ -90,3 +90,32 @@ def test_outbox_publica_produto_cadastrado(dsn_servico):
     assert (topico, chave, mensagem["aggregateId"], mensagem["correlationId"]) == ("produto_cadastrado", pid, pid, "corr-outbox")
     assert mensagem["payload"]["pesoUnitarioKg"] == 1.5 and mensagem["payload"]["nome"] == "Leite integral"
     assert bus.publicar_pendentes() == 0
+    assert kafka.inscricoes == ["fornecimento_criado"]  # v2.0: consome o fornecimento_criado pelo Kafka
+
+
+def test_alteracao_exclusao_e_movimentacao(dsn_servico):
+    """ESP-PRD-001 v2.0: UPDATE e DELETE condicionais à coluna movimentado (DDL v1.4)."""
+    from adaptadores.postgres import RepositorioProdutosPostgres
+    from app.main import create_app
+    from tests.conftest import PRODUTO_VALIDO, FakeBus, FakeChaves, FakeClock, auth
+
+    repo = RepositorioProdutosPostgres(dsn_servico)
+    bus = FakeBus()
+    cliente = TestClient(create_app(bus, FakeClock(), repo, FakeChaves()))
+    livre = cliente.post("/api/v1/produtos", json=PRODUTO_VALIDO, headers=auth()).json()
+    assert livre["com_movimentacao"] is False and livre["atualizado_em"] == livre["cadastrado_em"]
+    r = cliente.put(f"/api/v1/produtos/{livre['produto_id']}", json={**PRODUTO_VALIDO, "nome": "Leite A2", "categoria": "GRAOS"},
+                    headers=auth())
+    assert r.status_code == 200 and cliente.get(f"/api/v1/produtos/{livre['produto_id']}", headers=auth()).json() == r.json()
+    assert cliente.delete(f"/api/v1/produtos/{livre['produto_id']}", headers=auth()).status_code == 204
+    assert cliente.get(f"/api/v1/produtos/{livre['produto_id']}", headers=auth()).status_code == 404
+
+    usado = cliente.post("/api/v1/produtos", json=PRODUTO_VALIDO, headers=auth()).json()
+    for handler in bus.handlers["fornecimento_criado"]:
+        handler({"eventId": "evt-pg-1", "payload": {"produtoId": usado["produto_id"]}})
+    assert repo.obter(usado["produto_id"])["com_movimentacao"] is True
+    assert cliente.put(f"/api/v1/produtos/{usado['produto_id']}", json=PRODUTO_VALIDO, headers=auth()).status_code == 409
+    assert cliente.delete(f"/api/v1/produtos/{usado['produto_id']}", headers=auth()).status_code == 409
+    assert repo.atualizar_se_sem_movimentacao({**repo.obter(usado["produto_id"]), "nome": "X"}) is False
+    assert repo.excluir_se_sem_movimentacao(usado["produto_id"]) is False
+    assert repo.marcar_movimentado("nao-existe") is False

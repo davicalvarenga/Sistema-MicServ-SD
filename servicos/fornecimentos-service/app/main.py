@@ -1,4 +1,4 @@
-"""fornecimentos-service: implementação da ESP-FRN-001 v1.4."""
+"""fornecimentos-service: implementação da ESP-FRN-001 v2.0."""
 
 import traceback
 import uuid
@@ -34,6 +34,7 @@ NOME_SERVICO = "fornecimentos-service"
 TOPICO_DLT = "fornecimentos.dlt"
 ESCOPOS_CADASTRO = ("SUPPLIER",)  # RN-01
 ESCOPOS_CONSULTA = ("BUYER", "SUPPLIER", "TENANT_ADMIN")  # RN-05
+ESCOPOS_ALTERACAO = ("SUPPLIER",)  # RN-17
 STATUS_CANCELADO = "CANCELADO"
 STATUS_VENDA_CONCLUIDA = "VENDA_CONCLUIDA"
 MAXIMO = Decimal("9999999999.99")
@@ -57,7 +58,10 @@ class RepositorioFornecimentos(Protocol):
     def obter_produto_referencia(self, produto_id: str) -> dict | None: ...
     def inserir_fornecimento(self, fornecimento: dict) -> None: ...
     def obter_fornecimento(self, fornecimento_id: str) -> dict | None: ...
-    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int) -> tuple[list[dict], int]: ...
+    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int,
+                             incluir_zeradas_de: str | None) -> tuple[list[dict], int]: ...
+    def alterar_preco(self, fornecimento_id: str, preco: Decimal, atualizado_em: datetime) -> dict | None: ...
+    def zerar_disponivel(self, fornecimento_id: str, atualizado_em: datetime) -> tuple[dict, Decimal] | None: ...
     def aplicar_movimento(self, fornecimento_id: str, delta_disponivel: Decimal,
                           delta_reservada: Decimal, atualizado_em: datetime) -> dict | None: ...
     def obter_reserva(self, pedido_id: str, fornecimento_id: str) -> dict | None: ...
@@ -116,7 +120,7 @@ def projecao(fornecimento: dict) -> dict:
 
 def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornecimentos, chaves_publicas: ChavesPublicas,
                emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> FastAPI:
-    app = FastAPI(title="Fornecimentos API", version="1.4", docs_url="/docs", openapi_url="/openapi.json")
+    app = FastAPI(title="Fornecimentos API", version="2.0", docs_url="/docs", openapi_url="/openapi.json")
     logger = criar_logger(NOME_SERVICO)
 
     def prontas() -> bool:
@@ -136,19 +140,19 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         produto_id = corpo.get("produto_id")
         if not isinstance(produto_id, str) or not preenchido(produto_id):
             raise ErroApi(422, "DADOS_INVALIDOS", "O campo produto_id é obrigatório e deve ser texto.")
-        preco = decimal_valido(corpo.get("preco"))
+        preco = decimal_valido(corpo.get("preco"), minimo_exclusivo=False)  # RN-02: zero é permitido (RN-16 do Documento)
         if preco is None:
-            raise ErroApi(422, "DADOS_INVALIDOS", "preco deve ser número maior que 0, com até 2 casas decimais e até 9999999999.99.")
-        quantidade = decimal_valido(corpo.get("quantidade_disponivel"))
+            raise ErroApi(422, "DADOS_INVALIDOS", "preco deve ser número maior ou igual a 0, com até 2 casas decimais e até 9999999999.99.")
+        quantidade = decimal_valido(corpo.get("quantidade_disponivel"), minimo_exclusivo=False)
         if quantidade is None:
-            raise ErroApi(422, "DADOS_INVALIDOS", "quantidade_disponivel deve ser número maior que 0, com até 2 casas decimais e até 9999999999.99.")
+            raise ErroApi(422, "DADOS_INVALIDOS", "quantidade_disponivel deve ser número maior ou igual a 0, com até 2 casas decimais e até 9999999999.99.")
         origem = origem_valida(corpo.get("origem"))
         if origem is None:
             raise ErroApi(422, "DADOS_INVALIDOS", "origem deve ser objeto com cidade (1 a 255 caracteres) e uf (sigla de UF em maiúsculas).")
         produto_id = produto_id.strip()
         produto = repositorio.obter_produto_referencia(produto_id)
-        if produto is None:
-            raise ErroApi(422, "PRODUTO_INEXISTENTE", f"Produto {produto_id} não é conhecido.")
+        if produto is None or not produto["ativo"]:
+            raise ErroApi(422, "PRODUTO_INEXISTENTE", f"Produto {produto_id} não é conhecido ou foi excluído.")
         momento = instante(agora_utc(clock))
         fornecimento = {
             "fornecimento_id": str(uuid.uuid4()),
@@ -198,8 +202,80 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         page, size = paginacao(request)
-        itens, total = repositorio.listar_fornecimentos(filtro_texto(request, "produto_id"), (page - 1) * size, size)
+        # RN-18: oferta com disponível zero não aparece, exceto para o próprio fornecedor (histórico)
+        dono = claims["tenant_id"] if claims["active_scope"] == "SUPPLIER" else None
+        itens, total = repositorio.listar_fornecimentos(filtro_texto(request, "produto_id"), (page - 1) * size, size, dono)
         return JSONResponse({"itens": [projecao(f) for f in itens], "page": page, "size": size, "total": total})
+
+    @app.patch("/api/v1/fornecimentos/{fornecimento_id}")
+    async def alterar_fornecimento(fornecimento_id: str, request: Request):
+        """RF-11: repor quantidade, mudar o preço (vale para todo o estoque da oferta) ou encerrar a oferta."""
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
+        exigir_escopo(claims, ESCOPOS_ALTERACAO)
+        corpo = await corpo_json(request)
+        if not isinstance(corpo, dict):
+            raise ErroApi(422, "DADOS_INVALIDOS", "O corpo deve ser um objeto JSON.")
+        if not any(campo in corpo for campo in ("preco", "repor", "encerrar")):
+            raise ErroApi(422, "DADOS_INVALIDOS", "Informe preco, repor ou encerrar.")
+        encerrar = corpo.get("encerrar")
+        if "encerrar" in corpo and encerrar is not True:
+            raise ErroApi(422, "DADOS_INVALIDOS", "encerrar só aceita o valor true.")
+        if encerrar and ("preco" in corpo or "repor" in corpo):
+            raise ErroApi(422, "DADOS_INVALIDOS", "encerrar não pode ser combinado com preco ou repor.")
+        preco = None
+        if "preco" in corpo:
+            preco = decimal_valido(corpo["preco"], minimo_exclusivo=False)
+            if preco is None:
+                raise ErroApi(422, "DADOS_INVALIDOS", "preco deve ser número maior ou igual a 0, com até 2 casas decimais e até 9999999999.99.")
+        repor = None
+        if "repor" in corpo:
+            repor = decimal_valido(corpo["repor"])
+            if repor is None:
+                raise ErroApi(422, "DADOS_INVALIDOS", "repor deve ser número maior que 0, com até 2 casas decimais e até 9999999999.99.")
+        atual = repositorio.obter_fornecimento(fornecimento_id)
+        if atual is None:
+            raise ErroApi(404, "FORNECIMENTO_NAO_ENCONTRADO", f"Fornecimento {fornecimento_id} não cadastrado.")
+        if atual["fornecedor_id"] != claims["tenant_id"]:
+            raise ErroApi(403, "FORNECIMENTO_DE_OUTRA_EMPRESA", "Só o fornecedor dono da oferta pode alterá-la.")
+        if repor is not None and Decimal(str(atual["quantidade_disponivel"])) + repor > MAXIMO:
+            raise ErroApi(422, "DADOS_INVALIDOS", "A reposição deixaria a quantidade disponível acima de 9999999999.99.")
+        momento = agora_utc(clock)
+        movimentos: list[tuple[str, Decimal]] = []
+        alterado = None
+        try:
+            with repositorio.transacao():
+                if preco is not None:
+                    alterado = repositorio.alterar_preco(fornecimento_id, preco, momento)
+                if repor is not None:
+                    alterado = repositorio.aplicar_movimento(fornecimento_id, repor, ZERO, momento)
+                    movimentos.append(("REPOSICAO", repor))
+                if encerrar:
+                    resultado = repositorio.zerar_disponivel(fornecimento_id, momento)
+                    alterado = resultado[0] if resultado else None
+                    if resultado and resultado[1] > ZERO:
+                        movimentos.append(("ENCERRAMENTO", resultado[1]))
+                if alterado is None:
+                    raise RuntimeError(f"Fornecimento {fornecimento_id} não pôde ser alterado.")
+        except Exception:
+            logger.exception("falha ao alterar fornecimento", extra={"correlationId": correlation_id(request)})
+            raise ErroApi(500, "ERRO_INTERNO", "Não foi possível alterar o fornecimento.")
+        correlacao = correlation_id(request)
+        for operacao, quantidade in movimentos:
+            topico, chave, dados = estoque_atualizado(alterado, operacao, quantidade, None)
+            publicar(topico, chave, correlacao, dados)
+        if preco is not None or movimentos:
+            publicar("fornecimento_atualizado", fornecimento_id, correlacao, {
+                "fornecimentoId": fornecimento_id,
+                "fornecedorId": alterado["fornecedor_id"],
+                "produtoId": alterado["produto_id"],
+                "unidade": alterado["unidade"],
+                "preco": numero_json(alterado["preco"]),
+                "quantidadeDisponivel": numero_json(alterado["quantidade_disponivel"]),
+                "origem": dict(alterado["origem"]),
+                "atualizadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
+                "atualizadoEm": instante(momento),
+            })
+        return JSONResponse(projecao(alterado))
 
     # --------------------------------------------------------- Eventos consumidos
 
@@ -283,6 +359,41 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             })
         return []
 
+    # produto_atualizado e produto_excluido (RN-20)
+
+    def versao_da(mensagem: dict) -> str:
+        versao = datetime.fromisoformat(mensagem["timestamp"].replace("Z", "+00:00"))
+        if versao.tzinfo is None:
+            versao = versao.replace(tzinfo=timezone.utc)
+        return instante(versao)
+
+    def processar_produto_atualizado(mensagem: dict, payload: dict, correlacao: str):
+        atual = repositorio.obter_produto_referencia(payload["produtoId"])
+        versao = versao_da(mensagem)
+        # Eventos de produto chegam por tópicos diferentes: só aplica o que for mais novo que o último aplicado
+        if atual is None or versao > atual["versao_evento"]:
+            repositorio.salvar_produto_referencia({
+                "produto_id": payload["produtoId"], "nome": payload["nome"], "unidade": payload["unidade"],
+                "tipo_transporte": payload["tipoTransporte"], "ativo": True if atual is None else atual["ativo"],
+                "versao_evento": versao,
+            })
+        return []
+
+    def validar_produto_excluido(payload: dict, mensagem: dict) -> None:
+        exigir_textos(payload, ("produtoId",))
+        validar_produto({"produtoId": payload["produtoId"], "nome": "-", "unidade": "-", "tipoTransporte": "-"}, mensagem)
+
+    def processar_produto_excluido(mensagem: dict, payload: dict, correlacao: str):
+        atual = repositorio.obter_produto_referencia(payload["produtoId"])
+        versao = versao_da(mensagem)
+        if atual is None:
+            # Exclusão antes do cadastro (tópicos diferentes): guarda o produto inativo para recusar o cadastro tardio
+            repositorio.salvar_produto_referencia({"produto_id": payload["produtoId"], "nome": "", "unidade": "",
+                                                   "tipo_transporte": "", "ativo": False, "versao_evento": versao})
+        elif versao >= atual["versao_evento"]:
+            repositorio.salvar_produto_referencia({**atual, "ativo": False, "versao_evento": versao})
+        return []
+
     # pedido_criado (RF-06, RN-13, RN-14)
 
     def validar_pedido_criado(payload: dict, mensagem: dict) -> None:
@@ -290,7 +401,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         if decimal_valido(payload.get("quantidade"), maximo=None) is None:
             raise MensagemInvalida("payload.quantidade deve ser número maior que 0 com até 2 casas decimais.")
 
-    def estoque_atualizado(fornecimento: dict, operacao: str, quantidade: Decimal, pedido_id: str) -> tuple[str, str, dict]:
+    def estoque_atualizado(fornecimento: dict, operacao: str, quantidade: Decimal, pedido_id: str | None) -> tuple[str, str, dict]:
         return ("estoque_atualizado", fornecimento["fornecimento_id"], {
             "fornecimentoId": fornecimento["fornecimento_id"],
             "produtoId": fornecimento["produto_id"],
@@ -357,6 +468,8 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         return [estoque_atualizado(atualizado, operacao, quantidade, pedido_id)]
 
     event_bus.subscribe("produto_cadastrado", ao_receber(processar_produto, validar_produto))
+    event_bus.subscribe("produto_atualizado", ao_receber(processar_produto_atualizado, validar_produto))
+    event_bus.subscribe("produto_excluido", ao_receber(processar_produto_excluido, validar_produto_excluido))
     event_bus.subscribe("pedido_criado", ao_receber(processar_pedido_criado, validar_pedido_criado))
     event_bus.subscribe("pedido_atualizado", ao_receber(processar_pedido_atualizado, validar_pedido_atualizado))
 

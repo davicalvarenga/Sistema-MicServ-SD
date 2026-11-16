@@ -78,9 +78,11 @@
           "enum": [
             "RESERVA",
             "LIBERACAO",
-            "BAIXA"
+            "BAIXA",
+            "REPOSICAO",
+            "ENCERRAMENTO"
           ],
-          "description": "RESERVA: pedido criado. LIBERACAO: pedido cancelado. BAIXA: venda concluída."
+          "description": "RESERVA: pedido criado. LIBERACAO: pedido cancelado. BAIXA: venda concluída. REPOSICAO: o fornecedor repôs quantidade. ENCERRAMENTO: o fornecedor encerrou a oferta e o disponível foi zerado (o reservado continua)."
         },
         "quantidadeMovimentada": {
           "type": "number",
@@ -107,7 +109,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Pedido que causou o movimento. null em REPOSICAO e ENCERRAMENTO, que são feitos pelo fornecedor."
         },
         "atualizadoEm": {
           "type": "string",

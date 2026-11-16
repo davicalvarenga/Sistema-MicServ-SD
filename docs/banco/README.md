@@ -2,7 +2,7 @@
 
 **De:** grupo de Fornecimento e Produtos
 **Para:** grupo de Banco de Dados (com cópia ao grupo de Infraestrutura)
-**Data:** 26/10/2026 (versão 1.3: 11/11/2026)
+**Data:** 26/10/2026 (versão 1.4: 16/11/2026)
 **Script:** [`01-proposta-ddl-produtos-fornecimentos.sql`](01-proposta-ddl-produtos-fornecimentos.sql)
 
 O DDL é responsabilidade do grupo de Banco de Dados, conforme o guia do kit de infraestrutura (seção 5). Este arquivo é uma **proposta** para facilitar a revisão. A decisão final é de vocês.
@@ -70,3 +70,9 @@ O T11 confirma o comportamento descrito no ADR-006 do Relatório Técnico: no Po
 
 - A coluna `chave` das tabelas `outbox` passa a `TEXT`. Na DLT, a chave é o `aggregateId` da mensagem recebida de outro serviço, que não tem limite de tamanho garantido. Com `VARCHAR(64)`, uma chave maior faria a gravação falhar.
 - As tabelas `outbox` passaram a ser usadas pelos serviços (`adaptadores/outbox.py`). Testado com PostgreSQL 16 e o usuário de cada serviço, inclusive com duas instâncias publicando ao mesmo tempo.
+
+## Versão 1.4 (16/11/2026)
+
+- `movimentado BOOLEAN NOT NULL DEFAULT FALSE` em `produtos.produto`. O `produtos-service` marca o produto quando consome o primeiro `fornecimento_criado`; a partir daí, alteração e exclusão são recusadas por `UPDATE` e `DELETE` condicionais (`WHERE NOT movimentado`). Regra do professor: produto com movimentação não pode ser alterado nem excluído.
+- `CHECK (preco >= 0)` em `fornecimentos.fornecimento`. Preço e quantidade zero passaram a ser permitidos (o professor confirmou), mas negativos continuam proibidos.
+- O produto sem movimentação pode ser apagado (`DELETE`): o professor permite excluir o produto cadastrado errado.

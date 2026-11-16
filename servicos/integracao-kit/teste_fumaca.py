@@ -118,6 +118,13 @@ def executar() -> int:
         return 1
     fid = fornecimento["fornecimento_id"]
 
+    # v2.0: o produtos-service consome fornecimento_criado e passa a recusar alteração do produto
+    movimentado = esperar(lambda: http("GET", f"{P2}/api/v1/produtos/{pid}", tok=token())[1]["com_movimentacao"])
+    s, c, _ = http("PUT", f"{P1}/api/v1/produtos/{pid}", {"nome": "Outro nome", "categoria": "LATICINIOS", "unidade": "CX",
+                                                         "tipo_transporte": "REFRIGERADO"}, token())
+    verificar("produto marcado com movimentação pelo Kafka e alteração recusada (409 PRODUTO_COM_MOVIMENTACAO)",
+              movimentado and s == 409 and c["codigo"] == "PRODUTO_COM_MOVIMENTACAO")
+
     produtor = Producer({"bootstrap.servers": BROKER, "acks": "all"})
 
     def publicar(topico, payload, chave):
@@ -137,13 +144,16 @@ def executar() -> int:
     verificar("pedido_criado reservou 4 (disponível 96, reservada 4)", esperar(lambda: saldo(96, 4)))
     publicar("pedido_atualizado", {"pedidoId": pedido, "fornecimentoId": fid, "status": "CANCELADO"}, pedido)
     verificar("pedido_atualizado CANCELADO liberou a reserva (disponível 100, reservada 0)", esperar(lambda: saldo(100, 0)))
+    s, c, _ = http("PATCH", f"{F2}/api/v1/fornecimentos/{fid}", {"preco": 6, "repor": 20}, token(), {"X-Correlation-Id": corr})
+    verificar("reposição e novo preço da oferta (PATCH 200, disponível 120, preço 6)",
+              s == 200 and c["quantidade_disponivel"] == 120 and c["preco"] == 6)
 
     consumidor = Consumer({"bootstrap.servers": BROKER, "group.id": "fumaca-" + uuid.uuid4().hex,
                            "auto.offset.reset": "earliest"})
-    consumidor.subscribe(["produto_cadastrado", "fornecimento_criado", "estoque_atualizado"])
+    consumidor.subscribe(["produto_cadastrado", "fornecimento_criado", "estoque_atualizado", "fornecimento_atualizado"])
     vistos = {}
     fim = time.time() + 30
-    while time.time() < fim and len(vistos) < 4:
+    while time.time() < fim and len(vistos) < 6:
         m = consumidor.poll(1.0)
         if m is None or m.error():
             continue
@@ -159,6 +169,9 @@ def executar() -> int:
               fc and fc[0] == fid and fc[1]["payload"]["origem"] == {"cidade": "Goiânia", "uf": "GO"})
     verificar("estoque_atualizado com RESERVA e LIBERACAO no Redpanda",
               ("estoque_atualizado", "RESERVA") in vistos and ("estoque_atualizado", "LIBERACAO") in vistos)
+    fa = vistos.get(("fornecimento_atualizado", ""))
+    verificar("REPOSICAO e fornecimento_atualizado com o novo preço no Redpanda",
+              ("estoque_atualizado", "REPOSICAO") in vistos and fa and fa[1]["payload"]["preco"] == 6)
 
     falhas = resultados.count(False)
     print("RESULTADO:", "TUDO OK" if falhas == 0 else f"{falhas} FALHA(S)")

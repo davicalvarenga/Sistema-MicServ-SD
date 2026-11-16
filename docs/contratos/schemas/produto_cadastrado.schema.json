@@ -69,9 +69,17 @@
           "maxLength": 255
         },
         "categoria": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 64
+          "enum": [
+            "GRAOS",
+            "INSUMOS",
+            "SUBPRODUTOS",
+            "LATICINIOS",
+            "CARNES",
+            "HORTIFRUTI",
+            "BEBIDAS",
+            "OUTROS"
+          ],
+          "description": "Lista fixa (professor). Conteúdo definido pelo grupo; pode ser ampliado em nova versão do contrato."
         },
         "unidade": {
           "enum": [

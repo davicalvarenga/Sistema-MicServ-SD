@@ -114,9 +114,15 @@ class RepositorioFornecimentosPostgres:
         linha = self._executar(f"SELECT {COLUNAS_FORNECIMENTO} FROM fornecimentos.fornecimento WHERE id = %s", (fornecimento_id,), "um")
         return _fornecimento(linha) if linha else None
 
-    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int) -> tuple[list[dict], int]:
-        filtro = "WHERE produto_id = %s" if produto_id is not None else ""
-        parametros = (produto_id,) if produto_id is not None else ()
+    def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int,
+                             incluir_zeradas_de: str | None = None) -> tuple[list[dict], int]:
+        # Oferta com disponível zero só aparece para o próprio fornecedor (RN-18 da ESP-FRN-001)
+        condicoes = ["(quantidade_disponivel > 0 OR fornecedor_id = %s)"]
+        parametros: tuple = (incluir_zeradas_de,)
+        if produto_id is not None:
+            condicoes.append("produto_id = %s")
+            parametros += (produto_id,)
+        filtro = "WHERE " + " AND ".join(condicoes)
         linhas = self._executar(f"SELECT {COLUNAS_FORNECIMENTO} FROM fornecimentos.fornecimento {filtro} "
                                 "ORDER BY criado_em, id LIMIT %s OFFSET %s", parametros + (limite, offset), "todos")
         total = self._executar(f"SELECT count(*) FROM fornecimentos.fornecimento {filtro}", parametros, "um")[0]
@@ -131,6 +137,22 @@ class RepositorioFornecimentosPostgres:
             f"RETURNING {COLUNAS_FORNECIMENTO}",
             (delta_disponivel, delta_reservada, atualizado_em, fornecimento_id, delta_disponivel, delta_reservada), "um")
         return _fornecimento(linha) if linha else None
+
+    def alterar_preco(self, fornecimento_id: str, preco: Decimal, atualizado_em: datetime) -> dict | None:
+        linha = self._executar(
+            "UPDATE fornecimentos.fornecimento SET preco = %s, atualizado_em = %s WHERE id = %s "
+            f"RETURNING {COLUNAS_FORNECIMENTO}", (preco, atualizado_em, fornecimento_id), "um")
+        return _fornecimento(linha) if linha else None
+
+    def zerar_disponivel(self, fornecimento_id: str, atualizado_em: datetime) -> tuple[dict, Decimal] | None:
+        """Encerra a oferta: zera o disponível e devolve quanto havia, num só comando (sem perder reserva concorrente)."""
+        linha = self._executar(
+            "WITH antes AS (SELECT id AS alvo, quantidade_disponivel AS havia FROM fornecimentos.fornecimento "
+            "WHERE id = %s FOR UPDATE) "
+            "UPDATE fornecimentos.fornecimento SET quantidade_disponivel = 0, atualizado_em = %s FROM antes "
+            f"WHERE id = antes.alvo RETURNING {COLUNAS_FORNECIMENTO}, antes.havia",
+            (fornecimento_id, atualizado_em), "um")
+        return (_fornecimento(linha[:-1]), linha[-1]) if linha else None
 
     def obter_reserva(self, pedido_id: str, fornecimento_id: str) -> dict | None:
         linha = self._executar("SELECT pedido_id, fornecimento_id, quantidade, situacao, criado_em, atualizado_em "

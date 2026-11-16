@@ -1,4 +1,4 @@
-"""Testes de conformidade da ESP-PRD-001 v1.4: um teste por critério de aceitação."""
+"""Testes de conformidade da ESP-PRD-001 v2.0: um teste por critério de aceitação."""
 
 import ast
 import logging
@@ -34,6 +34,7 @@ def test_CA01(amb):
         "produto_id": corpo["produto_id"], "nome": "Leite integral", "categoria": "LATICINIOS", "unidade": "L",
         "tipo_transporte": "REFRIGERADO", "peso_unitario_kg": None, "cadastrado_por_empresa_id": "EMP-34",
         "cadastrado_por_usuario_id": "USR-7", "cadastrado_em": "2026-10-26T14:00:00Z",
+        "atualizado_em": "2026-10-26T14:00:00Z", "com_movimentacao": False,
     }
     g = amb.cliente.get(f"{URL}/{corpo['produto_id']}", headers=auth("SUPPLIER"))
     assert g.status_code == 200 and g.json() == corpo
@@ -255,7 +256,7 @@ def test_CA23(amb):
     r = amb.cliente.get("/api/v1/inexistente", headers=auth("BUYER"))
     assert r.status_code == 404 and r.json()["codigo"] == "ROTA_NAO_ENCONTRADA"
     _verificar_erro(r)
-    r = amb.cliente.delete(f"{URL}/PROD-1", headers=auth("SUPPLIER"))
+    r = amb.cliente.patch(f"{URL}/PROD-1", headers=auth("SUPPLIER"))
     assert r.status_code == 405 and r.json()["codigo"] == "METODO_NAO_PERMITIDO"
     _verificar_erro(r)
     respostas = [
@@ -363,3 +364,106 @@ def test_CA31(amb):
     r = cliente.post(URL, json=PRODUTO_VALIDO, headers=auth())
     assert r.status_code == 503 and r.json()["codigo"] == "DEPENDENCIA_INDISPONIVEL"
     assert amb.repo.produtos == {} and amb.bus.publicadas == []
+
+
+# v2.0: categoria em lista fixa, alteração e exclusão sem movimentação, consumo de fornecimento_criado
+
+def _fornecimento_criado(amb, produto_id, event_id="evt-forn-1"):
+    mensagem = {"eventId": event_id, "eventType": "fornecimento_criado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:01:00Z",
+                "source": "fornecimentos-service", "correlationId": "corr-forn", "aggregateId": "FORN-1",
+                "payload": {"fornecimentoId": "FORN-1", "produtoId": produto_id}}
+    for handler in amb.bus.handlers["fornecimento_criado"]:
+        handler(mensagem)
+
+
+def _publicadas(amb, topico):
+    return [p for p in amb.bus.publicadas if p["topic"] == topico]
+
+
+@pytest.mark.parametrize("categoria", ["Laticínios", "laticinios", "ELETRONICOS", "", 7])
+def test_CA32(amb, categoria):
+    r = cadastrar(amb, {**PRODUTO_VALIDO, "categoria": categoria})
+    assert r.status_code == 422 and r.json()["codigo"] == "DADOS_INVALIDOS"
+    assert amb.repo.produtos == {} and amb.bus.publicadas == []
+
+
+def test_CA33(amb):
+    pid = cadastrar(amb).json()["produto_id"]
+    amb.clock.agora = T0 + timedelta(minutes=10)
+    novo = {"nome": "Leite desnatado", "categoria": "LATICINIOS", "unidade": "CX", "tipo_transporte": "REFRIGERADO",
+            "peso_unitario_kg": 12}
+    r = amb.cliente.put(f"{URL}/{pid}", json=novo, headers={**auth(), "X-Correlation-Id": "corr-alt"})
+    assert r.status_code == 200
+    c = r.json()
+    assert (c["nome"], c["unidade"], c["peso_unitario_kg"], c["cadastrado_em"], c["atualizado_em"]) == \
+        ("Leite desnatado", "CX", 12, "2026-10-26T14:00:00Z", "2026-10-26T14:10:00Z")
+    assert amb.cliente.get(f"{URL}/{pid}", headers=auth("BUYER")).json() == c
+    [evento] = _publicadas(amb, "produto_atualizado")
+    assert evento["key"] == pid and evento["message"]["correlationId"] == "corr-alt"
+    assert evento["message"]["payload"] == {
+        "produtoId": pid, "nome": "Leite desnatado", "categoria": "LATICINIOS", "unidade": "CX", "tipoTransporte": "REFRIGERADO",
+        "pesoUnitarioKg": 12, "atualizadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "atualizadoEm": "2026-10-26T14:10:00Z"}
+
+
+def test_CA34(amb):
+    pid = cadastrar(amb).json()["produto_id"]
+    r = amb.cliente.delete(f"{URL}/{pid}", headers=auth())
+    assert r.status_code == 204 and r.content == b""
+    assert amb.cliente.get(f"{URL}/{pid}", headers=auth()).status_code == 404
+    [evento] = _publicadas(amb, "produto_excluido")
+    assert evento["key"] == pid
+    assert evento["message"]["payload"] == {"produtoId": pid, "excluidoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
+                                            "excluidoEm": "2026-10-26T14:00:00Z"}
+
+
+def test_CA35(amb):
+    pid = cadastrar(amb).json()["produto_id"]
+    _fornecimento_criado(amb, pid)
+    _fornecimento_criado(amb, pid, "evt-forn-2")
+    assert amb.cliente.get(f"{URL}/{pid}", headers=auth()).json()["com_movimentacao"] is True
+    amb.bus.publicadas.clear()
+    r = amb.cliente.put(f"{URL}/{pid}", json=PRODUTO_VALIDO, headers=auth())
+    assert r.status_code == 409 and r.json()["codigo"] == "PRODUTO_COM_MOVIMENTACAO"
+    r = amb.cliente.delete(f"{URL}/{pid}", headers=auth())
+    assert r.status_code == 409 and r.json()["codigo"] == "PRODUTO_COM_MOVIMENTACAO"
+    assert amb.repo.produtos[pid]["nome"] == "Leite integral" and amb.bus.publicadas == []
+
+
+def test_CA36(amb):
+    pid = cadastrar(amb).json()["produto_id"]
+    for metodo in ("put", "delete"):
+        kwargs = {"json": PRODUTO_VALIDO} if metodo == "put" else {}
+        r = getattr(amb.cliente, metodo)(f"{URL}/{pid}", headers=auth(tenant="EMP-99"), **kwargs)
+        assert r.status_code == 403 and r.json()["codigo"] == "PRODUTO_DE_OUTRA_EMPRESA"
+        r = getattr(amb.cliente, metodo)(f"{URL}/{pid}", headers=auth("CARRIER"), **kwargs)
+        assert r.status_code == 403 and r.json()["codigo"] == "PERFIL_NAO_PERMITIDO"
+        r = getattr(amb.cliente, metodo)(f"{URL}/PROD-X", headers=auth(), **kwargs)
+        assert r.status_code == 404 and r.json()["codigo"] == "PRODUTO_NAO_ENCONTRADO"
+    r = amb.cliente.put(f"{URL}/{pid}", json={**PRODUTO_VALIDO, "unidade": "litro"}, headers=auth())
+    assert r.status_code == 422 and r.json()["codigo"] == "DADOS_INVALIDOS"
+    r = amb.cliente.put(f"{URL}/PROD-X", json={**PRODUTO_VALIDO, "unidade": "litro"}, headers=auth())
+    assert r.status_code == 422  # a validação do corpo vem antes da busca do produto
+    assert len(amb.bus.publicadas) == 1  # só o produto_cadastrado
+
+
+def test_CA37(amb):
+    for mensagem in ({"eventId": "x", "payload": {}}, {"payload": {"produtoId": "P"}}, "texto"):
+        for handler in amb.bus.handlers["fornecimento_criado"]:
+            handler(mensagem)
+    assert [p["topic"] for p in amb.bus.publicadas] == ["produtos.dlt"] * 3
+    assert amb.bus.publicadas[0]["message"]["payload"]["originalEvent"] == {"eventId": "x", "payload": {}}
+    amb.bus.publicadas.clear()
+    _fornecimento_criado(amb, "PROD-DESCONHECIDO")
+    assert amb.bus.publicadas == [] and amb.repo.produtos == {}
+
+
+def test_CA38(amb):
+    pid = cadastrar(amb).json()["produto_id"]
+    lido = dict(amb.repo.produtos[pid])
+    _fornecimento_criado(amb, pid)
+    amb.repo.obter = lambda produto_id: dict(lido)  # leitura antiga: o fornecimento chegou depois da leitura
+    amb.bus.publicadas.clear()
+    r = amb.cliente.put(f"{URL}/{pid}", json=PRODUTO_VALIDO, headers=auth())
+    assert r.status_code == 409 and r.json()["codigo"] == "PRODUTO_COM_MOVIMENTACAO"
+    r = amb.cliente.delete(f"{URL}/{pid}", headers=auth())
+    assert r.status_code == 409 and pid in amb.repo.produtos and amb.bus.publicadas == []
