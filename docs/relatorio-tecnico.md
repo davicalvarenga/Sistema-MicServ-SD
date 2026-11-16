@@ -211,7 +211,7 @@ Proposta do grupo, seguindo o padrão do kit (ADR-020):
 
 Códigos de resposta de erro, sempre no formato RFC 7807 (RNF-20): 401 (token ausente, inválido ou expirado), 403 (perfil sem permissão), 404 (recurso inexistente), 422 (dados inválidos, `size` maior que 100, produto inexistente no cadastro de fornecimento ou quantidade maior que a disponível), 429 (limite de requisições do gateway) e 503 (dependência fora do ar em `/health/ready`).
 
-Preços são em reais (BRL), com 2 casas decimais, trafegando como número JSON sem símbolo de moeda (decisão do grupo, P-15, a confirmar com o professor).
+Preços são em reais (BRL), com 2 casas decimais, trafegando como número JSON sem símbolo de moeda (P-15, confirmado: real brasileiro).
 
 O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A proposta do grupo é não manter esse endpoint, porque o estoque muda pelos eventos de pedido (ADR-022).
 

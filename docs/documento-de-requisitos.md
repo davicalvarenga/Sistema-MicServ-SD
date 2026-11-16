@@ -234,7 +234,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RD-01 | Produto | Identificador, nome, categoria, unidade e tipo de transporte, todos obrigatórios | F1, F2, F8 | Confirmado |
 | RD-02 | Produto | Descrição | F4 | Proposto (P-06) |
 | RD-03 | Fornecimento | Identificador, fornecedor (empresa), produto, preço, quantidade, origem (cidade e UF) | F1, F2, F8, F11 | Confirmado |
-| RD-04 | Fornecimento | Preço e quantidades com até 2 casas decimais (`NUMERIC(12,2)` no banco do kit). Quantidades decimais permitem unidades como KG e L. O preço é em reais (BRL) | F8, F4 | Confirmado (moeda: decisão do grupo, P-15) |
+| RD-04 | Fornecimento | Preço e quantidades com até 2 casas decimais (`NUMERIC(12,2)` no banco do kit). Quantidades decimais permitem unidades como KG e L. O preço é em reais (BRL) | F8, F4 | Confirmado (moeda: real brasileiro, P-15) |
 | RD-05 | Categoria | Lista fixa | F1, F16 | Confirmado (conteúdo da lista: P-10) |
 | RD-06 | Estoque do fornecimento | Quantidade disponível e quantidade reservada | F6 | Confirmado (a tabela do kit só tem a disponível: P-28) |
 | RD-07 | Controle de eventos | Tabela `processed_events` (`event_id`, `processed_at`) em cada schema | F8 | Confirmado |
@@ -534,7 +534,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-12 | **Resolvida pelo F10.** O `payload` de `empresa_cadastrada` tem `tenant_id`, `group_id`, `cnpj`, `legal_name`, `branch_type`, `geo_lat`, `geo_lng`, `status` e `scopes` | |
 | P-13 | "Pedido de fornecimento entre fornecedor e grupo" corresponde ao `fornecimento_criado` ou é outro fluxo? O kit não tem tópico com esse nome | Professor |
 | P-14 | **Resolvida pelo F8.** O kit inclui Prometheus, Grafana, Loki, Jaeger e Alertmanager, e exige `/health`, `/health/ready`, `/metrics` e logs JSON (RNF-11, RNF-22) | |
-| P-15 | **Decisão do grupo, aguardando confirmação do professor.** O preço é em reais (BRL), com 2 casas decimais (RD-04). O JSON leva só o número, sem símbolo nem código de moeda | Professor (confirmação) |
+| P-15 | **Resolvida.** O preço é em reais (BRL), com 2 casas decimais (RD-04). O JSON leva só o número, sem símbolo nem código de moeda. Resposta à pergunta 8, informada pelo grupo em 16/11/2026 | |
 | P-16 | Como o serviço avisa o grupo de Pedidos quando chega um pedido com quantidade maior que a disponível? O kit não tem tópico para falha de reserva | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
 | P-17 | **Resolvida pelo F8.** Os nomes do diagrama são tópicos: um tópico por tipo de evento | |
 | P-18 | **Resolvida pelo F8.** Metas de desempenho do Grupo de Teste no RNF-25 | |
@@ -594,4 +594,4 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | 0.7 | 10/11/2026 | Segunda resposta do grupo de Autenticação (F10): notas em P-07 (`TENANT_ADMIN` não é administrador da plataforma) e P-34 (pedido de atualização do kit e proposta de padrão de erro, à espera de consenso) |
 | 0.8 | 12/11/2026 | Fontes F12 (token do Identity-Service, relatado pela Logística) e F13 (protótipo do UX/UI). RNF-02 ampliado (emissor, audiência, 403 sem contexto, 503 do serviço de chaves). Notas em P-07 e P-34. Nova pendência P-35 (divergências do protótipo do UX/UI) |
 | 0.9 | 12/11/2026 | Respostas do professor (F14): P-03, P-29 e P-30 resolvidas; P-20 aguarda o caso pedido pelo professor. Repositório de Compra e Demanda como fonte F15 |
-| 0.10 | 16/11/2026 | Respostas do professor em aula (F16): P-09 e P-11 resolvidas; P-21 resolvida com ressalva; P-10 e P-07 parcialmente resolvidas. Novas regras RN-12 a RN-16. RF-03, RF-04, RF-05, RF-11 e RD-05 atualizados. Novas pendências P-36 e P-37 |
+| 0.10 | 16/11/2026 | Respostas do professor em aula (F16): P-09 e P-11 resolvidas; P-21 resolvida com ressalva; P-10 e P-07 parcialmente resolvidas. Novas regras RN-12 a RN-16. RF-03, RF-04, RF-05, RF-11 e RD-05 atualizados. Novas pendências P-36 e P-37. P-15 resolvida: moeda real brasileiro (resposta à pergunta 8) |
