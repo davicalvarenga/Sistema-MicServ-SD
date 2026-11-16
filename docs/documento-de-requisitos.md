@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.9 (rascunho para revisão interna)
+**Versão:** 0.10 (rascunho para revisão interna)
 **Data:** 26/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O Grupo de Teste (QA) deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
@@ -64,6 +64,7 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 | F12 | Documentação do grupo de Logística/Transporte sobre o token do serviço de Autenticação (`docs/explicacoes/06` e `08` do repositório deles, commit `d72d1ff`, 10/11/2026), escrita a partir da leitura do código do Identity-Service (`TokenIssuer.cs`): o token traz `iss` = `identity-service`, `aud` = `b2b-platform`, `platform_role` (`NONE`, `SUPPORT_AGENT` ou `PLATFORM_ADMIN`) e `view_mode` (`NONE` logo após o login, `SINGLE` ou `MACRO_GROUP`). Em 12/11/2026, o repositório do Identity-Service não estava acessível para nós; o conteúdo vem do relato da Logística |
 | F14 | Respostas do professor às dúvidas do grupo, enviadas pelo Teams em 12/11/2026: o pedido é criado na abertura do leilão ou da negociação, antes do fechamento (o leilão é o "portador do pedido", e o comprador só é definido quando o leilão fecha); fornecedor e comprador cadastram produto; estoque por fornecimento, ou seja, por produto e por fornecedor; "o mesmo fornecedor com mais de uma oferta do mesmo produto não é usual", com pedido de um caso para análise |
 | F15 | Repositório do grupo de Compra e Demanda (`LuccaStuart/portal-b2b-compra-demanda`, commit `f7cdf10`, 12/11/2026): esqueleto do `demanda-service` e contratos de `demanda_criada`, `demanda_recorrente_gerada` e `demanda_cancelada` |
+| F16 | Transcrição automática de uma aula em que o professor respondeu às perguntas 4, 5, 6, 7 e 9 da mensagem do grupo (enviada pelo grupo em 16/11/2026). Alguns trechos estão truncados pela transcrição; quando a regra depende deles, o texto deste documento indica que é interpretação |
 | F13 | Protótipo navegável do grupo de UX/UI (repositório `HugoParzival007/portal-b2b-UI-UX`, commit `8a99d24`, 27/10/2026), com dados fictícios e sem chamadas às APIs |
 
 Quando F8 divergir de uma orientação do professor (F2, F3, F6, F7), vale a do professor, e a divergência é registrada como pendência para alinhamento com o grupo de Infraestrutura. Quando os próprios arquivos de F8 divergirem entre si, vale o que está implementado (script de tópicos, script do banco e código), e a divergência também é registrada.
@@ -151,9 +152,9 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 |---|---|---|---|
 | RF-01 | O sistema deve permitir que empresas com perfil de fornecedor ou de comprador cadastrem produto com nome, categoria, unidade e tipo de transporte | F1, F2, F7, F8 | Confirmado (perfil comprador confirmado pelo professor, F14) |
 | RF-02 | O sistema deve permitir consultar produtos, em lista paginada (com filtro por categoria) e por identificador | F4, F8 | Confirmado |
-| RF-03 | O sistema deve permitir alterar um produto cadastrado | F5 | Confirmado |
-| RF-04 | O sistema deve permitir excluir um produto | F5 | Confirmado (regra de exclusão: P-09) |
-| RF-05 | O sistema deve permitir gerenciar as categorias de produto | F1, F2 | Pendente (P-10) |
+| RF-03 | O sistema deve permitir alterar um produto cadastrado, desde que ele não tenha movimentação (RN-12) | F5, F16 | Confirmado |
+| RF-04 | O sistema deve permitir excluir um produto, desde que ele não tenha movimentação (RN-12, RN-13) | F5, F16 | Confirmado |
+| RF-05 | O sistema deve aceitar só categorias de uma lista fixa | F1, F2, F16 | Confirmado (conteúdo da lista: P-10) |
 | RF-06 | Ao cadastrar um produto, o serviço deve publicar o evento `produto_cadastrado`, com chave `produtoId` | F2, F5, F8 | Confirmado |
 | RF-07 | Ao alterar um produto, o serviço deve publicar um evento de alteração de produto | F5 | Confirmado (o kit não tem tópico para esse evento: P-26) |
 | RF-08 | Ao excluir um produto, o serviço deve publicar um evento de exclusão de produto | F5 | Confirmado (o kit não tem tópico para esse evento: P-26) |
@@ -164,7 +165,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 |---|---|---|---|
 | RF-09 | O fornecedor deve poder criar um fornecimento (relação de fornecimento) informando produto, preço, quantidade e origem | F1, F2, F8 | Confirmado |
 | RF-10 | O sistema deve permitir que compradores consultem os fornecimentos, em lista e por identificador, incluindo a quantidade disponível | F6, F7, F8 | Confirmado |
-| RF-11 | O sistema deve permitir alterar ou encerrar um fornecimento | F4 | Pendente (P-11) |
+| RF-11 | O fornecedor deve poder alterar a sua oferta (repor quantidade e mudar o preço) e encerrá-la, zerando o estoque (RN-14, RN-15) | F4, F16 | Confirmado (tópico do evento: P-37) |
 | RF-12 | Ao criar um fornecimento, o serviço deve publicar o evento `fornecimento_criado`, com chave `fornecimentoId` | F2, F8 | Confirmado |
 | RF-13 | O serviço deve manter, para cada fornecimento, a quantidade disponível e a quantidade reservada | F1, F2, F6 | Confirmado (granularidade por fornecimento: F14; ajuste no DDL do kit: P-28) |
 | RF-14 | Ao consumir o evento de criação de pedido, o serviço deve reservar a quantidade do pedido: subtrair da quantidade disponível e somar à quantidade reservada | F2, F5, F6 | Confirmado (momento: o pedido é criado na abertura do leilão ou da negociação, F14; contrato do evento: P-02) |
@@ -234,7 +235,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RD-02 | Produto | Descrição | F4 | Proposto (P-06) |
 | RD-03 | Fornecimento | Identificador, fornecedor (empresa), produto, preço, quantidade, origem (cidade e UF) | F1, F2, F8, F11 | Confirmado |
 | RD-04 | Fornecimento | Preço e quantidades com até 2 casas decimais (`NUMERIC(12,2)` no banco do kit). Quantidades decimais permitem unidades como KG e L. O preço é em reais (BRL) | F8, F4 | Confirmado (moeda: decisão do grupo, P-15) |
-| RD-05 | Categoria | Estrutura (lista fixa, cadastro, hierarquia) | F1 | Pendente (P-10) |
+| RD-05 | Categoria | Lista fixa | F1, F16 | Confirmado (conteúdo da lista: P-10) |
 | RD-06 | Estoque do fornecimento | Quantidade disponível e quantidade reservada | F6 | Confirmado (a tabela do kit só tem a disponível: P-28) |
 | RD-07 | Controle de eventos | Tabela `processed_events` (`event_id`, `processed_at`) em cada schema | F8 | Confirmado |
 | RD-08 | Produto | Peso unitário em kg, opcional, com até 3 casas decimais | F11 | Confirmado |
@@ -258,6 +259,11 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RN-09 | Todo produto tem um tipo de transporte definido | F7 (25:21), F8 (`tipo_transporte NOT NULL`), F11 | Confirmado |
 | RN-10 | O fornecedor de um fornecimento é a empresa do token (`empresaId`). O serviço ignora qualquer identificador de fornecedor enviado no corpo da requisição | F4 | Proposto |
 | RN-11 | O estoque nunca fica negativo. Uma operação que pede mais do que a quantidade disponível é recusada, com HTTP 422 quando a operação vem por REST | F8, F6 | Confirmado (falta de estoque em evento de pedido: P-16) |
+| RN-12 | Um produto só pode ser alterado ou excluído enquanto não tiver movimentação: nenhum fornecimento (estoque) e nenhum pedido. Com movimentação, não pode ser alterado nem excluído. Mudança de especificação (por exemplo, outro modelo ou outra cor) é outro produto, com novo cadastro | F16 (01:00 a 02:00) | Confirmado (quem pode alterar e excluir: P-07) |
+| RN-13 | O produto sem movimentação que foi cadastrado errado pode ser apagado (exclusão física) | F16 (01:00) | Confirmado |
+| RN-14 | O estoque de uma oferta não é cancelado nem apagado, porque o histórico de vendas precisa ser mantido para análise. O fornecedor que não quer mais trabalhar com um produto encerra a oferta zerando o estoque dela | F16 (02:00 a 03:00) | Confirmado |
+| RN-15 | O fornecedor pode alterar a oferta: repor quantidade e mudar o preço. O novo preço vale para todo o estoque da oferta, inclusive para as unidades que já estavam nela. O cálculo do preço (custo, margem) é do fornecedor; o sistema só registra o preço informado | F16 (03:32 a 06:39) | Confirmado |
+| RN-16 | Preço e quantidade podem ser zero. A oferta zerada não aparece para os compradores, mas continua guardada para o histórico | F16 (06:39 a 07:10) | Confirmado (interpretação: a transcrição deixa claro que a oferta zerada não aparece, mas o caso de preço zero com quantidade maior que zero está truncado) |
 
 ### 6.2 Regras em aberto
 
@@ -265,10 +271,8 @@ As perguntas abaixo não têm resposta nas fontes. Não devem ser testadas até 
 
 | Pendência | Pergunta |
 |---|---|
-| P-09 | A exclusão de produto é lógica ou física? O que acontece com os fornecimentos ativos do produto excluído? |
 | P-16 | Como o serviço avisa o grupo de Pedidos quando chega um pedido com quantidade maior que a disponível? |
 | P-20 | O mesmo fornecedor pode ter mais de um fornecimento do mesmo produto? O professor considera "não usual" e pediu um caso para analisar (F14) |
-| P-21 | Preço e quantidade podem ser zero? O boilerplate do kit exige valores maiores que zero no cadastro (F8) |
 
 ---
 
@@ -522,11 +526,11 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-04 | **Resolvida pelo F10.** O token é JWT RS256, validado em cada serviço com a chave pública do serviço de Autenticação (JWKS). Claims `sub`, `tenant_id` e `active_scope`. Substitui a definição do kit (HS256, `empresaId`, `perfil`) | |
 | P-05 | **Resolvida pelo F11.** A origem é o ponto de coleta do produto, em cidade e UF, como pediu a Logística (que a usa na cotação do frete). Coerente com F6 (10:58), em que a origem do frete é o endereço do fornecedor. Implementada na ESP-FRN-001 v1.2 | |
 | P-06 | **Resolvida pelo F11.** A Logística confirmou as unidades `KG`, `TON`, `UN`, `CX`, `L` e os tipos de transporte `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`, sugeridos pelo boilerplate do kit. A descrição do produto (RD-02) continua sem confirmação | |
-| P-07 | **Parcialmente resolvida.** Falta: quem pode alterar e excluir um produto (só a empresa que cadastrou?) e o que o perfil `admin` pode fazer nos nossos serviços. A Logística também precisa de um administrador da plataforma, e não só da empresa (`TENANT_ADMIN`), para controlar o relógio do módulo dela (F11); a pergunta está na dúvida 4 da issue #2, ao grupo de Autenticação. A Autenticação respondeu que `TENANT_ADMIN` é escopo válido para administrar a própria empresa, o que não cobre o administrador da plataforma; a pergunta foi refeita. Nos nossos serviços, `TENANT_ADMIN` consulta mas não cadastra (ESP-PRD-001, RN-01). **Atualização (F12):** o Identity-Service tem o administrador da plataforma (`platform_role` `PLATFORM_ADMIN`), separado do administrador da empresa. Nossos serviços não têm funções de administração da plataforma; o token desse perfil sem empresa selecionada recebe 403 `CONTEXTO_NAO_SELECIONADO`. Falta o professor definir quem altera e exclui produtos | Professor, Autenticação |
+| P-07 | **Parcialmente resolvida.** Falta: quem pode alterar e excluir um produto (só a empresa que cadastrou?) e o que o perfil `admin` pode fazer nos nossos serviços. A Logística também precisa de um administrador da plataforma, e não só da empresa (`TENANT_ADMIN`), para controlar o relógio do módulo dela (F11); a pergunta está na dúvida 4 da issue #2, ao grupo de Autenticação. A Autenticação respondeu que `TENANT_ADMIN` é escopo válido para administrar a própria empresa, o que não cobre o administrador da plataforma; a pergunta foi refeita. Nos nossos serviços, `TENANT_ADMIN` consulta mas não cadastra (ESP-PRD-001, RN-01). **Atualização (F12):** o Identity-Service tem o administrador da plataforma (`platform_role` `PLATFORM_ADMIN`), separado do administrador da empresa. Nossos serviços não têm funções de administração da plataforma; o token desse perfil sem empresa selecionada recebe 403 `CONTEXTO_NAO_SELECIONADO`. **Atualização (F16):** o produto só pode ser alterado ou excluído enquanto não tiver movimentação (RN-12). Continua sem resposta quem pode alterar e excluir: só a empresa que cadastrou ou qualquer empresa com o perfil | Professor, Autenticação |
 | P-08 | **Parcialmente resolvida pelo F8.** Serialização em JSON com envelope canônico. O kit sobe o Schema Registry do Redpanda com compatibilidade `BACKWARD`, mas a biblioteca comum publica JSON sem registrar schema. Falta saber se o registro é obrigatório | Infraestrutura |
-| P-09 | A exclusão de produto é lógica ou física? A tabela `produto` do kit não tem coluna de situação, o que obrigaria exclusão física ou um ajuste no DDL | Professor, Banco de Dados |
-| P-10 | Categorias são uma lista fixa ou um cadastro? O kit guarda a categoria como texto na tabela `produto`, sem tabela própria | Professor |
-| P-11 | Um fornecimento pode ser alterado (inclusive para repor quantidade) ou encerrado? Há eventos para isso? O kit não tem tópico para alteração de fornecimento | Professor |
+| P-09 | **Resolvida pelo F16.** O produto sem movimentação que foi cadastrado errado pode ser apagado (exclusão física, RN-13). O produto com movimentação não pode ser excluído (RN-12), então não existe fornecimento ativo de produto excluído. A tabela `produto` do kit não precisa de coluna de situação | |
+| P-10 | **Parcialmente resolvida pelo F16.** A categoria é uma lista fixa. O trecho em que o professor diz quem define a lista está truncado na transcrição. Falta definir o conteúdo da lista. Proposta do grupo: o grupo define a lista, a partir dos produtos do protótipo e da turma (grãos, insumos, subprodutos, laticínios), e a publica no Contrato de Eventos | Grupo; professor (confirmar quem define) |
+| P-11 | **Resolvida pelo F16.** A oferta pode ser alterada (repor quantidade, mudar o preço, que passa a valer para todo o estoque da oferta) e encerrada, zerando o estoque. O estoque não é cancelado nem apagado, para manter o histórico (RN-14, RN-15). O tópico do evento continua pendente (P-37) | |
 | P-12 | **Resolvida pelo F10.** O `payload` de `empresa_cadastrada` tem `tenant_id`, `group_id`, `cnpj`, `legal_name`, `branch_type`, `geo_lat`, `geo_lng`, `status` e `scopes` | |
 | P-13 | "Pedido de fornecimento entre fornecedor e grupo" corresponde ao `fornecimento_criado` ou é outro fluxo? O kit não tem tópico com esse nome | Professor |
 | P-14 | **Resolvida pelo F8.** O kit inclui Prometheus, Grafana, Loki, Jaeger e Alertmanager, e exige `/health`, `/health/ready`, `/metrics` e logs JSON (RNF-11, RNF-22) | |
@@ -536,7 +540,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-18 | **Resolvida pelo F8.** Metas de desempenho do Grupo de Teste no RNF-25 | |
 | P-19 | **Resolvida pelo F8.** Consumidores na seção 9. Resta a Logística (P-27) | |
 | P-20 | **Parcialmente resolvida.** Vários fornecedores podem ofertar o mesmo produto (F6, F14). Para o mesmo fornecedor com mais de uma oferta do mesmo produto, o professor respondeu que "não é usual" e pediu um caso para analisar (F14). O serviço hoje permite. Se o professor decidir que não pode, o cadastro passa a recusar a segunda oferta (restrição única por fornecedor e produto). Mesmo assim, o `fornecimentoId` no `pedido_criado` continua sendo a forma direta de indicar a oferta (P-02) | Professor (caso enviado para análise) |
-| P-21 | Preço e quantidade podem ser zero? O boilerplate do kit exige valores maiores que zero | Professor |
+| P-21 | **Resolvida pelo F16, com ressalva.** Preço e quantidade podem ser zero, e a oferta zerada não aparece para os compradores (RN-16). O trecho sobre preço zero com quantidade maior que zero está truncado na transcrição; vale confirmar com o professor se uma oferta com preço zero e estoque deve aparecer | Professor (confirmar o caso de preço zero) |
 | P-22 | **Resolvida pelo F8.** Os front-ends são do grupo de UX/UI. O nosso grupo entrega a API e os erros no padrão RFC 7807, que o front-end exibe | |
 | P-23 | **Resolvida pelo F9.** Pedidos é do grupo de Mercado, Negociação/Leilão e Pedidos | |
 | P-24 | **Resolvida pelo F8.** O grupo de Banco de Dados faz a modelagem, o DDL, as roles, a auditoria e as migrações | |
@@ -551,6 +555,8 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-33 | Divergências entre os arquivos do kit: o guia usa `produto_criado`, chave `produto_id` nos eventos de fornecimento e estoque, campo `version` no envelope e claim `empresa_id`. O `CONTRACTS.md`, o script de tópicos e o código usam `produto_cadastrado`, chave `fornecimentoId`, campo `eventVersion` e claim `empresaId`. Este documento segue o que está implementado | Infraestrutura |
 | P-34 | O grupo de Autenticação definiu RS256, `tenant_id`, `active_scope` e o nome `identity-service` (F10), mas o kit de infraestrutura ainda usa HS256, `empresaId`, `perfil` e `usuarios-service` (F8). A Infraestrutura vai atualizar o kit? Também falta um padrão único para os campos de erro: Autenticação usa `code` e `correlation_id` (RFC 9457), o kit usa `correlationId`, e as nossas ESPs usam `codigo` e `correlationId`. A Logística usa o mesmo formato de erro que nós (`codigo` e `correlationId`) e apoia fechar esse padrão para a turma; ela ainda segue o HS256 do kit (F11). **Atualização (F10, 10/11/2026):** a Autenticação diz ter pedido à Infraestrutura a atualização do kit (RS256, rotas do gateway, tópicos e permissões do banco); o kit continua no commit `630515c`. Sobre o erro, a Autenticação propôs `code` (valores como `ERR-AUTH-001`) e `correlationId`, sem `instance` e `timestamp`. Todos concordam com `correlationId`. O grupo mantém `codigo` até haver consenso na turma, incluindo Logística, Infraestrutura e Teste, e propôs `code` mantendo `instance`, `timestamp` e os valores atuais. Em 12/11/2026, o kit continuava no commit `630515c` | Autenticação, Infraestrutura, Logística, Teste |
 | P-35 | O protótipo do grupo de UX/UI (F13) diverge do contrato dos nossos serviços: tipo de transporte "Rodoviário" (fora da lista `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`); origem do fornecimento como texto livre ("Sorriso - MT") em vez de cidade e UF; produto digitado em vez de escolhido do catálogo; categoria no formulário de fornecimento (é atributo do produto); status "Ativo" e "Pausado" no fornecimento, que não existe (depende da P-11); quantidade com até 3 casas decimais (a API aceita 2). O protótipo não chama as APIs, então nada quebra hoje | Grupo de UX/UI |
+| P-36 | Como o `produtos-service` sabe se um produto tem movimentação (RN-12), se os fornecimentos e os pedidos ficam em outros serviços? Proposta do grupo: o `produtos-service` consome `fornecimento_criado` e marca o produto como movimentado na própria base; a partir daí, alteração e exclusão são recusadas | Grupo |
+| P-37 | Em que tópico publicar a alteração e o encerramento de oferta (RN-14, RN-15)? O kit não tem tópico para isso. Proposta do grupo: a mudança de quantidade sai no `estoque_atualizado`, com as operações novas `REPOSICAO` e `ENCERRAMENTO`; a mudança de preço precisa de um tópico novo, `fornecimento_atualizado`, que o Mercado consumiria | Infraestrutura; Mercado |
 
 ---
 
@@ -588,3 +594,4 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | 0.7 | 10/11/2026 | Segunda resposta do grupo de Autenticação (F10): notas em P-07 (`TENANT_ADMIN` não é administrador da plataforma) e P-34 (pedido de atualização do kit e proposta de padrão de erro, à espera de consenso) |
 | 0.8 | 12/11/2026 | Fontes F12 (token do Identity-Service, relatado pela Logística) e F13 (protótipo do UX/UI). RNF-02 ampliado (emissor, audiência, 403 sem contexto, 503 do serviço de chaves). Notas em P-07 e P-34. Nova pendência P-35 (divergências do protótipo do UX/UI) |
 | 0.9 | 12/11/2026 | Respostas do professor (F14): P-03, P-29 e P-30 resolvidas; P-20 aguarda o caso pedido pelo professor. Repositório de Compra e Demanda como fonte F15 |
+| 0.10 | 16/11/2026 | Respostas do professor em aula (F16): P-09 e P-11 resolvidas; P-21 resolvida com ressalva; P-10 e P-07 parcialmente resolvidas. Novas regras RN-12 a RN-16. RF-03, RF-04, RF-05, RF-11 e RD-05 atualizados. Novas pendências P-36 e P-37 |
