@@ -1,8 +1,8 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 2.0 (proposta para revisão dos grupos que integram com a gente)
-**Data:** 10/11/2026 (versão 1.0: 26/10/2026)
+**Versão:** 2.1 (proposta para revisão dos grupos que integram com a gente)
+**Data:** 18/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
 
@@ -212,15 +212,24 @@ O `produtos-service` consome `fornecimento_criado` e marca o produto como movime
 
 ### 3.4 `empresa_cadastrada` (do serviço de Autenticação)
 
-Conteúdo definido pelo grupo de Autenticação na issue #2 (09/11/2026). Em 10/11/2026, a pedido nosso, o `payload` passou de `snake_case` para `camelCase`, como os demais eventos. Chave: o `tenantId`. O `source` é `identity-service` (o kit chama o serviço de `usuarios-service`, divergência registrada na P-34 do Documento de Requisitos).
+Conteúdo definido pelo grupo de Autenticação. Em 10/11/2026 (issue #2), o grupo respondeu que o `payload` passaria para `camelCase`. O código publicado não seguiu essa resposta, e em 18/11/2026 o grupo confirmou no próprio repositório que o formato oficial é outro (issue #28; [`Matheus-Allvz/Identity-Service`](https://github.com/Matheus-Allvz/Identity-Service), commit `3cc4cce`, `Docs/Alinhamento-Ecossistema-B2B.md`, seção 3.5):
 
-| Campo | Descrição |
+- **Corpo:** o objeto da empresa direto na mensagem, em `snake_case`, **sem** o envelope do kit (`eventType`, `eventVersion`, `payload` etc.).
+- **Chave:** o `tenant_id`, UUID com hífens.
+- **Cabeçalhos do Kafka:** `event_id`, `tenant_id`, `group_id`, `initiator_user_id`, `actor_user_id` (só quando um operador age em nome do usuário), `acting_scope`, `correlation_id` e `context_jws` (assinatura RS256 que pode ser conferida com o JWKS).
+
+| Campo do corpo | Descrição |
 |---|---|
-| `tenantId`, `groupId` | Empresa e grupo econômico (UUID) |
-| `cnpj`, `legalName`, `branchType` | Dados cadastrais (`branchType`: ex. `HQ`) |
-| `geoLat`, `geoLng` | Localização |
-| `status` | Situação da empresa (ex.: `ACTIVE`) |
+| `event_id` | Identificador do evento (UUID) |
+| `tenant_id`, `group_id` | Empresa e grupo econômico (UUID) |
+| `cnpj`, `legal_name` | Dados cadastrais |
+| `branch_type` | `HQ` (matriz) ou `BRANCH` (filial) |
+| `geo_lat`, `geo_lng` | Localização |
+| `status` | Situação da empresa (`ACTIVE` no cadastro) |
 | `scopes` | Escopos habilitados: `BUYER`, `SUPPLIER`, `CARRIER`, `TENANT_ADMIN` |
+| `created_at` | Data e hora do cadastro (ISO 8601) |
+
+Quem consome com a biblioteca comum do kit, que espera o envelope, precisa ler o corpo direto e tirar `eventId` e `correlationId` dos cabeçalhos. O grupo de Autenticação recomenda isso no mesmo documento.
 
 O `fornecimentos-service` não consome este evento na versão 1.1 da ESP-FRN-001, porque o escopo ativo já vem no token (`active_scope`). O campo `empresaId` dos nossos eventos recebe o valor do claim `tenant_id`.
 
@@ -245,7 +254,7 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 |---|---|
 | Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
 | Infraestrutura | Criar, com 3 partições, os tópicos `produto_atualizado`, `produto_excluido`, `fornecimento_atualizado` e `reserva_estoque_recusada`, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado`, `pedido_atualizado`, `produto_atualizado` e `produto_excluido`, e o `produtos-service` como consumidor de `fornecimento_criado`, no `CONTRACTS.md` |
-| Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2): conteúdo de `empresa_cadastrada`, em camelCase. Em aberto: padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
+| Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2) e em 18/11/2026 (issues #27, #28, #29 e #31): conteúdo de `empresa_cadastrada`, em `snake_case` sem envelope; cadastro de produto só por `SUPPLIER`. Em aberto: padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
 | Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`. A categoria passou a ser lista fixa |
 | Logística/Transporte | Respondido em 10/11/2026: listas confirmadas (P-06), tipo de transporte pelo `pedido_criado` (P-27), origem em cidade e UF (P-05) e peso unitário opcional atendidos na versão 1.1 |
 
@@ -260,3 +269,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 1.2 | 10/11/2026 | `empresa_cadastrada` em camelCase (`tenantId`, `groupId`, `legalName`, `branchType`, `geoLat`, `geoLng`), conforme a resposta do grupo de Autenticação na issue #2 |
 | 1.3 | 12/11/2026 | `compradorId` do `pedido_criado` pode ser `null`, porque o pedido passa a ser criado na abertura do leilão (resposta do professor) |
 | 2.0 | 16/11/2026 | Respostas do professor em aula: categoria em lista fixa; `produto_atualizado` e `produto_excluido` passam a ser publicados; `fornecimento_atualizado` novo; operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`; preço e quantidade podem ser zero; `produtos-service` passa a consumir `fornecimento_criado`. **Mudança incompatível:** `categoria` fora da lista é recusada |
+| 2.1 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) corrigido para o formato que o grupo de Autenticação publica: corpo em `snake_case` sem envelope, metadados nos cabeçalhos do Kafka, campos `event_id` e `created_at`. Não muda nenhum evento nosso (issue #28) |
