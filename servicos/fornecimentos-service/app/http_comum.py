@@ -37,6 +37,7 @@ TITULOS = {
     "TOKEN_EXPIRADO": "Token Expirado",
     "PERFIL_NAO_PERMITIDO": "Acesso Negado",
     "CONTEXTO_NAO_SELECIONADO": "Contexto Não Selecionado",
+    "CONTEXTO_DE_GRUPO_NAO_PERMITIDO": "Contexto de Grupo Não Permitido",
     "PRODUTO_DE_OUTRA_EMPRESA": "Produto de Outra Empresa",
     "FORNECIMENTO_DE_OUTRA_EMPRESA": "Fornecimento de Outra Empresa",
     "PRODUTO_COM_MOVIMENTACAO": "Produto com Movimentação",
@@ -104,8 +105,13 @@ def resposta_erro(request: Request, clock: Clock, status: int, codigo: str, deta
 
 
 def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock,
-               emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> dict:
-    """Valida o token na ordem do §7.1 e devolve os claims."""
+               emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO, exige_empresa: bool = True) -> dict:
+    """Valida o token na ordem do §7.1 e devolve os claims.
+
+    `exige_empresa=False` só nas consultas: aceita o token de visão de grupo econômico
+    (`view_mode` MACRO_GROUP, `tenant_id` nulo e lista `allowed_tenants`). Cadastro e alteração
+    precisam de uma única empresa dona e recusam esse token com 403 (§7.1, passo 5).
+    """
     cabecalho = request.headers.get("authorization")
     if cabecalho is None or not cabecalho.startswith("Bearer ") or not preenchido(cabecalho[7:]):
         raise ErroApi(401, "TOKEN_AUSENTE", "Cabeçalho Authorization Bearer ausente.")
@@ -148,10 +154,25 @@ def autenticar(request: Request, chaves: ChavesPublicas, clock: Clock,
         raise ErroApi(401, "TOKEN_INVALIDO", "Claims do token ausentes ou inválidos.")
     if exp <= int(agora_utc(clock).timestamp()):
         raise ErroApi(401, "TOKEN_EXPIRADO", "O token está expirado.")
+    if escopo is not None and empresa is None and claims.get("view_mode") == "MACRO_GROUP":
+        permitidas = claims.get("allowed_tenants")
+        if not isinstance(permitidas, list) or not permitidas or not all(preenchido(t) for t in permitidas):
+            raise ErroApi(401, "TOKEN_INVALIDO", "Token de grupo econômico sem a lista allowed_tenants.")
+        if exige_empresa:
+            raise ErroApi(403, "CONTEXTO_DE_GRUPO_NAO_PERMITIDO",
+                          "Esta operação exige uma única empresa. Use o switch-context com view_mode SINGLE.")
+        return claims
     if not preenchido(empresa) or escopo is None:
         # Token do login, antes da escolha de empresa e escopo (switch-context): válido, mas sem contexto
         raise ErroApi(403, "CONTEXTO_NAO_SELECIONADO", "Selecione a empresa e o escopo de atuação antes de usar o serviço.")
     return claims
+
+
+def empresas_do_token(claims: dict) -> tuple[str, ...]:
+    """Empresas em nome das quais o token atua: a empresa ativa ou, na visão de grupo, as do grupo."""
+    if preenchido(claims.get("tenant_id")):
+        return (claims["tenant_id"],)
+    return tuple(claims.get("allowed_tenants") or ())
 
 
 def exigir_escopo(claims: dict, permitidos: tuple[str, ...]) -> None:
@@ -298,6 +319,6 @@ def criar_logger(nome: str):
 
 __all__ = [
     "AUDIENCIA_PADRAO", "ChavesPublicas", "Clock", "EMISSOR_PADRAO", "ErroApi", "ESCOPOS", "ROTAS_PUBLICAS", "Response", "agora_utc", "autenticar",
-    "configurar_http", "corpo_json", "correlation_id", "criar_logger", "envelope", "exigir_escopo",
+    "configurar_http", "corpo_json", "correlation_id", "criar_logger", "empresas_do_token", "envelope", "exigir_escopo",
     "filtro_texto", "instante", "paginacao", "preenchido", "resposta_erro",
 ]

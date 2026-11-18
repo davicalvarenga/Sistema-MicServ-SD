@@ -340,9 +340,9 @@ def test_alteracao_encerramento_e_vitrine(repo):
         encerrado, havia = repo.zerar_disponivel(fid, agora)
     assert havia == Decimal("40.00") and encerrado["quantidade_disponivel"] == Decimal("0.00")
     assert encerrado["quantidade_reservada"] == Decimal("30.00")
-    visiveis, total = repo.listar_fornecimentos(pid, 0, 10, None)
+    visiveis, total = repo.listar_fornecimentos(pid, 0, 10, ())
     assert visiveis == [] and total == 0
-    do_dono, total = repo.listar_fornecimentos(pid, 0, 10, "EMP-34")
+    do_dono, total = repo.listar_fornecimentos(pid, 0, 10, ("EMP-34",))
     assert [f["fornecimento_id"] for f in do_dono] == [fid] and total == 1
     assert repo.zerar_disponivel("nao-existe", agora) is None and repo.alterar_preco("nao-existe", Decimal("1"), agora) is None
     with pytest.raises(psycopg2.Error):

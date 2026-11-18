@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 2.0 |
+| Versão | 2.1 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -215,9 +215,10 @@ Rotas públicas (sem token): `/health`, `/health/ready`, `/metrics`, `/docs`, `/
 
 Validação do token, nesta ordem:
 1. Cabeçalho `Authorization` ausente, vazio, ou que não começa com `Bearer ` seguido de texto preenchido → `401 TOKEN_AUSENTE`.
-2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; `iss` ausente ou diferente de `emissor`; `aud` ausente ou que não contém `audiencia` (`aud` pode ser texto ou lista); ou claims inválidos: `sub` precisa ser texto preenchido, `active_scope`, quando presente e não nulo, precisa ser um dos quatro escopos do glossário, `tenant_id`, quando presente e não nulo, precisa ser string, e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Se `chaves_publicas.obter(kid)` lançar exceção (serviço de chaves indisponível) → `503 DEPENDENCIA_INDISPONIVEL`, e não 401, para que a tela não encerre a sessão do usuário por uma falha da plataforma. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`group_id`, `roles`, `permissions`) são ignorados.
+2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; `iss` ausente ou diferente de `emissor`; `aud` ausente ou que não contém `audiencia` (`aud` pode ser texto ou lista); ou claims inválidos: `sub` precisa ser texto preenchido, `active_scope`, quando presente e não nulo, precisa ser um dos quatro escopos do glossário, `tenant_id`, quando presente e não nulo, precisa ser string, e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Se `chaves_publicas.obter(kid)` lançar exceção (serviço de chaves indisponível) → `503 DEPENDENCIA_INDISPONIVEL`, e não 401, para que a tela não encerre a sessão do usuário por uma falha da plataforma. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`roles`, `permissions`) são ignorados; `group_id` só é usado no `grupoId` do `fornecimento_criado` (§7.3).
 3. `exp` menor ou igual a `int(agora.timestamp())` → `401 TOKEN_EXPIRADO`. A expiração é verificada com `clock.now()` (decodificar com `options={"verify_exp": False}` e comparar manualmente).
-4. `tenant_id` ausente, nulo ou que não é texto preenchido, ou `active_scope` ausente ou nulo → `403 CONTEXTO_NAO_SELECIONADO`. É o token devolvido pelo login antes da escolha de empresa e escopo (`switch-context` do serviço de Autenticação): ele é válido, mas ainda não diz em nome de qual empresa e perfil o usuário age.
+4. `view_mode` igual a `"MACRO_GROUP"`, `tenant_id` ausente ou nulo e `active_scope` preenchido: é o token de visão de grupo econômico, emitido pelo `switch-context` quando o usuário escolhe o grupo, e não uma empresa. `allowed_tenants` precisa ser lista não vazia de textos preenchidos, senão `401 TOKEN_INVALIDO`. Nas consultas (API-05 e API-06) o token é aceito. No cadastro e na alteração (API-04 e API-07) → `403 CONTEXTO_DE_GRUPO_NAO_PERMITIDO`, porque a operação precisa de uma única empresa dona; o `detail` orienta a usar o `switch-context` com `view_mode` `SINGLE` (issue #33, regra aprovada pelo grupo de Autenticação em 2026-11-18).
+5. `tenant_id` ausente, nulo ou que não é texto preenchido, ou `active_scope` ausente ou nulo → `403 CONTEXTO_NAO_SELECIONADO`. É o token devolvido pelo login antes da escolha de empresa e escopo (`switch-context` do serviço de Autenticação): ele é válido, mas ainda não diz em nome de qual empresa e perfil o usuário age.
 
 Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da requisição.
 
@@ -228,10 +229,10 @@ Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da req
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
+| API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
 | API-05 | GET | `/api/v1/fornecimentos/{fornecimento_id}` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `FORNECIMENTO_NAO_ENCONTRADO` |
 | API-06 | GET | `/api/v1/fornecimentos` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `PAGINACAO_INVALIDA` |
-| API-07 | PATCH | `/api/v1/fornecimentos/{fornecimento_id}` | `SUPPLIER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `FORNECIMENTO_NAO_ENCONTRADO` → 403 `FORNECIMENTO_DE_OUTRA_EMPRESA` → 422 `DADOS_INVALIDOS` (reposição acima do máximo) → 500 `ERRO_INTERNO` |
+| API-07 | PATCH | `/api/v1/fornecimentos/{fornecimento_id}` | `SUPPLIER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `FORNECIMENTO_NAO_ENCONTRADO` → 403 `FORNECIMENTO_DE_OUTRA_EMPRESA` → 422 `DADOS_INVALIDOS` (reposição acima do máximo) → 500 `ERRO_INTERNO` |
 
 #### API-01 — Saúde
 Resposta 200: `{"status": "UP", "service": "fornecimentos-service", "timestamp": "2026-10-26T14:00:00Z"}`
@@ -276,7 +277,7 @@ Resposta 200: o fornecimento completo, no formato da resposta 201 da API-04.
 #### API-06 — Listar fornecimentos
 Parâmetros: `page` (inteiro ≥ 1, padrão 1), `size` (inteiro de 1 a 100, padrão 10), `produto_id` (opcional; se ausente ou não for texto preenchido, sem filtro).
 
-Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04. A oferta zerada só aparece quando o token tem escopo `SUPPLIER` e `tenant_id` igual ao `fornecedor_id` dela (RN-18).
+Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04. A oferta zerada só aparece quando o token tem escopo `SUPPLIER` e o `fornecedor_id` dela é a empresa do token (`tenant_id`) ou, no token de visão de grupo econômico, uma das empresas de `allowed_tenants` (RN-18).
 
 #### API-07 — Alterar ou encerrar fornecimento
 Corpo: objeto com pelo menos um destes campos: `preco` (valor decimal ≥ 0, novo preço de todo o estoque da oferta), `repor` (valor decimal > 0, somado ao disponível) ou `encerrar` (só `true`, zera o disponível). `encerrar` não pode vir com `preco` nem com `repor`. Resposta 200: o fornecimento completo depois da alteração. Exemplo: `{"preco": 12, "repor": 5}`.
@@ -350,13 +351,13 @@ Envelope comum:
 
 | Tópico | Quando | Chave de partição | Payload |
 |---|---|---|---|
-| `fornecimento_criado` | Fornecimento cadastrado (RF-01) | `fornecimento_id` | `fornecimentoId`, `fornecedorId`, `produtoId`, `unidade`, `preco`, `quantidadeDisponivel`, `origem`, `criadoPor` (`empresaId`, `usuarioId`), `criadoEm` |
+| `fornecimento_criado` | Fornecimento cadastrado (RF-01) | `fornecimento_id` | `fornecimentoId`, `fornecedorId`, `produtoId`, `unidade`, `preco`, `quantidadeDisponivel`, `origem`, `criadoPor` (`empresaId`, `usuarioId`), `criadoEm`, `grupoId` |
 | `fornecimento_atualizado` | Oferta alterada ou encerrada (RF-10), quando houve mudança de preço ou de quantidade | `fornecimento_id` | `fornecimentoId`, `fornecedorId`, `produtoId`, `unidade`, `preco`, `quantidadeDisponivel`, `origem`, `atualizadoPor` (`empresaId`, `usuarioId`), `atualizadoEm`. O tópico ainda não existe no kit (P-37 do Documento de Requisitos) |
 | `estoque_atualizado` | Reserva, liberação, baixa, reposição ou encerramento (RF-06, RF-07, RF-10) | `fornecimento_id` | `fornecimentoId`, `produtoId`, `fornecedorId`, `operacao` (`RESERVA`, `LIBERACAO`, `BAIXA`, `REPOSICAO` ou `ENCERRAMENTO`; nos dois últimos, `pedidoId` é `null`), `quantidadeMovimentada`, `quantidadeDisponivel` e `quantidadeReservada` (saldos depois da operação), `pedidoId`, `atualizadoEm` |
 | `reserva_estoque_recusada` | Reserva não feita (RF-06) | `pedido_id` | `pedidoId`, `fornecimentoId`, `quantidadeSolicitada`, `quantidadeDisponivel` (`null` se o fornecimento não existe), `motivo` (`ESTOQUE_INSUFICIENTE` ou `FORNECIMENTO_INEXISTENTE`), `recusadoEm` |
 | `fornecimentos.dlt` | Mensagem consumida inválida ou com falha (RN-09) | `aggregateId` da mensagem original se for texto preenchido; senão `eventId` original se for texto preenchido; senão `"desconhecido"` | `originalEvent` (a mensagem recebida, intacta), `error` (texto não vazio com o motivo), `stackTrace` (`""` para mensagem inválida; o *traceback* para exceção), `failedAtAttempt` (`1`) |
 
-Mapeamento do fornecimento (§6.1) para `fornecimento_criado`: `fornecimento_id` → `fornecimentoId`; `fornecedor_id` → `fornecedorId` e `criadoPor.empresaId`; `produto_id` → `produtoId`; `quantidade_disponivel` → `quantidadeDisponivel`; `criado_por_usuario_id` → `criadoPor.usuarioId`; `criado_em` → `criadoEm`; `unidade`, `preco` e `origem` (objeto com `cidade` e `uf`) com o mesmo nome. `quantidade_reservada` e `atualizado_em` não vão no evento.
+Mapeamento do fornecimento (§6.1) para `fornecimento_criado`: `fornecimento_id` → `fornecimentoId`; `fornecedor_id` → `fornecedorId` e `criadoPor.empresaId`; `produto_id` → `produtoId`; `quantidade_disponivel` → `quantidadeDisponivel`; `criado_por_usuario_id` → `criadoPor.usuarioId`; `criado_em` → `criadoEm`; `unidade`, `preco` e `origem` (objeto com `cidade` e `uf`) com o mesmo nome. `quantidade_reservada` e `atualizado_em` não vão no evento. `grupoId` não é atributo do fornecimento: vem do claim `group_id` do token quando é texto preenchido, senão é `null` (issue #35).
 
 Exemplo de `estoque_atualizado` (`event_bus.publish("estoque_atualizado", "FORN-1", mensagem)`):
 ```json
@@ -559,12 +560,19 @@ Cenário: Evento publicado com envelope, chave e payload
   Quando o CA-01 é executado
   Então exatamente 1 mensagem é publicada, no tópico "fornecimento_criado", com key igual ao fornecimento_id da resposta
   E a mensagem tem eventId UUID4, eventType "fornecimento_criado", eventVersion "1.0", timestamp "2026-10-26T14:00:00Z", source "fornecimentos-service", correlationId "corr-001" e aggregateId igual ao fornecimento_id
-  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem {"cidade": "Goiânia", "uf": "GO"}, criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e criadoEm "2026-10-26T14:00:00Z"
+  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem {"cidade": "Goiânia", "uf": "GO"}, criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"}, criadoEm "2026-10-26T14:00:00Z" e grupoId null (o token não traz group_id)
 
 # CA-13
 Cenário: Requisição recusada não publica
   Quando os cenários CA-02, CA-03, CA-04 e CA-31 a CA-34 são executados
   Então nenhuma mensagem é publicada
+
+# CA-61
+Cenário: Grupo econômico do fornecedor no evento
+  Quando a requisição do CA-01 é enviada com token que traz group_id "GRP-3"
+  Então o payload do fornecimento_criado tem grupoId "GRP-3"
+  Quando é enviada com group_id "" ou 5
+  Então o payload tem grupoId null
 ```
 
 ### RF-05 — Manter a referência local de produtos
@@ -789,6 +797,28 @@ Cenário: Serviço de chaves indisponível
   Quando envia POST /api/v1/fornecimentos com um corpo válido e um token de "SUPPLIER"
   Então a resposta é 503 com codigo "DEPENDENCIA_INDISPONIVEL"
   E nenhum fornecimento é gravado e nenhuma mensagem é publicada
+
+# CA-59
+Cenário: Token de visão de grupo econômico
+  Dado o fornecimento "FORN-1" com disponível 70 e o "FORN-2" com disponível 0, ambos da empresa "EMP-34"
+  E um token de "BUYER" com view_mode "MACRO_GROUP", tenant_id nulo e allowed_tenants ["EMP-34", "EMP-35"]
+  Quando GET /api/v1/fornecimentos/FORN-1 e GET /api/v1/fornecimentos são enviados com esse token
+  Então as respostas são 200 e a lista traz só "FORN-1"
+  Quando POST /api/v1/fornecimentos e PATCH /api/v1/fornecimentos/FORN-1 são enviados com o mesmo token em escopo "SUPPLIER"
+  Então as respostas são 403 com codigo "CONTEXTO_DE_GRUPO_NAO_PERMITIDO" e title "Contexto de Grupo Não Permitido"
+  E nenhuma mensagem é publicada e o saldo de "FORN-1" continua 70
+
+# CA-60
+Cenário: Ofertas zeradas na visão de grupo e token de grupo inválido
+  Dado o fornecimento "FORN-1" com disponível 0 da empresa "EMP-34" e o "FORN-2" com disponível 0 da empresa "EMP-99"
+  Quando GET /api/v1/fornecimentos é enviado com token "MACRO_GROUP" de "SUPPLIER" e allowed_tenants ["EMP-34", "EMP-35"]
+  Então a lista traz só "FORN-1"
+  Quando allowed_tenants é ["EMP-35"]
+  Então a lista é vazia
+  Quando allowed_tenants é vazio, ausente, texto, [""] ou [3]
+  Então a resposta é 401 com codigo "TOKEN_INVALIDO"
+  Quando o token tem view_mode "NONE" e tenant_id nulo
+  Então a resposta é 403 com codigo "CONTEXTO_NAO_SELECIONADO"
 ```
 
 ### RF-10 — Alterar e encerrar a oferta
@@ -916,7 +946,7 @@ Cenário: Métricas
 | RN-15 | `pedido_atualizado` válido exige `payload.pedidoId`, `payload.fornecimentoId` e `payload.status` como texto preenchido. | Sem `status` → DLT. |
 | RN-16 | Liberação e baixa (§6.2): com reserva `RESERVADA` de quantidade q, `CANCELADO` aplica `(+q, −q)` e muda para `LIBERADA`; `VENDA_CONCLUIDA` aplica `(0, −q)` e muda para `BAIXADA`; as duas publicam `estoque_atualizado`. Sem reserva, `CANCELADO` grava reserva `CANCELADA_SEM_RESERVA` com quantidade 0. Nos demais casos, nada muda e nada é publicado. Em todos os casos válidos, o `eventId` é registrado. | PED-1 RESERVADA 30 + CANCELADO → 100/0. |
 | RN-17 | Alteração da oferta (API-07): só escopo `SUPPLIER` (senão 403 `PERFIL_NAO_PERMITIDO`) e só o fornecedor dono (`fornecedor_id` igual ao claim `tenant_id`; senão 403 `FORNECIMENTO_DE_OUTRA_EMPRESA`). Corpo: ver API-07; violação, nenhum dos três campos, `encerrar` diferente de `true` ou combinado com outro campo → 422 `DADOS_INVALIDOS`. Reposição que levaria o disponível acima de 9999999999.99 → 422. | `{"encerrar": true, "preco": 5}` → 422. |
-| RN-18 | Vitrine: na API-06, a oferta com `quantidade_disponivel` 0 não aparece, salvo para o próprio fornecedor (escopo `SUPPLIER` e `tenant_id` igual ao `fornecedor_id`). A API-05 mostra qualquer oferta. | Oferta encerrada some da lista do comprador. |
+| RN-18 | Vitrine: na API-06, a oferta com `quantidade_disponivel` 0 não aparece, salvo para o próprio fornecedor (escopo `SUPPLIER` e `fornecedor_id` igual ao `tenant_id` ou, no token de visão de grupo econômico, contido em `allowed_tenants`). A API-05 mostra qualquer oferta. | Oferta encerrada some da lista do comprador. |
 | RN-19 | Efeitos da API-07, numa única transação: `preco` → `alterar_preco`; `repor` q → `aplicar_movimento(+q, 0)` e `estoque_atualizado` com `REPOSICAO` e `quantidadeMovimentada` q; `encerrar` → `zerar_disponivel` e, se havia disponível maior que zero, `estoque_atualizado` com `ENCERRAMENTO` e `quantidadeMovimentada` igual ao que havia. A reserva existente continua. Se houve mudança de preço ou de quantidade, publica também `fornecimento_atualizado`. Encerrar oferta já zerada responde 200 e não publica nada. Os eventos saem depois da transação, com o correlation id da requisição. | Encerrar com 70 disponíveis e 30 reservados → 0 e 30, `ENCERRAMENTO` 70. |
 | RN-20 | `produto_atualizado` válido exige os mesmos campos do RN-07; atualiza a cópia local só se o `timestamp` for mais novo que o último aplicado (`versao_evento`), mantendo `ativo`. `produto_excluido` válido exige `payload.produtoId` e `timestamp`; põe `ativo = False` se o `timestamp` for igual ou mais novo que o último aplicado. Exclusão de produto desconhecido cria a cópia já inativa, para que um `produto_cadastrado` atrasado não o reative. Produto inativo no cadastro de fornecimento → 422 `PRODUTO_INEXISTENTE`. | `produto_atualizado` mais antigo → ignorado. |
 
@@ -942,7 +972,8 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | TOKEN_AUSENTE | 401 | Não Autenticado | §7.1, item 1. |
 | TOKEN_INVALIDO | 401 | Token Inválido | §7.1, item 2. |
 | TOKEN_EXPIRADO | 401 | Token Expirado | §7.1, item 3. |
-| CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 4. |
+| CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 5. |
+| CONTEXTO_DE_GRUPO_NAO_PERMITIDO | 403 | Contexto de Grupo Não Permitido | §7.1, item 4. |
 | PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01, RN-05, RN-17. |
 | FORNECIMENTO_DE_OUTRA_EMPRESA | 403 | Fornecimento de Outra Empresa | RN-17. |
 | FORNECIMENTO_NAO_ENCONTRADO | 404 | Fornecimento Não Encontrado | RN-05. |
@@ -961,7 +992,7 @@ Respostas fora do catálogo: nenhuma. A documentação automática do framework 
 2. TOKEN_AUSENTE
 3. TOKEN_INVALIDO / DEPENDENCIA_INDISPONIVEL (serviço de chaves)
 4. TOKEN_EXPIRADO
-5. CONTEXTO_NAO_SELECIONADO
+5. CONTEXTO_NAO_SELECIONADO / CONTEXTO_DE_GRUPO_NAO_PERMITIDO
 6. PERFIL_NAO_PERMITIDO
 7. DADOS_INVALIDOS / PAGINACAO_INVALIDA
 8. PRODUTO_INEXISTENTE / FORNECIMENTO_NAO_ENCONTRADO
@@ -1044,12 +1075,12 @@ Cenário: Token não vaza
 |---|---|---|---|
 | RF-01 | RN-01, RN-02, RN-03, RN-04, RN-10 | API-04, `fornecimento_criado` | CA-01 a CA-06, CA-51 |
 | RF-02 | RN-05, RN-06 | API-05 | CA-07 a CA-09 |
-| RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52 |
-| RF-04 | RN-04, RN-12 | `fornecimento_criado` | CA-12, CA-13 |
+| RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52, CA-60 |
+| RF-04 | RN-04, RN-12 | `fornecimento_criado` | CA-12, CA-13, CA-61 |
 | RF-05 | RN-07, RN-08, RN-09, RN-20 | `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimentos.dlt` | CA-14 a CA-16, CA-58 |
 | RF-06 | RN-08, RN-09, RN-11, RN-13, RN-14 | `pedido_criado`, `estoque_atualizado`, `reserva_estoque_recusada`, `fornecimentos.dlt` | CA-17 a CA-26 |
 | RF-07 | RN-08, RN-09, RN-11, RN-15, RN-16 | `pedido_atualizado`, `estoque_atualizado`, `fornecimentos.dlt` | CA-27 a CA-30 |
-| RF-08 | RN-01, RN-04, RN-05 | API-04 a API-06 | CA-31 a CA-34, CA-48 a CA-50 |
+| RF-08 | RN-01, RN-04, RN-05 | API-04 a API-07 | CA-31 a CA-34, CA-48 a CA-50, CA-59, CA-60 |
 | RF-09 | RN-12 | todas | CA-35, CA-36 |
 | RF-10 | RN-11, RN-17, RN-18, RN-19 | API-07, `estoque_atualizado`, `fornecimento_atualizado` | CA-53 a CA-57 |
 | RF-10 | — | API-01 a API-03 | CA-37 a CA-39 |
@@ -1080,6 +1111,9 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-17 | Decisão | Alteração e encerramento de oferta (P-11, respondida pelo professor em aula, F16 do Documento de Requisitos). | Reposição, mudança de preço e encerramento pela API-07 (RN-17 a RN-19). O novo preço vale para todo o estoque, como no exemplo do professor. O encerramento zera só o disponível: a quantidade reservada para pedidos em andamento continua. Se um desses pedidos for cancelado depois, a quantidade volta ao disponível e a oferta reaparece na vitrine; o fornecedor pode encerrar de novo. |
 | Q-18 | Decisão | Preço e quantidade zero (P-21; o trecho sobre preço zero com estoque está truncado na transcrição). | Zero é aceito no cadastro e na alteração (RN-02). A vitrine esconde só a oferta com disponível zero (RN-18); a oferta com preço zero e estoque aparece. Revisar se o professor decidir diferente. |
 | Q-19 | Decisão | Tópico da alteração de oferta (P-37). | `fornecimento_atualizado`, ainda não criado no kit. O Redpanda do kit em modo `dev-container` cria o tópico na primeira publicação, com 1 partição; a criação com 3 partições foi pedida à Infraestrutura. |
+| Q-20 | Decisão | Token de visão de grupo econômico (`MACRO_GROUP`, issue #33). | Aceito nas consultas; recusado com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4). Regra aprovada pelo grupo de Autenticação em 2026-11-18. |
+| Q-21 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`, ainda sem tópico no kit. |
+| Q-22 | Decisão | Grupo econômico no `fornecimento_criado` (issue #35), para Mercado e Negociação/Leilão aplicarem a trava de auto-negociação. | Campo opcional `grupoId`, do claim `group_id`. Não é guardado no fornecimento, porque nenhuma operação do serviço o lê. Mudança compatível no contrato (versão 2.2). |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1120,3 +1154,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-48 a CA-50 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-49. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |
 | 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-14 confirmada pelo professor (pedido criado na abertura do leilão ou da negociação; `compradorId` pode vir vazio). Só texto, sem mudança de comportamento nem de critérios. |
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Preço e quantidade zero aceitos (RN-02, CA-51; CA-03 ajustado). Vitrine sem ofertas zeradas para compradores (RN-18, CA-52). Alteração e encerramento de oferta (API-07, RF-10, RN-17, RN-19, CA-53 a CA-57) com `fornecimento_atualizado` e as operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`. Consumo de `produto_atualizado` e `produto_excluido` (RN-20, CA-58). Novo código `FORNECIMENTO_DE_OUTRA_EMPRESA` (403). Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudanças incompatíveis com a 1.x:** zero passa a ser aceito no cadastro, e a listagem do comprador deixa de mostrar ofertas zeradas. |
+| 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro e alteração; na vitrine, o fornecedor vê as ofertas zeradas das empresas do grupo (§7.1, item 4; RN-18; CA-59, CA-60; Q-20). Campo `grupoId` no `fornecimento_criado` (CA-61, Q-22; CA-12 ajustado). Revogação do token registrada como premissa (Q-21). Motivo: análise do serviço de Autenticação (issues #33, #34 e #35). Mudança compatível. |

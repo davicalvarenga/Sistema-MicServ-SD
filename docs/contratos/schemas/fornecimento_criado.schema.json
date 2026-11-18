@@ -163,6 +163,15 @@
         "criadoEm": {
           "type": "string",
           "format": "date-time"
+        },
+        "grupoId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Grupo econômico do fornecedor (claim group_id do token). Nulo quando o token não traz o grupo. Serve para Mercado e Negociação aplicarem a trava de auto-negociação (issue #35). Campo opcional, versão 2.2 do contrato."
         }
       },
       "additionalProperties": false

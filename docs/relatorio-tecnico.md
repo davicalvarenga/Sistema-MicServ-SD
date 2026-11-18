@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.10 (esboço)
+**Versão:** 0.11 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -230,7 +230,7 @@ O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A p
 | `fornecimento_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Implementado; o kit ainda não tem o tópico (P-37) |
 | `fornecimento_criado` (consumo) | Produtos | Consome | `fornecimentoId` | Implementado: marca a movimentação do produto (ADR-014) |
 | `produto_cadastrado` | Fornecimentos | Consome | `produtoId` | Aceita (ADR-011) |
-| `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8) |
+| `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8). Leva o grupo econômico do fornecedor (`grupoId`) desde 18/11/2026, para a trava de auto-negociação de Mercado e Negociação (issue #35) |
 | `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8) |
 | `empresa_cadastrada` | Fornecimentos | Consome | `empresaId` | Aceita (conteúdo: P-12) |
 | `pedido_criado`, `pedido_atualizado` | Fornecimentos | Consome | `pedidoId` | Pendente (P-02, P-29) |
@@ -523,6 +523,10 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Consequências:** só o serviço de Autenticação emite tokens. Não há chamada de rede por requisição, só a busca das chaves a cada hora. Um token continua válido até expirar (15 minutos). Fixar `algorithms=["RS256"]` impede o ataque de confusão de algoritmo, em que um token HS256 é assinado com a chave pública como segredo. O kit ainda descreve HS256 e precisa ser alinhado (P-34).
 - **Evidência na implementação:** `app/http_comum.py` (`autenticar`: RS256 fixo, `kid` obrigatório, claims `sub`, `tenant_id`, `active_scope`, expiração pelo relógio injetado) e `adaptadores/chaves_jwks.py` (`PyJWKClient` com cache de 1 hora). CA-14 a CA-17 (Produtos) e CA-31 a CA-34 (Fornecimentos), incluindo token HS256 recusado.
 - **Revisão em 12/11/2026 (F12 do Documento de Requisitos):** o token real do Identity-Service traz `iss` = `identity-service` e `aud` = `b2b-platform`. O serviço passou a conferir os dois; antes, aceitava um token emitido para outro sistema com a mesma chave. Os valores são parâmetros de `create_app`, lidos de `JWT_ISSUER` e `JWT_AUDIENCE` no `servidor.py`. Também passaram a valer, como no grupo de Logística: token sem empresa ou escopo (o do login) → 403 `CONTEXTO_NAO_SELECIONADO`, em vez de 401; serviço de chaves fora do ar → 503, em vez de 401. Nos dois casos, o 401 faria a tela encerrar a sessão do usuário sem ele ter errado nada. O adaptador `ChavesJwks` busca o JWKS de novo, para `kid` desconhecido, no máximo uma vez a cada 5 segundos, o que impede que tokens com `kid` inventado gerem uma chamada ao serviço de Autenticação por requisição. Evidência: CA-29 a CA-31 (Produtos), CA-48 a CA-50 (Fornecimentos), `tests/test_chaves_jwks.py` (servidor JWKS local) e cinco defeitos introduzidos de propósito, todos detectados.
+- **Revisão em 18/11/2026 (análise do código do Identity-Service, commit `800f2d8`, e respostas do grupo de Autenticação nas issues #32 a #34):**
+  - O `switch-context` também emite um token de visão de grupo econômico (`view_mode` `MACRO_GROUP`), com `tenant_id` nulo e a lista `allowed_tenants`. Antes, o serviço o tratava como o token do login (403 `CONTEXTO_NAO_SELECIONADO`). Agora as consultas o aceitam, e cadastro, alteração e exclusão o recusam com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO`, porque produto e oferta precisam de uma única empresa dona. Na vitrine, o fornecedor nessa visão vê as ofertas zeradas das empresas do grupo. Regra aprovada pelo grupo de Autenticação. Evidência: `autenticar(..., exige_empresa)` e `empresas_do_token` em `app/http_comum.py`; CA-39 e CA-40 (Produtos), CA-59 e CA-60 (Fornecimentos).
+  - Revogação: logout, suspensão do usuário e bloqueio da empresa só valem na hora dentro do serviço de Autenticação, que mantém a lista de revogação no Redis. Nos nossos serviços o token continua aceito até o `exp`, no máximo 15 minutos. O risco foi aceito (seção 13). O grupo de Autenticação confirmou que é o comportamento esperado e indicou duas saídas para casos críticos: consumir `tenant_bloqueado` e `usuario_bloqueado`, ou chamar o `introspect` deles a cada requisição (a alternativa já descartada acima).
+  - Expiração sem folga de relógio: o SDK do grupo de Autenticação aceita 60 s depois do `exp`; os nossos serviços não aceitam nenhuma folga. Mantido, com o aval do grupo de Autenticação (issue #32).
 - **Status:** Aceita
 
 ### ADR-013: Eventos de alteração e exclusão de produto
@@ -621,13 +625,14 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 
 ## 13. Limitações conhecidas e itens não implementados
 
-> Atualizado em 11/11/2026.
+> Atualizado em 18/11/2026.
 
 | Item | Motivo | Impacto |
 |---|---|---|
 | Limpeza da tabela `outbox` | Não implementada: os eventos publicados ficam na tabela | A tabela cresce com o uso. Uma limpeza periódica dos eventos publicados há mais de 7 dias (retenção dos tópicos no kit) fica para depois |
 | Teste no kit fora do CI | Exige Docker com o kit completo; o CI do GitHub roda só os testes com PostgreSQL | O teste de fumaça e o de queda do Redpanda precisam ser repetidos à mão (`servicos/integracao-kit/`) a cada mudança relevante |
 | Kit ainda com defeitos (K12 a K15) | Correções dependem da Infraestrutura | Sem o contorno de teste local, o banco do kit não sobe |
+| Revogação do token só na expiração | A validação é local (ADR-012) e o kit não tem os tópicos `tenant_bloqueado` e `usuario_bloqueado` | Depois de logout ou bloqueio da empresa, o token continua aceito por até 15 minutos. Risco aceito em 18/11/2026 (issue #34); consumir os eventos de bloqueio fica para quando os tópicos existirem |
 | Log de acesso do uvicorn em texto | Formato padrão do uvicorn | As linhas de acesso HTTP não saem em JSON; os registros do serviço e dos adaptadores saem |
 | Oferta criada durante a exclusão do produto | Os dois serviços são separados; a exclusão e o fornecimento podem acontecer no mesmo segundo | Em uma janela de cerca de 1 segundo, a oferta pode ficar sem produto no catálogo. O caso é raro, porque a exclusão só vale para produto cadastrado errado e sem movimentação |
 | Oferta encerrada com reserva | O encerramento zera só o disponível; um pedido cancelado depois devolve a quantidade | A oferta volta a aparecer na vitrine com a quantidade devolvida; o fornecedor pode encerrar de novo (Q-17 da ESP-FRN-001) |
@@ -682,6 +687,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.8 | 12/11/2026 | ADR-012 revisado: `iss` e `aud` conferidos, 403 para token sem contexto, 503 para serviço de chaves indisponível, limite de busca do JWKS. Seção 7 atualizada |
 | 0.9 | 12/11/2026 | Respostas do professor: ADR-004 aceito (estoque por fornecimento); momento da reserva definido no ADR-005 e no passo 7 |
 | 0.10 | 16/11/2026 | Respostas do professor em aula: ADR-013, ADR-014 e ADR-022 aceitos (alteração e exclusão de produto só sem movimentação, alteração e encerramento de oferta). Seções 5, 6 e 13 atualizadas. Versão 2.0 executada no kit (seção 10) e novo ponto K15 na seção 3.4 |
+| 0.11 | 18/11/2026 | ADR-012 revisado após a análise do serviço de Autenticação: token de visão de grupo econômico aceito só nas consultas, risco da revogação aceito, expiração sem folga mantida. Grupo econômico (`grupoId`) no `fornecimento_criado` (issue #35). Seção 13 atualizada |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

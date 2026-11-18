@@ -131,7 +131,7 @@ def _payload_evento(produto: dict) -> dict:
 
 def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositorio, chaves_publicas: ChavesPublicas,
                emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> FastAPI:
-    app = FastAPI(title="Produtos API", version="2.0", docs_url="/docs", openapi_url="/openapi.json")
+    app = FastAPI(title="Produtos API", version="2.1", docs_url="/docs", openapi_url="/openapi.json")
     logger = criar_logger(NOME_SERVICO)
 
     def prontas() -> bool:
@@ -168,7 +168,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
 
     @app.get("/api/v1/produtos/{produto_id}")
     async def consultar_produto(produto_id: str, request: Request):
-        autenticar(request, chaves_publicas, clock, emissor, audiencia)
+        autenticar(request, chaves_publicas, clock, emissor, audiencia, exige_empresa=False)
         produto = repositorio.obter(produto_id)
         if produto is None:
             raise ErroApi(404, "PRODUTO_NAO_ENCONTRADO", f"Produto {produto_id} não cadastrado.")
@@ -176,7 +176,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
 
     @app.get("/api/v1/produtos")
     async def listar_produtos(request: Request):
-        autenticar(request, chaves_publicas, clock, emissor, audiencia)
+        autenticar(request, chaves_publicas, clock, emissor, audiencia, exige_empresa=False)
         page, size = paginacao(request)
         itens, total = repositorio.listar(filtro_texto(request, "categoria"), (page - 1) * size, size)
         return JSONResponse({"itens": [_projecao(p) for p in itens], "page": page, "size": size, "total": total})

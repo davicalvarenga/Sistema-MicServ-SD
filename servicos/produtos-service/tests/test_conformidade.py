@@ -467,3 +467,32 @@ def test_CA38(amb):
     assert r.status_code == 409 and r.json()["codigo"] == "PRODUTO_COM_MOVIMENTACAO"
     r = amb.cliente.delete(f"{URL}/{pid}", headers=auth())
     assert r.status_code == 409 and pid in amb.repo.produtos and amb.bus.publicadas == []
+
+
+GRUPO = {"tenant": None, "view_mode": "MACRO_GROUP", "allowed_tenants": ["EMP-34", "EMP-35"], "group_id": "GRP-3"}
+
+
+def test_CA39(amb):
+    """Visão de grupo econômico (MACRO_GROUP): consultas aceitas; cadastro, alteração e exclusão recusados com 403."""
+    pid = cadastrar(amb).json()["produto_id"]
+    amb.bus.publicadas.clear()
+    assert amb.cliente.get(f"{URL}/{pid}", headers=auth("BUYER", **GRUPO)).status_code == 200
+    r = amb.cliente.get(URL, headers=auth("BUYER", **GRUPO))
+    assert r.status_code == 200 and r.json()["total"] == 1
+    for metodo, url, kwargs in (("post", URL, {"json": PRODUTO_VALIDO}), ("put", f"{URL}/{pid}", {"json": PRODUTO_VALIDO}),
+                                ("delete", f"{URL}/{pid}", {})):
+        r = getattr(amb.cliente, metodo)(url, headers=auth(**GRUPO), **kwargs)
+        assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_DE_GRUPO_NAO_PERMITIDO"
+        assert r.json()["title"] == "Contexto de Grupo Não Permitido"
+    assert amb.bus.publicadas == [] and len(amb.repo.produtos) == 1
+
+
+def test_CA40(amb):
+    """Token de grupo sem allowed_tenants válido é inválido; token do login continua pedindo o switch-context."""
+    for invalido in ([], None, "EMP-34", [""], [3]):
+        r = amb.cliente.get(URL, headers=auth(**{**GRUPO, "allowed_tenants": invalido}))
+        assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_INVALIDO"
+    r = amb.cliente.get(URL, headers=auth(tenant=None, view_mode="NONE"))
+    assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
+    r = amb.cliente.get(URL, headers=auth(None, **GRUPO))
+    assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"

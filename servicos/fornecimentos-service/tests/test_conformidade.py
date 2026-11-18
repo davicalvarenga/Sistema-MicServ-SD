@@ -168,7 +168,8 @@ def test_CA12(amb):
         "source": "fornecimentos-service", "correlationId": "corr-001", "aggregateId": fid}
     assert m["payload"] == {"fornecimentoId": fid, "fornecedorId": "EMP-34", "produtoId": "PROD-1", "unidade": "L", "preco": 5.5,
                             "quantidadeDisponivel": 15000, "origem": {"cidade": "Goiânia", "uf": "GO"},
-                            "criadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "criadoEm": "2026-10-26T14:00:00Z"}
+                            "criadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "criadoEm": "2026-10-26T14:00:00Z",
+                            "grupoId": None}
 
 
 def test_CA13(amb):
@@ -711,3 +712,46 @@ def test_CA58(amb):
     assert r.status_code == 422 and r.json()["codigo"] == "PRODUTO_INEXISTENTE"
     entregar(amb, "produto_excluido", {"eventId": "inv-1", "payload": {}})
     assert [p["topic"] for p in amb.bus.publicadas][-1] == "fornecimentos.dlt"
+
+
+GRUPO = {"tenant": None, "view_mode": "MACRO_GROUP", "allowed_tenants": ["EMP-34", "EMP-35"], "group_id": "GRP-3"}
+
+
+def test_CA59(amb):
+    """Visão de grupo econômico (MACRO_GROUP): consultas aceitas; cadastro e alteração recusados com 403."""
+    gravar_fornecimento(amb, 70)
+    gravar_fornecimento(amb, 0, fid="FORN-2")
+    assert amb.cliente.get(f"{URL}/FORN-1", headers=auth("BUYER", **GRUPO)).status_code == 200
+    r = amb.cliente.get(URL, headers=auth("BUYER", **GRUPO))
+    assert r.status_code == 200 and [f["fornecimento_id"] for f in r.json()["itens"]] == ["FORN-1"]
+    r = amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth(**GRUPO))
+    assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_DE_GRUPO_NAO_PERMITIDO"
+    assert r.json()["title"] == "Contexto de Grupo Não Permitido"
+    r = amb.cliente.patch(f"{URL}/FORN-1", json={"repor": 1}, headers=auth(**GRUPO))
+    assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_DE_GRUPO_NAO_PERMITIDO"
+    assert amb.bus.publicadas == [] and amb.repo.estado["fornecimentos"]["FORN-1"]["quantidade_disponivel"] == Decimal("70")
+
+
+def test_CA60(amb):
+    """Fornecedor na visão de grupo vê as ofertas zeradas das empresas do grupo, e só delas."""
+    gravar_fornecimento(amb, 0)
+    gravar_fornecimento(amb, 0, fid="FORN-2")
+    amb.repo.estado["fornecimentos"]["FORN-2"]["fornecedor_id"] = "EMP-99"
+    r = amb.cliente.get(URL, headers=auth(**GRUPO))
+    assert [f["fornecimento_id"] for f in r.json()["itens"]] == ["FORN-1"]
+    r = amb.cliente.get(URL, headers=auth(**{**GRUPO, "allowed_tenants": ["EMP-35"]}))
+    assert r.json()["itens"] == []
+    for invalido in ([], None, "EMP-34", [""], [3]):
+        r = amb.cliente.get(URL, headers=auth(**{**GRUPO, "allowed_tenants": invalido}))
+        assert r.status_code == 401 and r.json()["codigo"] == "TOKEN_INVALIDO"
+    r = amb.cliente.get(URL, headers=auth(tenant=None, view_mode="NONE", allowed_tenants=["EMP-34"]))
+    assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
+
+
+def test_CA61(amb):
+    """grupoId do fornecimento_criado vem do claim group_id do token."""
+    r = amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth(group_id="GRP-3"))
+    assert r.status_code == 201 and amb.bus.publicadas[-1]["message"]["payload"]["grupoId"] == "GRP-3"
+    for sem_grupo in ("", 5):
+        amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth(group_id=sem_grupo))
+        assert amb.bus.publicadas[-1]["message"]["payload"]["grupoId"] is None
