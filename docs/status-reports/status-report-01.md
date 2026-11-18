@@ -22,12 +22,12 @@
 | Entrega | Versão | Onde está |
 |---|---|---|
 | Documento de Requisitos | 0.11 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
-| Relatório Técnico (arquitetura e decisões) | 0.10 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
-| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.1 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
-| Especificação do `produtos-service` | 2.0 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
-| Especificação do `fornecimentos-service` | 2.0 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
+| Relatório Técnico (arquitetura e decisões) | 0.11 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
+| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.2 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
+| Especificação do `produtos-service` | 2.1 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
+| Especificação do `fornecimentos-service` | 2.1 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
-| `produtos-service` e `fornecimentos-service` | 2.0 | [`servicos/`](../../servicos/) |
+| `produtos-service` e `fornecimentos-service` | 2.1 | [`servicos/`](../../servicos/) |
 | Integração com o kit (duas instâncias de cada serviço) | | [`servicos/integracao-kit/`](../../servicos/integracao-kit/README.md) |
 
 ---

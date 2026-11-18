@@ -131,7 +131,7 @@ def _payload_evento(produto: dict) -> dict:
 
 def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositorio, chaves_publicas: ChavesPublicas,
                emissor: str = EMISSOR_PADRAO, audiencia: str = AUDIENCIA_PADRAO) -> FastAPI:
-    app = FastAPI(title="Produtos API", version="2.0", docs_url="/docs", openapi_url="/openapi.json")
+    app = FastAPI(title="Produtos API", version="2.1", docs_url="/docs", openapi_url="/openapi.json")
     logger = criar_logger(NOME_SERVICO)
 
     def prontas() -> bool:

@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 2.0 |
+| Versão | 2.1 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -170,7 +170,8 @@ Validação do token, nesta ordem (o primeiro problema encontrado define a respo
 1. Cabeçalho `Authorization` ausente, vazio, ou que não começa com `Bearer ` seguido de texto preenchido → `401 TOKEN_AUSENTE`.
 2. Token malformado; cabeçalho do token sem `kid` ou com `alg` diferente de `"RS256"`; `chaves_publicas.obter(kid)` devolvendo `None`; assinatura inválida para essa chave; `iss` ausente ou diferente de `emissor`; `aud` ausente ou que não contém `audiencia` (`aud` pode ser texto ou lista); ou claims inválidos: `sub` precisa ser texto preenchido, `active_scope`, quando presente e não nulo, precisa ser um dos quatro escopos do glossário, `tenant_id`, quando presente e não nulo, precisa ser string, e `exp` precisa ser inteiro → `401 TOKEN_INVALIDO`. Se `chaves_publicas.obter(kid)` lançar exceção (serviço de chaves indisponível) → `503 DEPENDENCIA_INDISPONIVEL`, e não 401, para que a tela não encerre a sessão do usuário por uma falha da plataforma. Decodificar sempre com `algorithms=["RS256"]`, nunca aceitando o algoritmo declarado pelo próprio token. Claims extras (`group_id`, `roles`, `permissions`) são ignorados.
 3. `exp` (segundos desde a época Unix, UTC) menor ou igual a `int(agora.timestamp())` → `401 TOKEN_EXPIRADO`. A verificação de expiração usa `clock.now()`, nunca o relógio do sistema (decodificar com `options={"verify_exp": False}` e comparar manualmente).
-4. `tenant_id` ausente, nulo ou que não é texto preenchido, ou `active_scope` ausente ou nulo → `403 CONTEXTO_NAO_SELECIONADO`. É o token devolvido pelo login antes da escolha de empresa e escopo (`switch-context` do serviço de Autenticação): ele é válido, mas ainda não diz em nome de qual empresa e perfil o usuário age.
+4. `view_mode` igual a `"MACRO_GROUP"`, `tenant_id` ausente ou nulo e `active_scope` preenchido: é o token de visão de grupo econômico, emitido pelo `switch-context` quando o usuário escolhe o grupo, e não uma empresa. `allowed_tenants` precisa ser lista não vazia de textos preenchidos, senão `401 TOKEN_INVALIDO`. Nas consultas (API-05 e API-06) o token é aceito. No cadastro, na alteração e na exclusão (API-04, API-07 e API-08) → `403 CONTEXTO_DE_GRUPO_NAO_PERMITIDO`, porque a operação precisa de uma única empresa dona; o `detail` orienta a usar o `switch-context` com `view_mode` `SINGLE` (issue #33, regra aprovada pelo grupo de Autenticação em 2026-11-18).
+5. `tenant_id` ausente, nulo ou que não é texto preenchido, ou `active_scope` ausente ou nulo → `403 CONTEXTO_NAO_SELECIONADO`. É o token devolvido pelo login antes da escolha de empresa e escopo (`switch-context` do serviço de Autenticação): ele é válido, mas ainda não diz em nome de qual empresa e perfil o usuário age.
 
 Toda resposta, de sucesso ou de erro, inclui o cabeçalho `X-Correlation-Id` com o correlation id da requisição.
 
@@ -181,11 +182,11 @@ Toda resposta, de sucesso ou de erro, inclui o cabeçalho `X-Correlation-Id` com
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
+| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
 | API-05 | GET | `/api/v1/produtos/{produto_id}` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 404 `PRODUTO_NAO_ENCONTRADO` |
 | API-06 | GET | `/api/v1/produtos` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 422 `PAGINACAO_INVALIDA` |
-| API-07 | PUT | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
-| API-08 | DELETE | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 204 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
+| API-07 | PUT | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
+| API-08 | DELETE | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 204 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
 
 #### API-01 — Saúde
 Resposta 200:
@@ -547,6 +548,23 @@ Cenário: Serviço de chaves indisponível
   Quando envia POST /api/v1/produtos com um corpo válido
   Então a resposta é 503 com codigo "DEPENDENCIA_INDISPONIVEL"
   E nenhum produto é gravado e nenhuma mensagem é publicada
+
+# CA-39
+Cenário: Token de visão de grupo econômico
+  Dado o produto do CA-01 cadastrado
+  E um token de "BUYER" com view_mode "MACRO_GROUP", tenant_id nulo e allowed_tenants ["EMP-34", "EMP-35"]
+  Quando GET /api/v1/produtos/{produto_id} e GET /api/v1/produtos são enviados com esse token
+  Então as respostas são 200
+  Quando POST /api/v1/produtos, PUT e DELETE /api/v1/produtos/{produto_id} são enviados com o mesmo token em escopo "SUPPLIER"
+  Então as respostas são 403 com codigo "CONTEXTO_DE_GRUPO_NAO_PERMITIDO" e title "Contexto de Grupo Não Permitido"
+  E nenhuma mensagem é publicada e o produto continua gravado
+
+# CA-40
+Cenário: Token de grupo inválido e token do login
+  Quando GET /api/v1/produtos é enviado com token "MACRO_GROUP" cujo allowed_tenants é vazio, ausente, texto, [""] ou [3]
+  Então cada resposta é 401 com codigo "TOKEN_INVALIDO"
+  Quando é enviado com token de view_mode "NONE" e tenant_id nulo, ou com token "MACRO_GROUP" sem active_scope
+  Então a resposta é 403 com codigo "CONTEXTO_NAO_SELECIONADO"
 ```
 
 ### RF-06 — Propagar o identificador de correlação
@@ -713,7 +731,8 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | TOKEN_AUSENTE | 401 | Não Autenticado | §7.1, item 1. |
 | TOKEN_INVALIDO | 401 | Token Inválido | §7.1, item 2. |
 | TOKEN_EXPIRADO | 401 | Token Expirado | §7.1, item 3. |
-| CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 4. |
+| CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 5. |
+| CONTEXTO_DE_GRUPO_NAO_PERMITIDO | 403 | Contexto de Grupo Não Permitido | §7.1, item 4. |
 | PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01. |
 | PRODUTO_DE_OUTRA_EMPRESA | 403 | Produto de Outra Empresa | RN-10. |
 | PRODUTO_NAO_ENCONTRADO | 404 | Produto Não Encontrado | RN-05. |
@@ -732,7 +751,7 @@ Respostas fora do catálogo: nenhuma. Rota inexistente e método não permitido 
 2. TOKEN_AUSENTE
 3. TOKEN_INVALIDO / DEPENDENCIA_INDISPONIVEL (serviço de chaves)
 4. TOKEN_EXPIRADO
-5. CONTEXTO_NAO_SELECIONADO
+5. CONTEXTO_NAO_SELECIONADO / CONTEXTO_DE_GRUPO_NAO_PERMITIDO
 6. PERFIL_NAO_PERMITIDO
 7. DADOS_INVALIDOS / PAGINACAO_INVALIDA
 8. PRODUTO_NAO_ENCONTRADO
@@ -795,7 +814,7 @@ Cenário: Token não vaza
 | RF-02 | RN-05 | API-05 | CA-07, CA-08 |
 | RF-03 | RN-05, RN-06 | API-06 | CA-09 a CA-11 |
 | RF-04 | RN-03, RN-04, RN-07, RN-08 | `produto_cadastrado` | CA-12, CA-13, CA-28 |
-| RF-05 | RN-01, RN-04 | API-04 a API-06 | CA-14 a CA-17, CA-29 a CA-31 |
+| RF-05 | RN-01, RN-04 | API-04 a API-08 | CA-14 a CA-17, CA-29 a CA-31, CA-39, CA-40 |
 | RF-06 | RN-07 | todas | CA-18, CA-19 |
 | RF-07 | — | API-01 a API-03 | CA-20 a CA-22 |
 | RF-08 | RN-02, RN-09, RN-10, RN-11 | API-07, `produto_atualizado` | CA-33, CA-36, CA-38 |
@@ -823,6 +842,8 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-12 | Decisão | Quem altera e exclui o produto (P-07 sem resposta do professor). | Só a empresa dona (RN-10). Revisar se o professor decidir diferente. |
 | Q-13 | Decisão | Conteúdo da lista fixa de categorias (P-10: o professor disse que é lista fixa; o trecho sobre quem define está truncado na transcrição). | Lista definida pelo grupo a partir dos produtos do protótipo do UX e da turma (RN-09). Ampliar a lista é nova versão desta ESP e dos schemas. |
 | Q-14 | Premissa | Fornecimento criado no mesmo instante em que o produto é excluído (os dois serviços são separados). | Janela de cerca de 1 segundo (tempo de entrega do evento). O `fornecimentos-service` desativa a cópia local ao receber `produto_excluido`, e o `fornecimento_criado` atrasado de um produto já excluído é ignorado aqui (CA-37). O fornecimento criado nessa janela fica sem produto no catálogo; o caso é registrado como limitação no Relatório Técnico. |
+| Q-15 | Decisão | Token de visão de grupo econômico (`MACRO_GROUP`, issue #33). | Aceito nas consultas; recusado com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4). Regra aprovada pelo grupo de Autenticação em 2026-11-18. |
+| Q-16 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`, ainda sem tópico no kit. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -863,3 +884,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.4 | 2026-11-12 | Grupo de Fornecimento e Produtos | Token: `iss` e `aud` conferidos (parâmetros opcionais `emissor` e `audiencia` em `create_app`); token sem empresa ou escopo → 403 `CONTEXTO_NAO_SELECIONADO` (§7.1, item 4); serviço de chaves indisponível → 503 `DEPENDENCIA_INDISPONIVEL`. CA-29 a CA-31 novos; o caso "sem tenant_id" saiu do critério de token inválido e passou ao CA-30. Motivo: formato do token do Identity-Service relatado pelo grupo de Logística (F12). |
 | 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-03 confirmada pelo professor (comprador cadastra produto). Só texto, sem mudança de comportamento nem de critérios. |
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Categoria passa a lista fixa (RN-09, CA-32). Alteração (API-07, RF-08) e exclusão (API-08, RF-09) de produto pela empresa dona, só sem movimentação (RN-10, RN-11). Consumo de `fornecimento_criado` para marcar a movimentação (RF-10) e `produtos.dlt`. Novos atributos `atualizado_em` e `com_movimentacao`; novos códigos `PRODUTO_DE_OUTRA_EMPRESA` (403) e `PRODUTO_COM_MOVIMENTACAO` (409). CA-01 e CA-23 ajustados; CA-32 a CA-38 novos. Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudança incompatível com a 1.x:** categoria em texto livre passa a ser recusada. |
+| 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4; CA-39, CA-40; Q-15). Revogação do token registrada como premissa (Q-16). Motivo: análise do serviço de Autenticação (issues #33 e #34). Mudança compatível: antes esse token recebia 403 `CONTEXTO_NAO_SELECIONADO` em todas as rotas. |
