@@ -41,10 +41,15 @@
    - Categoria do produto passou a ser lista fixa.
    - Eventos novos: `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado`.
 2. **Testes.**
-   - Testes automatizados com PostgreSQL real: 62 no `produtos-service` e 111 no `fornecimentos-service`, todos passando, também no CI do GitHub.
+   - Testes automatizados com PostgreSQL real: 64 no `produtos-service` e 114 no `fornecimentos-service`, todos passando, também no CI do GitHub.
    - Teste de ponta a ponta no kit (HTTP nas quatro instâncias, Redpanda, banco e token RS256): 17 de 17 verificações em duas rodadas seguidas.
 3. **Defeito novo no kit (K15).** O script de criação de tópicos do kit esconde falhas e informa sucesso; rodado cedo demais, deixa de criar tópicos. Era a causa provável da falha intermitente que tínhamos registrado (issue #24). Contorno documentado e problema relatado à Infraestrutura (issue #12).
-4. **Análise do serviço de Autenticação.** O repositório ficou acessível em 17/11. Os nossos serviços aceitam o formato real do token deles. Abrimos 9 issues com inconsistências (#27 a #35); o grupo de Autenticação corrigiu 4 delas em 18/11 (#27, #28, #29 e #31).
+4. **Análise do serviço de Autenticação.** O repositório ficou acessível em 17/11. Os nossos serviços aceitam o formato real do token deles. Abrimos 9 issues com inconsistências (#27 a #35), e o grupo de Autenticação respondeu a todas em 18/11. Três foram corrigidas do lado deles (#28, #29 e #31). Na #27, a nossa análise estava errada (dissemos que só o fornecedor cadastra produto, quando o professor confirmou fornecedor e comprador); a issue foi reaberta com a correção.
+5. **Decisões a partir das respostas da Autenticação.**
+   - Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas; cadastro e alteração recusados com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (issue #33).
+   - `fornecimento_criado` passa a levar o grupo econômico do fornecedor (`grupoId`), para Mercado e Negociação aplicarem a trava de auto-negociação (issue #35).
+   - Expiração do token sem folga de relógio, como já era (issue #32).
+   - Logout ou bloqueio só valem nos nossos serviços quando o token expira, em até 15 minutos; risco aceito e registrado no Relatório Técnico (issue #34).
 
 ---
 
@@ -52,9 +57,9 @@
 
 | # | Ação | Responsável |
 |---|---|---|
-| 1 | Decidir como tratar o token de visão de grupo econômico (`MACRO_GROUP`) e a folga de 60 s na expiração do token (issues #33 e #32) | Grupo |
-| 2 | Decidir se aceitamos o risco de revogação de token em até 15 minutos ou se consumimos os eventos de bloqueio da Autenticação (issue #34) | Grupo |
-| 3 | Decidir se o `fornecimento_criado` passa a levar o grupo econômico, para Mercado e Negociação aplicarem a trava de auto-negociação (issue #35) | Grupo |
+| 1 | Avisar Mercado e Negociação/Leilão do campo `grupoId` no `fornecimento_criado` (issue #35) | Grupo |
+| 2 | Acompanhar a correção dos escopos de cadastro de produto no serviço de Autenticação (issue #27) | Grupo de Autenticação |
+| 3 | Repetir o teste de ponta a ponta no kit com a versão 2.1 | Grupo |
 | 4 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`) | Grupo, quando o serviço estiver no kit |
 | 5 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
 
@@ -69,6 +74,7 @@
 | Compra e Demanda | Revisar os eventos de catálogo e estoque da versão 2.0 | Possível divergência na integração | #21 |
 | UX/UI | O protótipo usa valores fora do contrato (tipo de transporte, origem em texto, categoria "Grãos") | As telas não vão funcionar com a nossa API sem ajuste | #22 |
 | Autenticação | Padrão único para o corpo de erro (`code` ou `codigo`) | Front-end e testes tratam dois formatos | #30 |
+| Autenticação | Voltar a permitir que o comprador cadastre produto (`BUYER_OPERATOR` com `produtos:criar`) | O nosso serviço confere só o escopo ativo e aceita o comprador; quem seguir a documentação deles (Grupo de Teste, front-end) vai esperar 403 | #27 |
 | Grupo de Teste | Atualizar os casos para a versão 2.0 | Casos antigos vão falhar (ex.: preço zero agora é aceito) | #25 |
 
 ---
@@ -92,5 +98,5 @@ As respostas da última aula ficaram cortadas na transcrição nestes pontos. O 
 |---|---|---|
 | Kit de infraestrutura com defeitos (K12 a K15) | Nenhum serviço da turma sobe sem contorno | Contornos documentados no README da integração; pedidos na issue #12 |
 | Eventos de pedido sem `fornecimentoId` | Reserva e baixa de estoque não funcionam na integração | Pedido feito ao grupo de Pedidos (issue #1) |
-| Token continua válido por até 15 minutos depois de logout ou bloqueio | Empresa bloqueada ainda opera nesse intervalo | Em decisão (issue #34) |
+| Token continua válido por até 15 minutos depois de logout ou bloqueio | Empresa bloqueada ainda opera nesse intervalo | Aceito e registrado no Relatório Técnico (issue #34) |
 | Teste no kit fora do CI | Regressão na integração só aparece no teste manual | Teste de fumaça repetido a cada mudança relevante |

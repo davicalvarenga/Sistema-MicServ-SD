@@ -22,6 +22,7 @@ from .http_comum import (
     corpo_json,
     correlation_id,
     criar_logger,
+    empresas_do_token,
     envelope,
     exigir_escopo,
     filtro_texto,
@@ -59,7 +60,7 @@ class RepositorioFornecimentos(Protocol):
     def inserir_fornecimento(self, fornecimento: dict) -> None: ...
     def obter_fornecimento(self, fornecimento_id: str) -> dict | None: ...
     def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int,
-                             incluir_zeradas_de: str | None) -> tuple[list[dict], int]: ...
+                             incluir_zeradas_de: tuple[str, ...]) -> tuple[list[dict], int]: ...
     def alterar_preco(self, fornecimento_id: str, preco: Decimal, atualizado_em: datetime) -> dict | None: ...
     def zerar_disponivel(self, fornecimento_id: str, atualizado_em: datetime) -> tuple[dict, Decimal] | None: ...
     def aplicar_movimento(self, fornecimento_id: str, delta_disponivel: Decimal,
@@ -183,6 +184,8 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "origem": dict(origem),
             "criadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
             "criadoEm": momento,
+            # Grupo econômico do fornecedor (claim group_id), para Mercado e Negociação aplicarem a trava de auto-negociação
+            "grupoId": claims["group_id"] if preenchido(claims.get("group_id")) else None,
         }
         chave = fornecimento["fornecimento_id"]
         event_bus.publish("fornecimento_criado", chave, envelope("fornecimento_criado", NOME_SERVICO, chave, correlation_id(request), clock, payload))
@@ -190,7 +193,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
 
     @app.get("/api/v1/fornecimentos/{fornecimento_id}")
     async def consultar_fornecimento(fornecimento_id: str, request: Request):
-        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia, exige_empresa=False)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         fornecimento = repositorio.obter_fornecimento(fornecimento_id)
         if fornecimento is None:
@@ -199,11 +202,12 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
 
     @app.get("/api/v1/fornecimentos")
     async def listar_fornecimentos(request: Request):
-        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
+        claims = autenticar(request, chaves_publicas, clock, emissor, audiencia, exige_empresa=False)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         page, size = paginacao(request)
-        # RN-18: oferta com disponível zero não aparece, exceto para o próprio fornecedor (histórico)
-        dono = claims["tenant_id"] if claims["active_scope"] == "SUPPLIER" else None
+        # RN-18: oferta com disponível zero não aparece, exceto para o próprio fornecedor (histórico).
+        # Na visão de grupo econômico, o fornecedor vê as ofertas zeradas de todas as empresas do grupo.
+        dono = empresas_do_token(claims) if claims["active_scope"] == "SUPPLIER" else ()
         itens, total = repositorio.listar_fornecimentos(filtro_texto(request, "produto_id"), (page - 1) * size, size, dono)
         return JSONResponse({"itens": [projecao(f) for f in itens], "page": page, "size": size, "total": total})
 

@@ -1,7 +1,7 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 2.1 (proposta para revisão dos grupos que integram com a gente)
+**Versão:** 2.2 (proposta para revisão dos grupos que integram com a gente)
 **Data:** 18/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
@@ -99,6 +99,7 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 | `origem` | objeto | Ponto de coleta: `cidade` (texto) e `uf` (sigla de uma das 27 unidades da federação). Formato pedido pela Logística, igual ao campo `origem` que ela propôs para o `pedido_criado` (P-05) |
 | `criadoPor` | objeto | `empresaId` e `usuarioId` de quem criou |
 | `criadoEm` | data e hora | Momento da criação |
+| `grupoId` | texto ou nulo | Grupo econômico do fornecedor, do claim `group_id` do token. Nulo quando o token não traz o grupo. Para Mercado e Negociação/Leilão aplicarem a trava de auto-negociação (issue #35). Opcional: consumidores antigos podem ignorar |
 
 Exemplo: [`exemplos/fornecimento_criado.json`](contratos/exemplos/fornecimento_criado.json)
 
@@ -254,7 +255,7 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 |---|---|
 | Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
 | Infraestrutura | Criar, com 3 partições, os tópicos `produto_atualizado`, `produto_excluido`, `fornecimento_atualizado` e `reserva_estoque_recusada`, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado`, `pedido_atualizado`, `produto_atualizado` e `produto_excluido`, e o `produtos-service` como consumidor de `fornecimento_criado`, no `CONTRACTS.md` |
-| Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2) e em 18/11/2026 (issues #27, #28, #29 e #31): conteúdo de `empresa_cadastrada`, em `snake_case` sem envelope; cadastro de produto só por `SUPPLIER`. Em aberto: padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
+| Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2) e em 18/11/2026 (issues #28, #29 e #31): conteúdo de `empresa_cadastrada`, em `snake_case` sem envelope. Em aberto: escopos de cadastro de produto, que são `SUPPLIER` e `BUYER` (issue #27); padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
 | Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`. A categoria passou a ser lista fixa |
 | Logística/Transporte | Respondido em 10/11/2026: listas confirmadas (P-06), tipo de transporte pelo `pedido_criado` (P-27), origem em cidade e UF (P-05) e peso unitário opcional atendidos na versão 1.1 |
 
@@ -270,3 +271,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 1.3 | 12/11/2026 | `compradorId` do `pedido_criado` pode ser `null`, porque o pedido passa a ser criado na abertura do leilão (resposta do professor) |
 | 2.0 | 16/11/2026 | Respostas do professor em aula: categoria em lista fixa; `produto_atualizado` e `produto_excluido` passam a ser publicados; `fornecimento_atualizado` novo; operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`; preço e quantidade podem ser zero; `produtos-service` passa a consumir `fornecimento_criado`. **Mudança incompatível:** `categoria` fora da lista é recusada |
 | 2.1 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) corrigido para o formato que o grupo de Autenticação publica: corpo em `snake_case` sem envelope, metadados nos cabeçalhos do Kafka, campos `event_id` e `created_at`. Não muda nenhum evento nosso (issue #28) |
+| 2.2 | 18/11/2026 | Campo opcional `grupoId` no `fornecimento_criado`, pedido na análise do grupo de Autenticação (issue #35). Mudança compatível |
