@@ -2,7 +2,7 @@
 
 **Grupo:** Fornecimento e Produtos
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Situação em:** 18/11/2026
+**Situação em:** 19/11/2026
 **Repositório:** [`davicalvarenga/Sistema-MicServ-SD`](https://github.com/davicalvarenga/Sistema-MicServ-SD)
 
 ---
@@ -42,7 +42,7 @@
    - Eventos novos: `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado`.
 2. **Testes.**
    - Testes automatizados com PostgreSQL real: 64 no `produtos-service` e 114 no `fornecimentos-service`, todos passando, também no CI do GitHub.
-   - Teste de ponta a ponta no kit (HTTP nas quatro instâncias, Redpanda, banco e token RS256): 17 de 17 verificações em duas rodadas seguidas.
+   - Teste de ponta a ponta no kit (HTTP nas quatro instâncias, Redpanda, banco e token RS256): 18 de 18 verificações em duas rodadas seguidas com a versão 2.1, em 19/11.
 3. **Defeito novo no kit (K15).** O script de criação de tópicos do kit esconde falhas e informa sucesso; rodado cedo demais, deixa de criar tópicos. Era a causa provável da falha intermitente que tínhamos registrado (issue #24). Contorno documentado e problema relatado à Infraestrutura (issue #12).
 4. **Análise do serviço de Autenticação.** O repositório ficou acessível em 17/11. Os nossos serviços aceitam o formato real do token deles. Abrimos 9 issues com inconsistências (#27 a #35), e o grupo de Autenticação respondeu a todas em 18/11. Três foram corrigidas do lado deles (#28, #29 e #31). Na #27, a nossa análise estava errada (dissemos que só o fornecedor cadastra produto, quando o professor confirmou fornecedor e comprador); a issue foi reaberta com a correção.
 5. **Decisões a partir das respostas da Autenticação.**
@@ -59,9 +59,9 @@
 |---|---|---|
 | 1 | Avisar Mercado e Negociação/Leilão do campo `grupoId` no `fornecimento_criado` (issue #35) | Grupo |
 | 2 | Acompanhar a correção dos escopos de cadastro de produto no serviço de Autenticação (issue #27) | Grupo de Autenticação |
-| 3 | Repetir o teste de ponta a ponta no kit com a versão 2.1 | Grupo |
-| 4 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`) | Grupo, quando o serviço estiver no kit |
-| 5 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
+| 3 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`) | Grupo, quando o serviço estiver no kit |
+| 4 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
+| 5 | Descobrir quem responde pelos eventos de pedido e onde está o repositório, para cobrar o `fornecimentoId` no `pedido_criado` (issue #1) | Grupo |
 
 ---
 
