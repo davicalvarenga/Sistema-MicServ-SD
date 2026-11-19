@@ -44,7 +44,7 @@
    - Testes automatizados com PostgreSQL real: 64 no `produtos-service` e 114 no `fornecimentos-service`, todos passando, também no CI do GitHub.
    - Teste de ponta a ponta no kit (HTTP nas quatro instâncias, Redpanda, banco e token RS256): 18 de 18 verificações em duas rodadas seguidas com a versão 2.1, em 19/11.
 3. **Defeito novo no kit (K15).** O script de criação de tópicos do kit esconde falhas e informa sucesso; rodado cedo demais, deixa de criar tópicos. Era a causa provável da falha intermitente que tínhamos registrado (issue #24). Contorno documentado e problema relatado à Infraestrutura (issue #12).
-4. **Análise do serviço de Autenticação.** O repositório ficou acessível em 17/11. Os nossos serviços aceitam o formato real do token deles. Abrimos 9 issues com inconsistências (#27 a #35), e o grupo de Autenticação respondeu a todas em 18/11. Três foram corrigidas do lado deles (#28, #29 e #31). Na #27, a nossa análise estava errada (dissemos que só o fornecedor cadastra produto, quando o professor confirmou fornecedor e comprador); a issue foi reaberta com a correção.
+4. **Análise do serviço de Autenticação.** O repositório ficou acessível em 17/11. Os nossos serviços aceitam o formato real do token deles. Abrimos 9 issues com inconsistências (#27 a #35), e o grupo de Autenticação respondeu a todas em 18/11. Três foram corrigidas do lado deles (#28, #29 e #31). Na #27, a nossa análise estava errada (dissemos que só o fornecedor cadastra produto, quando o professor confirmou fornecedor e comprador); a issue foi reaberta com a correção, e o grupo de Autenticação desfez a mudança em 19/11 (conferido no repositório deles).
 5. **Decisões a partir das respostas da Autenticação.**
    - Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas; cadastro e alteração recusados com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (issue #33).
    - `fornecimento_criado` passa a levar o grupo econômico do fornecedor (`grupoId`), para Mercado e Negociação aplicarem a trava de auto-negociação (issue #35).
@@ -59,10 +59,9 @@
 | # | Ação | Responsável |
 |---|---|---|
 | 1 | Avisar Mercado e Negociação/Leilão do campo `grupoId` no `fornecimento_criado` (issue #35) | Grupo |
-| 2 | Acompanhar a correção dos escopos de cadastro de produto no serviço de Autenticação (issue #27) | Grupo de Autenticação |
-| 3 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`) | Grupo, quando o serviço estiver no kit |
-| 4 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
-| 5 | Testar a reserva, a liberação e a baixa com o `pedidos-service` real no kit | Grupo e grupo de Pedidos |
+| 2 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`), usando as chaves publicadas por eles enquanto a rota do JWKS não existe no kit | Grupo |
+| 3 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
+| 4 | Testar a reserva, a liberação e a baixa com o `pedidos-service` real no kit | Grupo e grupo de Pedidos |
 
 ---
 
@@ -75,7 +74,6 @@
 | Compra e Demanda | Revisar os eventos de catálogo e estoque da versão 2.0 | Possível divergência na integração | #21 |
 | UX/UI | O protótipo usa valores fora do contrato (tipo de transporte, origem em texto, categoria "Grãos") | As telas não vão funcionar com a nossa API sem ajuste | #22 |
 | Autenticação | Padrão único para o corpo de erro (`code` ou `codigo`) | Front-end e testes tratam dois formatos | #30 |
-| Autenticação | Voltar a permitir que o comprador cadastre produto (`BUYER_OPERATOR` com `produtos:criar`) | O nosso serviço confere só o escopo ativo e aceita o comprador; quem seguir a documentação deles (Grupo de Teste, front-end) vai esperar 403 | #27 |
 | Grupo de Teste | Atualizar os casos para a versão 2.0 | Casos antigos vão falhar (ex.: preço zero agora é aceito) | #25 |
 
 ---
