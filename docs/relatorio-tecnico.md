@@ -346,7 +346,7 @@ Variáveis de ambiente lidas por `servidor.py`:
 | `JWT_ISSUER`, `JWT_AUDIENCE` | `identity-service`, `b2b-platform` | Emissor (`iss`) e audiência (`aud`) esperados no token |
 | `PORT` | `8102` ou `8103` | Porta HTTP |
 
-Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Em 11/11/2026, as imagens foram construídas e rodaram no kit com Docker: as quatro instâncias ficaram saudáveis, o teste de fumaça passou nas 13 verificações e o teste de queda do Redpanda confirmou o outbox (seção 11). Em 16/11/2026, com a versão 2.0, o teste de fumaça passou nas 17 verificações atuais em duas rodadas seguidas, incluindo a marcação de movimentação pelo Kafka, a recusa da alteração do produto (409) e a reposição com novo preço.
+Cada serviço tem o próprio `Dockerfile` (contexto de build na pasta do serviço, o que evita o problema K4 do kit). Em 11/11/2026, as imagens foram construídas e rodaram no kit com Docker: as quatro instâncias ficaram saudáveis, o teste de fumaça passou nas 13 verificações e o teste de queda do Redpanda confirmou o outbox (seção 11). Em 16/11/2026, com a versão 2.0, o teste de fumaça passou nas 17 verificações atuais em duas rodadas seguidas, incluindo a marcação de movimentação pelo Kafka, a recusa da alteração do produto (409) e a reposição com novo preço. Em 19/11/2026, com a versão 2.1, passou nas 18 verificações em duas rodadas seguidas, incluindo o token de visão de grupo econômico e o `grupoId` no `fornecimento_criado`.
 
 ---
 

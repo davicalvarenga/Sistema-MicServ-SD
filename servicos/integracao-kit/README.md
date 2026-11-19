@@ -80,16 +80,17 @@ Resultado esperado: os quatro contêineres `Up` e `(healthy)`. Se algum ficar `u
 docker compose $F run --rm --no-deps -v "$PWD/teste-chaves:/t:ro" -v "$PWD/../Sistema-MicServ-SD/servicos/integracao-kit:/script:ro" app1-produtos python /script/teste_fumaca.py executar
 ```
 
-Resultado esperado: 17 linhas `OK` e `RESULTADO: TUDO OK`. O teste:
+Resultado esperado: 18 linhas `OK` e `RESULTADO: TUDO OK`. O teste:
 
 - confere a prontidão das quatro instâncias;
 - recusa um token HS256 e um token do login ainda sem empresa (403);
 - cadastra um produto numa instância e o consulta na outra;
+- confere que o token de visão de grupo econômico consulta (200), mas não cadastra (403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO`);
 - espera o `produto_cadastrado` chegar ao Fornecimentos pelo Redpanda e cadastra um fornecimento;
 - espera o `fornecimento_criado` chegar ao Produtos e confere que a alteração do produto passa a ser recusada (409);
 - publica `pedido_criado` e `pedido_atualizado` (cancelamento) e confere a reserva e a liberação do estoque;
 - repõe a oferta e muda o preço (`PATCH`);
-- lê no Redpanda os eventos publicados.
+- lê no Redpanda os eventos publicados, inclusive o `grupoId` do `fornecimento_criado`.
 
 Se a verificação "produto chegou ao fornecimentos" falhar, confira se o tópico `produto_cadastrado` existe com 3 partições e se o grupo consumidor recebeu partições dele:
 
@@ -139,3 +140,4 @@ Em 11/11/2026, com Docker 29 e as imagens do kit (`postgres:16.3-alpine` e `redp
 - No teste de queda do Redpanda, o cadastro respondeu 201 e a prontidão respondeu 503. O evento ficou no outbox e foi publicado de 6 a 25 segundos depois que o Redpanda voltou. O consumidor do Fornecimentos se reconectou sozinho e processou o evento.
 - Os logs dos dois serviços saem em JSON, inclusive os da biblioteca do Kafka. A exceção é o log de acesso do uvicorn.
 - Em 16/11/2026, com a versão 2.0 dos serviços e do contrato, o teste de fumaça passou nas 17 verificações em duas rodadas seguidas, seguindo este passo a passo do zero numa pasta nova. A primeira tentativa, ainda com `sleep 20` no passo 3, falhou na chegada ao Fornecimentos pelo K15.
+- Em 19/11/2026, com a versão 2.1, o teste passou nas 18 verificações em duas rodadas seguidas, seguindo este passo a passo do zero numa pasta nova.

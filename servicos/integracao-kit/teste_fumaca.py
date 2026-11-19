@@ -40,13 +40,16 @@ def gerar_chaves(pasta: str) -> None:
     print(f"chaves de teste criadas em {destino}")
 
 
-def token(escopo: str | None = "SUPPLIER", tenant: str | None = "EMP-1") -> str:
+def token(escopo: str | None = "SUPPLIER", tenant: str | None = "EMP-1", **extras) -> str:
     """Token no formato do Identity-Service: iss, aud e, depois do switch-context, empresa e escopo."""
-    claims = {"sub": "USR-1", "iss": "identity-service", "aud": "b2b-platform", "exp": int(time.time()) + 600}
+    claims = {"sub": "USR-1", "iss": "identity-service", "aud": "b2b-platform", "exp": int(time.time()) + 600,
+              "group_id": "GRP-1", "view_mode": "SINGLE"}
     if tenant is not None:
         claims["tenant_id"] = tenant
+        claims["allowed_tenants"] = [tenant]
     if escopo is not None:
         claims["active_scope"] = escopo
+    claims.update(extras)
     return jwt.encode(claims, pathlib.Path("/t/privada.pem").read_text(), algorithm="RS256", headers={"kid": KID})
 
 
@@ -90,7 +93,7 @@ def executar() -> int:
     falso = jwt.encode({"sub": "x"}, "segredo-compartilhado", algorithm="HS256")
     s, c, _ = http("GET", P1 + "/api/v1/produtos", tok=falso)
     verificar("token HS256 recusado (401 TOKEN_INVALIDO)", s == 401 and c["codigo"] == "TOKEN_INVALIDO")
-    s, c, _ = http("GET", P1 + "/api/v1/produtos", tok=token(None, None))
+    s, c, _ = http("GET", P1 + "/api/v1/produtos", tok=token(None, None, view_mode="NONE", group_id=None, allowed_tenants=[]))
     verificar("token do login, sem empresa, recusado (403 CONTEXTO_NAO_SELECIONADO)", s == 403 and c["codigo"] == "CONTEXTO_NAO_SELECIONADO")
 
     corr = "fumaca-" + uuid.uuid4().hex[:8]
@@ -103,6 +106,12 @@ def executar() -> int:
         return 1
     pid = produto["produto_id"]
     verificar("consulta do produto na instância app2", http("GET", f"{P2}/api/v1/produtos/{pid}", tok=token("BUYER"))[1] == produto)
+    grupo = token("SUPPLIER", None, view_mode="MACRO_GROUP", allowed_tenants=["EMP-1", "EMP-2"])
+    s_lista = http("GET", P2 + "/api/v1/produtos", tok=grupo)[0]
+    s, c, _ = http("POST", P1 + "/api/v1/produtos", {"nome": "Outro", "categoria": "OUTROS", "unidade": "UN",
+                                                    "tipo_transporte": "CARGA_SECA"}, grupo)
+    verificar("token de grupo econômico: consulta 200 e cadastro 403 CONTEXTO_DE_GRUPO_NAO_PERMITIDO",
+              s_lista == 200 and s == 403 and c["codigo"] == "CONTEXTO_DE_GRUPO_NAO_PERMITIDO")
 
     oferta = {"produto_id": pid, "preco": 5.5, "quantidade_disponivel": 100, "origem": {"cidade": "Goiânia", "uf": "GO"}}
 
@@ -165,8 +174,9 @@ def executar() -> int:
     verificar("produto_cadastrado no Redpanda com chave, correlationId e pesoUnitarioKg",
               pc and pc[0] == pid and pc[1]["correlationId"] == corr and pc[1]["payload"]["pesoUnitarioKg"] == 12.35)
     fc = vistos.get(("fornecimento_criado", ""))
-    verificar("fornecimento_criado no Redpanda com origem {cidade, uf}",
-              fc and fc[0] == fid and fc[1]["payload"]["origem"] == {"cidade": "Goiânia", "uf": "GO"})
+    verificar("fornecimento_criado no Redpanda com origem {cidade, uf} e grupoId do token",
+              fc and fc[0] == fid and fc[1]["payload"]["origem"] == {"cidade": "Goiânia", "uf": "GO"}
+              and fc[1]["payload"]["grupoId"] == "GRP-1")
     verificar("estoque_atualizado com RESERVA e LIBERACAO no Redpanda",
               ("estoque_atualizado", "RESERVA") in vistos and ("estoque_atualizado", "LIBERACAO") in vistos)
     fa = vistos.get(("fornecimento_atualizado", ""))
