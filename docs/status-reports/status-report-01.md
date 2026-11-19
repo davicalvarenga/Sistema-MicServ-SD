@@ -12,7 +12,7 @@
 | Item | Situação |
 |---|---|
 | Escopo do grupo | `produtos-service` (catálogo de produtos) e `fornecimentos-service` (ofertas e estoque) |
-| Situação geral | Os dois serviços estão implementados, testados e rodando no kit de infraestrutura da turma, com as respostas do professor da última aula já incorporadas (versão 2.0) |
+| Situação geral | Os dois serviços estão implementados, testados e rodando no kit de infraestrutura da turma, com as respostas do professor da última aula (versão 2.0) e as decisões tomadas com o grupo de Autenticação (versão 2.1) já incorporadas |
 | Bloqueios do grupo | Nenhum que impeça o nosso trabalho. A integração completa depende de outros grupos (seção 5) |
 
 ---
@@ -21,9 +21,9 @@
 
 | Entrega | Versão | Onde está |
 |---|---|---|
-| Documento de Requisitos | 0.11 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
-| Relatório Técnico (arquitetura e decisões) | 0.11 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
-| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.2 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
+| Documento de Requisitos | 0.12 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
+| Relatório Técnico (arquitetura e decisões) | 0.12 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
+| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.4 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
 | Especificação do `produtos-service` | 2.1 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
 | Especificação do `fornecimentos-service` | 2.1 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
@@ -50,6 +50,7 @@
    - `fornecimento_criado` passa a levar o grupo econômico do fornecedor (`grupoId`), para Mercado e Negociação aplicarem a trava de auto-negociação (issue #35).
    - Expiração do token sem folga de relógio, como já era (issue #32).
    - Logout ou bloqueio só valem nos nossos serviços quando o token expira, em até 15 minutos; risco aceito e registrado no Relatório Técnico (issue #34).
+6. **Contrato com o grupo de Pedidos fechado (issue #1, 19/11).** O grupo de Mercado, Negociação/Leilão e Pedidos respondeu: `fornecimentoId` nos eventos de pedido, status `CANCELADO` (libera a reserva) e `VENDA_CONCLUIDA` (dá baixa, no fechamento da negociação) e aceite do `reserva_estoque_recusada`. Validamos os eventos publicados por eles contra os nossos schemas, e os nossos contra os schemas de consumidor deles: todos os que trocamos passam. Contrato de eventos na versão 2.4, sem mudança de schema.
 
 ---
 
@@ -61,7 +62,7 @@
 | 2 | Acompanhar a correção dos escopos de cadastro de produto no serviço de Autenticação (issue #27) | Grupo de Autenticação |
 | 3 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`) | Grupo, quando o serviço estiver no kit |
 | 4 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
-| 5 | Descobrir quem responde pelos eventos de pedido e onde está o repositório, para cobrar o `fornecimentoId` no `pedido_criado` (issue #1) | Grupo |
+| 5 | Testar a reserva, a liberação e a baixa com o `pedidos-service` real no kit | Grupo e grupo de Pedidos |
 
 ---
 
@@ -70,7 +71,7 @@
 | Grupo | O que falta | Efeito para nós | Issue |
 |---|---|---|---|
 | Infraestrutura | Corrigir o banco do kit, que não sobe (K12); rota do JWKS no gateway (K13); criar 4 tópicos que faltam (K14); script de tópicos (K15) | Hoje rodamos o kit com contornos documentados | #12 |
-| Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` no `pedido_criado` e no `pedido_atualizado`; informar os status de cancelamento e de venda concluída; avaliar `reserva_estoque_recusada` | Sem isso, não conseguimos reservar e baixar o estoque com os pedidos reais | #1 |
+| Mercado, Negociação/Leilão e Pedidos | Respondido em 19/11. Falta o teste conjunto no kit | Contrato validado só com os exemplos; o comportamento real aparece no teste | #1 |
 | Compra e Demanda | Revisar os eventos de catálogo e estoque da versão 2.0 | Possível divergência na integração | #21 |
 | UX/UI | O protótipo usa valores fora do contrato (tipo de transporte, origem em texto, categoria "Grãos") | As telas não vão funcionar com a nossa API sem ajuste | #22 |
 | Autenticação | Padrão único para o corpo de erro (`code` ou `codigo`) | Front-end e testes tratam dois formatos | #30 |
@@ -97,6 +98,6 @@ As respostas da última aula ficaram cortadas na transcrição nestes pontos. O 
 | Risco | Efeito | Tratamento |
 |---|---|---|
 | Kit de infraestrutura com defeitos (K12 a K15) | Nenhum serviço da turma sobe sem contorno | Contornos documentados no README da integração; pedidos na issue #12 |
-| Eventos de pedido sem `fornecimentoId` | Reserva e baixa de estoque não funcionam na integração | Pedido feito ao grupo de Pedidos (issue #1) |
+| Tópico `reserva_estoque_recusada` ausente no kit | Pedido acima do disponível fica sem aviso a Pedidos | Criação pedida à Infraestrutura (issue #12) |
 | Token continua válido por até 15 minutos depois de logout ou bloqueio | Empresa bloqueada ainda opera nesse intervalo | Aceito e registrado no Relatório Técnico (issue #34) |
 | Teste no kit fora do CI | Regressão na integração só aparece no teste manual | Teste de fumaça repetido a cada mudança relevante |

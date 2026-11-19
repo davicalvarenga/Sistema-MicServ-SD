@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.11 (esboço)
+**Versão:** 0.12 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -63,7 +63,7 @@ O portal conecta empresas compradoras, fornecedoras e transportadoras. O fluxo p
 - **Passo 1 (fornecedor publica fornecimento):** o `fornecimentos-service` recebe o cadastro da oferta (`POST /api/v1/fornecimentos`), valida o produto na cópia local e publica `fornecimento_criado` para o Mercado.
 - **Passo 3 (eventos no Kafka):** o `produtos-service` publica `produto_cadastrado`; o `fornecimentos-service` consome esse evento e os de pedido, e publica `estoque_atualizado`, `reserva_estoque_recusada` e `fornecimentos.dlt`.
 - **Passo 7 (pedido criado):** o `fornecimentos-service` reserva a quantidade ao consumir `pedido_criado`, libera em cancelamento e dá baixa na venda concluída (`pedido_atualizado`). Segundo o professor (12/11/2026), o pedido é criado na abertura do leilão ou da negociação, e não depois do fechamento: o leilão é o "portador do pedido" e só recebe o comprador quando fecha.
-- **Passo 8 (logística):** a Logística recebe o tipo de transporte, o peso da carga e a origem pelo `pedido_criado`, que o grupo de Pedidos monta com os dados de `produto_cadastrado` (tipo de transporte e peso unitário) e de `fornecimento_criado` (origem em cidade e UF). Proposta da Logística ao grupo de Pedidos, ainda sem resposta (ADR-023).
+- **Passo 8 (logística):** a Logística recebe o tipo de transporte, o peso da carga e a origem pelo `pedido_criado`, que o grupo de Pedidos monta com os dados de `produto_cadastrado` (tipo de transporte e peso unitário) e de `fornecimento_criado` (origem em cidade e UF). Proposta da Logística, aceita pelo grupo de Pedidos em 19/11/2026: eles copiam `tipoTransporte`, `pesoUnitarioKg` e `origem` e calculam o `pesoKg` (issue #1, ADR-023).
 
 ---
 
@@ -233,7 +233,7 @@ O boilerplate do kit expõe `POST /api/v1/fornecimentos/{id}/baixa-estoque`. A p
 | `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8). Leva o grupo econômico do fornecedor (`grupoId`) desde 18/11/2026, para a trava de auto-negociação de Mercado e Negociação (issue #35) |
 | `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Aceita (F8) |
 | `empresa_cadastrada` | Fornecimentos | Consome | `empresaId` | Aceita (conteúdo: P-12) |
-| `pedido_criado`, `pedido_atualizado` | Fornecimentos | Consome | `pedidoId` | Pendente (P-02, P-29) |
+| `pedido_criado`, `pedido_atualizado` | Fornecimentos | Consome | `pedidoId` | Aceita: contrato confirmado pelo grupo de Pedidos em 19/11/2026 (`fornecimentoId` nos dois eventos; status `CANCELADO` e `VENDA_CONCLUIDA`; issue #1). O kit ainda lista só a Logística como consumidora (issue #12) |
 | `produtos.dlt`, `fornecimentos.dlt` | Produtos, Fornecimentos | Publica falhas | a do evento original | Aceita (ADR-019) |
 
 Os tópicos de negócio têm 3 partições, fator de replicação 3 e retenção de 7 dias. Os tópicos de falha têm 1 partição e retenção de 14 dias (F8, `CONTRACTS.md` e `scripts/init_topics.sh`).
@@ -323,7 +323,7 @@ Até a aprovação do grupo de Banco de Dados, os serviços usam a proposta de D
 | Evento recebido duas vezes | Ignorado pela verificação em `processed_events` | ADR-007, RNF-06 |
 | Evento com formato inválido ou erro persistente | Enviado ao tópico de falha após 3 tentativas | ADR-019, RNF-10 |
 | Pedidos simultâneos para o mesmo fornecimento | Reserva atômica, sem ultrapassar a quantidade disponível | ADR-006, RNF-14 |
-| Pedido maior que o disponível | Reserva recusada. A forma de avisar Pedidos está em aberto | RN-11, P-16 |
+| Pedido maior que o disponível | Reserva recusada e evento `reserva_estoque_recusada` publicado; o grupo de Pedidos cancela o pedido ao recebê-lo (issue #1). O tópico ainda não existe no kit (issue #12) | RN-11, P-16 |
 | Redpanda indisponível no momento da publicação | O evento fica na tabela `outbox` e é publicado quando o Redpanda voltar. O cliente da API não recebe erro por isso | ADR-010 |
 | Banco ou Redpanda fora do ar | `/health/ready` responde 503 | RNF-22 |
 
@@ -391,7 +391,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 002 | Comunicação entre módulos por eventos no Redpanda (API Kafka) | Aceita |
 | 003 | Um schema por serviço no PostgreSQL 16 | Aceita |
 | 004 | Estoque controlado por fornecimento, com quantidade disponível e reservada | Aceita (confirmada pelo professor) |
-| 005 | Reserva de estoque como Saga coreografada com compensação | Proposta |
+| 005 | Reserva de estoque como Saga coreografada com compensação | Aceita |
 | 006 | Reserva atômica por atualização condicional | Proposta |
 | 007 | Idempotência por registro de eventos processados no banco | Aceita |
 | 008 | `aggregateId` como chave das mensagens | Aceita |
@@ -444,7 +444,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** vários fornecedores podem ofertar o mesmo produto, cada um com o seu preço (aula 1, 16:04). O professor descreve o estoque com uma parte disponível e uma parte bloqueada por pedidos (aula 1, 8:13 a 9:42). No kit, a quantidade disponível fica na tabela `fornecimento`.
 - **Decisão:** cada fornecimento tem a sua quantidade disponível e a sua quantidade reservada.
 - **Alternativas consideradas:** estoque único por produto. Não permite saber de qual fornecedor sai a quantidade de um pedido.
-- **Consequências:** o pedido precisa identificar o fornecimento. O exemplo de `pedido_criado` do kit traz `fornecedorId` e `produtoId`, mas não o `fornecimentoId` (P-02).
+- **Consequências:** o pedido precisa identificar o fornecimento. O exemplo de `pedido_criado` do kit traz `fornecedorId` e `produtoId`, mas não o `fornecimentoId` (P-02). O grupo de Pedidos passou a enviar o `fornecimentoId` (19/11/2026, issue #1).
 - **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py` (`processar_pedido_criado`, `processar_pedido_atualizado`); colunas `quantidade_disponivel` e `quantidade_reservada` da tabela `fornecimento`.
 - **Status:** Aceita: o professor confirmou em 12/11/2026 que o estoque é por fornecimento, isto é, por produto e por fornecedor ([issue #5](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/5))
 
@@ -455,7 +455,8 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Alternativas consideradas:** Saga orquestrada, com um coordenador central que comanda cada passo. Facilita acompanhar o fluxo, mas exige um componente a mais e um dono para ele. Com só dois participantes (Pedidos e Fornecimentos), a coreografia é suficiente.
 - **Consequências:** existe um intervalo em que o pedido já existe e a reserva ainda não foi feita. Se a reserva falhar, Pedidos precisa ser avisado (P-16). O momento em que o pedido é criado foi definido pelo professor em 12/11/2026: na abertura do leilão ou da negociação, o que mantém o estoque bloqueado durante o leilão. O kit, que cria o pedido depois de `negociacao_fechada`, precisa ser alterado pela Infraestrutura. Leilão sem vencedor termina com o pedido cancelado e a reserva liberada.
 - **Evidência na implementação:** `servicos/fornecimentos-service/app/main.py`: reserva em `pedido_criado`, liberação e baixa em `pedido_atualizado`, `reserva_estoque_recusada` quando falta saldo. Critérios CA-17 a CA-30 da ESP-FRN-001.
-- **Status:** Proposta ([issue #1](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/1))
+- **Revisão de 19/11/2026:** o grupo de Pedidos confirmou a coreografia: `CANCELADO` libera a reserva, `VENDA_CONCLUIDA` dá baixa (publicado uma vez por pedido, no fechamento da negociação) e `reserva_estoque_recusada` cancela o pedido. Um `CANCELADO` que chega antes do `pedido_criado` fica registrado e impede a reserva posterior.
+- **Status:** Aceita ([issue #1](https://github.com/davicalvarenga/Sistema-MicServ-SD/issues/1))
 
 ### ADR-006: Reserva atômica por atualização condicional
 
@@ -617,7 +618,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - **Contexto:** a Logística cota o frete a partir do ponto de coleta e do peso da carga. Ela pediu (Documento de Requisitos, F11) que a origem do fornecimento seja cidade e UF e que o produto tenha um peso unitário opcional, porque com as unidades `UN`, `CX` e `L` não há como saber o peso. A origem era texto livre no kit (P-05).
 - **Decisão:** `origem` passa a ser um objeto `{cidade, uf}`, com a UF validada contra as 27 siglas, no mesmo formato que a Logística propôs para o `pedido_criado`. O produto ganha `peso_unitario_kg`, opcional, com até 3 casas decimais (1 grama). O banco reaproveita a coluna `origem` do kit para a cidade e acrescenta `origem_uf` e `peso_unitario_kg`.
 - **Alternativas consideradas:** manter a origem como texto no formato "Cidade-UF", que obrigaria cada consumidor a separar os dois valores e não permitiria validar a UF; peso obrigatório, que obrigaria o fornecedor a informar um dado inútil para `KG` e `TON`; a Logística consumir os eventos de produto e fornecimento diretamente (plano B dela), que fica possível com os mesmos campos.
-- **Consequências:** a mudança na origem é incompatível com a versão 1.1 das ESPs e do contrato, mas ainda não havia consumidor do `fornecimento_criado`. O cálculo do peso da carga fica com o grupo de Pedidos, que precisa aceitar a proposta da Logística.
+- **Consequências:** a mudança na origem é incompatível com a versão 1.1 das ESPs e do contrato, mas ainda não havia consumidor do `fornecimento_criado`. O cálculo do peso da carga fica com o grupo de Pedidos, que aceitou a proposta da Logística em 19/11/2026 (issue #1).
 - **Evidência na implementação:** `origem_valida` e `UFS` em `servicos/fornecimentos-service/app/main.py`; `_peso_unitario` em `servicos/produtos-service/app/main.py`; colunas e `CHECK` na proposta de DDL v1.2. CA-03, CA-05 e CA-12 (Fornecimentos) e CA-04 e CA-28 (Produtos).
 - **Status:** Aceita
 
@@ -658,6 +659,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 - Documento de Requisitos do grupo: [documento-de-requisitos.md](documento-de-requisitos.md)
 - Diagrama "Arquitetura do Portal B2B Distribuído", elaborado pelo professor
 - Kit de integração do grupo de Infraestrutura: https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra (commit `630515c`)
+- Repositório do grupo de Mercado, Negociação/Leilão e Pedidos (ESP-PED-001 v2.1): https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos (commit `8091833`)
 - NYGARD, Michael. Documenting Architecture Decisions, 2011: https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions
 - Apache Kafka, documentação oficial: https://kafka.apache.org/documentation/
 - KIP-679, Producer will enable the strongest delivery guarantee by default: https://cwiki.apache.org/confluence/display/KAFKA/KIP-679%3A+Producer+will+enable+the+strongest+delivery+guarantee+by+default
@@ -688,6 +690,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.9 | 12/11/2026 | Respostas do professor: ADR-004 aceito (estoque por fornecimento); momento da reserva definido no ADR-005 e no passo 7 |
 | 0.10 | 16/11/2026 | Respostas do professor em aula: ADR-013, ADR-014 e ADR-022 aceitos (alteração e exclusão de produto só sem movimentação, alteração e encerramento de oferta). Seções 5, 6 e 13 atualizadas. Versão 2.0 executada no kit (seção 10) e novo ponto K15 na seção 3.4 |
 | 0.11 | 18/11/2026 | ADR-012 revisado após a análise do serviço de Autenticação: token de visão de grupo econômico aceito só nas consultas, risco da revogação aceito, expiração sem folga mantida. Grupo econômico (`grupoId`) no `fornecimento_criado` (issue #35). Seção 13 atualizada |
+| 0.12 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): ADR-005 aceito; contrato de `pedido_criado` e `pedido_atualizado` confirmado na seção 6; aviso de pedido acima do disponível definido na seção 9 |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

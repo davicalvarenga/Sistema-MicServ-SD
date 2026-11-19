@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.11 (rascunho para revisão interna)
+**Versão:** 0.12 (rascunho para revisão interna)
 **Data:** 26/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O Grupo de Teste (QA) deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
@@ -66,6 +66,7 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 | F15 | Repositório do grupo de Compra e Demanda (`LuccaStuart/portal-b2b-compra-demanda`, commit `f7cdf10`, 12/11/2026): esqueleto do `demanda-service` e contratos de `demanda_criada`, `demanda_recorrente_gerada` e `demanda_cancelada` |
 | F16 | Transcrição automática de uma aula em que o professor respondeu às perguntas 4, 5, 6, 7 e 9 da mensagem do grupo (enviada pelo grupo em 16/11/2026). Alguns trechos estão truncados pela transcrição; quando a regra depende deles, o texto deste documento indica que é interpretação |
 | F13 | Protótipo navegável do grupo de UX/UI (repositório `HugoParzival007/portal-b2b-UI-UX`, commit `8a99d24`, 27/10/2026), com dados fictícios e sem chamadas às APIs |
+| F17 | Resposta do grupo de Mercado, Negociação/Leilão e Pedidos na issue #1, em 19/11/2026, e o repositório `brunnoalexcson/portal-b2b-mercado-negociacao-pedidos` (commit `8091833`, ESP-PED-001 v2.1): `fornecimentoId` em `pedido_criado` e em todo `pedido_atualizado`; status `CANCELADO` (libera a reserva) e `VENDA_CONCLUIDA` (dá baixa), com `VENDA_CONCLUIDA` uma única vez por pedido, no fechamento da negociação; `compradorId` nulo na criação do pedido; aceite do evento `reserva_estoque_recusada` |
 
 Quando F8 divergir de uma orientação do professor (F2, F3, F6, F7), vale a do professor, e a divergência é registrada como pendência para alinhamento com o grupo de Infraestrutura. Quando os próprios arquivos de F8 divergirem entre si, vale o que está implementado (script de tópicos, script do banco e código), e a divergência também é registrada.
 
@@ -126,7 +127,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 |---|---|---|
 | Autenticação (`identity-service`, chamado de `usuarios-service` no kit) | Cadastro de empresas e escopos (F7, 19:09). Token JWT RS256 com `sub`, `tenant_id` (empresa ativa), `group_id`, `active_scope` (`SUPPLIER`, `BUYER`, `CARRIER` ou `TENANT_ADMIN`), `roles`, `permissions` e `exp`; chaves públicas em `/.well-known/jwks.json` (F10). O token também traz `iss` (`identity-service`), `aud` (`b2b-platform`), `platform_role` e `view_mode`; o token do login, antes da escolha de empresa e escopo, não tem empresa (F12). Access token de 15 minutos (F8). Evento `empresa_cadastrada` com chave `tenant_id` (F10) | Confirmado (alinhamento com o kit: P-34) |
 | Gateway (grupo de Infraestrutura) | Gateway Nginx na porta 8080: rotas `/api/v1/produtos` e `/api/v1/fornecimentos`, limite de 100 requisições por segundo por IP e repasse do cabeçalho `X-Correlation-Id` (F8). A validação do token é feita em cada serviço, não no gateway (F8, `services/common/auth.py`) | Confirmado |
-| Mercado, Negociação/Leilão e Pedidos (`pedidos-service`) | Eventos `pedido_criado` e `pedido_atualizado` com identificação do fornecimento, quantidade e situação (criado, cancelado, venda concluída). O pedido é criado na abertura do leilão ou da negociação, antes do fechamento, e é ele que reserva o estoque; no leilão, o solicitante é o Mercado, e o comprador só é definido quando o leilão fecha (F14). Por isso o `compradorId` pode vir vazio no `pedido_criado` | Confirmado o momento (F14); contrato do evento pendente (P-02) |
+| Mercado, Negociação/Leilão e Pedidos (`pedidos-service`) | Eventos `pedido_criado` e `pedido_atualizado` com identificação do fornecimento, quantidade e situação (criado, cancelado, venda concluída). O pedido é criado na abertura do leilão ou da negociação, antes do fechamento, e é ele que reserva o estoque; no leilão, o solicitante é o Mercado, e o comprador só é definido quando o leilão fecha (F14). Por isso o `compradorId` pode vir vazio no `pedido_criado` | Confirmado o momento (F14) e o contrato do evento (F17) |
 | Mercado (`mercado-service`) | Consome `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` (F8, `CONTRACTS.md`) | Confirmado |
 | Compra e Demanda (`demanda-service`) | Consome `produto_cadastrado` (F8, `CONTRACTS.md`) | Confirmado |
 | Logística/Transporte (`logistica-service`) | Precisa do tipo de transporte do produto para escolher as transportadoras (F6, 10:33; F7, 24:56). Recebe o tipo de transporte, o peso da carga (`pesoKg`) e a origem pelo `pedido_criado`, que o grupo de Pedidos preenche a partir do produto e do fornecimento; não consome `produto_cadastrado`. Plano B, se Pedidos não incluir os campos: consumir `produto_cadastrado` e `produto_atualizado` e guardar cópia local (F11) | Confirmado (depende do grupo de Pedidos aceitar os campos) |
@@ -168,13 +169,13 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RF-11 | O fornecedor deve poder alterar a sua oferta (repor quantidade e mudar o preço) e encerrá-la, zerando o estoque (RN-14, RN-15) | F4, F16 | Confirmado (tópico do evento: P-37) |
 | RF-12 | Ao criar um fornecimento, o serviço deve publicar o evento `fornecimento_criado`, com chave `fornecimentoId` | F2, F8 | Confirmado |
 | RF-13 | O serviço deve manter, para cada fornecimento, a quantidade disponível e a quantidade reservada | F1, F2, F6 | Confirmado (granularidade por fornecimento: F14; ajuste no DDL do kit: P-28) |
-| RF-14 | Ao consumir o evento de criação de pedido, o serviço deve reservar a quantidade do pedido: subtrair da quantidade disponível e somar à quantidade reservada | F2, F5, F6 | Confirmado (momento: o pedido é criado na abertura do leilão ou da negociação, F14; contrato do evento: P-02) |
+| RF-14 | Ao consumir o evento de criação de pedido, o serviço deve reservar a quantidade do pedido: subtrair da quantidade disponível e somar à quantidade reservada | F2, F5, F6 | Confirmado (momento: o pedido é criado na abertura do leilão ou da negociação, F14; contrato do evento: F17) |
 | RF-15 | Sempre que o estoque mudar, o serviço deve publicar o evento `estoque_atualizado`, com chave `fornecimentoId` | F2, F5, F8 | Confirmado |
 | RF-16 | O serviço de Fornecimentos deve consumir os eventos de produto para manter uma referência local dos produtos válidos | F5, F8, F4 | Confirmado para `produto_cadastrado` (F8). Alteração e exclusão: P-26 |
 | RF-17 | O serviço de Fornecimentos deve consumir o evento `empresa_cadastrada` para reconhecer as empresas com perfil de fornecedor | F2, F8 | Confirmado (conteúdo do evento: P-12) |
 | RF-18 | O sistema deve publicar e consumir eventos de pedido de fornecimento entre fornecedor e grupo | F5 | Pendente (P-13) |
-| RF-19 | Ao consumir o evento de cancelamento de pedido, o serviço deve devolver a quantidade reservada à quantidade disponível | F6 | Confirmado (contrato do evento: P-02) |
-| RF-20 | Ao consumir o evento de conclusão da venda, o serviço deve dar baixa definitiva na quantidade reservada | F6 | Confirmado (contrato do evento: P-02) |
+| RF-19 | Ao consumir o evento de cancelamento de pedido, o serviço deve devolver a quantidade reservada à quantidade disponível | F6, F17 | Confirmado (status `CANCELADO`, F17) |
+| RF-20 | Ao consumir o evento de conclusão da venda, o serviço deve dar baixa definitiva na quantidade reservada | F6, F17 | Confirmado (status `VENDA_CONCLUIDA`, publicado uma vez por pedido no fechamento da negociação, F17) |
 | RF-21 | Os eventos de produto devem conter o tipo de transporte e o peso unitário, para que o grupo de Pedidos os repasse à Logística/Transporte no `pedido_criado` (ou para que a Logística os consuma no plano B) | F6, F4, F11 | Confirmado |
 
 **Justificativa do RF-13, RF-14, RF-19 e RF-20:** na aula 2, o professor diz ao grupo que, "a partir do momento de entrar no leilão ou fizer uma negociação, tem que fechar um pedido, tem que bloquear" o estoque (F7, 21:03). Na aula 1 (F6, 8:13 a 9:42), ele descreve que, ao criar um pedido, o produto sai do estoque e fica bloqueado no pedido, enquanto o restante continua visível para quem quer comprar. Se o pedido for cancelado, a quantidade volta ao estoque. Se a negociação terminar em venda, a operação é finalizada. Ele chama a operação de transação.
@@ -200,7 +201,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RNF-11 | Os serviços registram logs em JSON na saída padrão, com o `correlationId` em todas as linhas. O `correlationId` vem do cabeçalho `X-Correlation-Id` ou é gerado (UUID v4) e é repassado nos eventos publicados | Manutenibilidade | F8 | Confirmado |
 | RNF-12 | Os serviços são executáveis em contêiner Docker | Portabilidade | F2, F7, F8 | Confirmado ("vocês precisam trabalhar com docker", F7, 21:48 a 21:58) |
 | RNF-13 | Os eventos são publicados em JSON com o envelope canônico: `eventId`, `eventType`, `eventVersion`, `timestamp`, `source`, `correlationId`, `aggregateId` e `payload` | Interoperabilidade | F8 | Confirmado (uso do Schema Registry: P-08) |
-| RNF-14 | A reserva de estoque é atômica: reservas simultâneas para o mesmo fornecimento não podem, somadas, ultrapassar a quantidade disponível | Confiabilidade | F6, F8, F4 | Confirmado (comportamento quando falta estoque: P-16) |
+| RNF-14 | A reserva de estoque é atômica: reservas simultâneas para o mesmo fornecimento não podem, somadas, ultrapassar a quantidade disponível | Confiabilidade | F6, F8, F4 | Confirmado (comportamento quando falta estoque: evento `reserva_estoque_recusada`, F17) |
 | RNF-15 | As telas seguem o padrão visual definido pela equipe de UX: visual limpo, verde e branco, linhas finas nas bordas dos campos | Usabilidade | F7, F8 | Confirmado. Responsabilidade do grupo de UX/UI (F8) |
 | RNF-16 | As telas têm modo escuro, em cinza escuro e preto, com destaques em verde mais escuro | Usabilidade | F7, F8 | Confirmado. Responsabilidade do grupo de UX/UI (F8) |
 | RNF-17 | As telas atendem a requisitos de acessibilidade | Usabilidade | F7, F8 | Confirmado. Responsabilidade do grupo de UX/UI (F8) |
@@ -258,7 +259,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RN-08 | Empresas com perfil de fornecedor ou de comprador podem cadastrar produtos | F7 (1:17 a 1:49), F14 | Confirmado pelo professor (o guia do kit, que restringe o comprador, precisa ser corrigido) |
 | RN-09 | Todo produto tem um tipo de transporte definido | F7 (25:21), F8 (`tipo_transporte NOT NULL`), F11 | Confirmado |
 | RN-10 | O fornecedor de um fornecimento é a empresa do token (`empresaId`). O serviço ignora qualquer identificador de fornecedor enviado no corpo da requisição | F4 | Proposto |
-| RN-11 | O estoque nunca fica negativo. Uma operação que pede mais do que a quantidade disponível é recusada, com HTTP 422 quando a operação vem por REST | F8, F6 | Confirmado (falta de estoque em evento de pedido: P-16) |
+| RN-11 | O estoque nunca fica negativo. Uma operação que pede mais do que a quantidade disponível é recusada, com HTTP 422 quando a operação vem por REST | F8, F6 | Confirmado (falta de estoque em evento de pedido: evento `reserva_estoque_recusada`, F17) |
 | RN-12 | Um produto só pode ser alterado ou excluído enquanto não tiver movimentação: nenhum fornecimento (estoque) e nenhum pedido. Com movimentação, não pode ser alterado nem excluído. Mudança de especificação (por exemplo, outro modelo ou outra cor) é outro produto, com novo cadastro | F16 (01:00 a 02:00) | Confirmado (quem pode alterar e excluir: P-07) |
 | RN-13 | O produto sem movimentação que foi cadastrado errado pode ser apagado (exclusão física) | F16 (01:00) | Confirmado |
 | RN-14 | O estoque de uma oferta não é cancelado nem apagado, porque o histórico de vendas precisa ser mantido para análise. O fornecedor que não quer mais trabalhar com um produto encerra a oferta zerando o estoque dela | F16 (02:00 a 03:00) | Confirmado |
@@ -324,7 +325,7 @@ As perguntas abaixo não têm resposta nas fontes. Não devem ser testadas até 
 - **Fluxos alternativos:**
   - A1. Evento já processado: o serviço ignora o evento e não publica novo `estoque_atualizado` (RNF-06).
   - A2. Evento com formato inválido ou que falha após as tentativas: o evento vai para o tópico de erro (RNF-10).
-  - A3. Quantidade do pedido maior que a disponível: comportamento em aberto (P-16).
+  - A3. Quantidade do pedido maior que a disponível: o serviço não reserva e publica `reserva_estoque_recusada`, e o serviço de Pedidos cancela o pedido (P-16, F17).
   - A4. Pedido cancelado: o serviço devolve a quantidade reservada à quantidade disponível e publica `estoque_atualizado` (RF-19, RN-06).
   - A5. Venda concluída: o serviço retira a quantidade reservada do estoque e publica `estoque_atualizado` (RF-20, RN-07).
 - **Requisitos relacionados:** RF-13, RF-14, RF-15, RF-19, RF-20, RNF-06, RNF-10, RNF-14
@@ -448,7 +449,7 @@ Quando ele cria um fornecimento enviando no corpo o identificador da empresa B c
 Então o fornecimento é gravado com a empresa A como fornecedora
 ```
 
-Os valores numéricos dos CA-10 a CA-12 são exemplos para o teste, não regras de negócio. Os eventos de pedido citados dependem do contrato com o grupo de Mercado, Negociação/Leilão e Pedidos (P-02).
+Os valores numéricos dos CA-10 a CA-12 são exemplos para o teste, não regras de negócio. Os eventos de pedido citados seguem o contrato confirmado pelo grupo de Mercado, Negociação/Leilão e Pedidos (F17).
 
 Nos CA-01 e CA-02, a resposta 401 segue a RFC 7807 (RNF-20), como faz a biblioteca comum do kit (F8, `services/common/auth.py`).
 
@@ -469,8 +470,8 @@ Os tópicos, as chaves e os consumidores abaixo seguem o catálogo do kit de inf
 | `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Mercado | Confirmado |
 | `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Mercado | Confirmado |
 | `empresa_cadastrada` | Fornecimentos | Consome | `empresaId` | | Confirmado (conteúdo: P-12) |
-| `pedido_criado` | Fornecimentos | Consome (reserva) | `pedidoId` | | Momento confirmado (F14); contrato pendente (P-02) |
-| `pedido_atualizado` | Fornecimentos | Consome (cancelamento devolve, venda dá baixa) | `pedidoId` | | Pendente (P-02) |
+| `pedido_criado` | Fornecimentos | Consome (reserva) | `pedidoId` | | Confirmado (F14, F17) |
+| `pedido_atualizado` | Fornecimentos | Consome (cancelamento devolve, venda dá baixa) | `pedidoId` | | Confirmado (F17) |
 | `produtos.dlt` | Produtos | Publica (falhas) | a do evento original | | Confirmado (1 partição, retenção de 14 dias) |
 | `fornecimentos.dlt` | Fornecimentos | Publica (falhas) | a do evento original | | Confirmado (1 partição, retenção de 14 dias) |
 | Pedido de fornecimento | A definir | Publica e consome | A definir | | Pendente (P-13) |
@@ -521,7 +522,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | ID | Pergunta | A quem perguntar |
 |---|---|---|
 | P-01 | **Resolvida na versão 0.2.** O escopo do grupo é implementar os blocos 2 e 3 do diagrama e integrar com os demais | |
-| P-02 | **Parcialmente resolvida.** O exemplo de `pedido_criado` no guia do kit traz `pedidoId`, `negociacaoId`, `compradorId`, `fornecedorId`, `produtoId`, `quantidade`, `valorTotal` e `status`. Faltam: (a) o `fornecimentoId`, sem o qual não sabemos de qual oferta reservar se o fornecedor tiver mais de uma do mesmo produto (P-20); (b) os valores de `status` em `pedido_atualizado` que indicam cancelamento e venda concluída; (c) incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md`, que hoje lista só a Logística | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
+| P-02 | **Resolvida pelo F17, salvo o item (c).** Itens (a) e (b): o grupo de Pedidos inclui o `fornecimentoId` em `pedido_criado` e em todo `pedido_atualizado` e usa `CANCELADO` e `VENDA_CONCLUIDA`. O item (c) continua com a Infraestrutura (issue #12). Texto original: o exemplo de `pedido_criado` no guia do kit traz `pedidoId`, `negociacaoId`, `compradorId`, `fornecedorId`, `produtoId`, `quantidade`, `valorTotal` e `status`. Faltam: (a) o `fornecimentoId`, sem o qual não sabemos de qual oferta reservar se o fornecedor tiver mais de uma do mesmo produto (P-20); (b) os valores de `status` em `pedido_atualizado` que indicam cancelamento e venda concluída; (c) incluir o `fornecimentos-service` como consumidor de `pedido_criado` e `pedido_atualizado` no `CONTRACTS.md`, que hoje lista só a Logística | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
 | P-03 | **Resolvida pelo F14.** O estoque é controlado por fornecimento, ou seja, por produto e por fornecedor. Cada fornecedor pode ofertar o mesmo produto com preço e estoque próprios. É o que o grupo já implementou | |
 | P-04 | **Resolvida pelo F10.** O token é JWT RS256, validado em cada serviço com a chave pública do serviço de Autenticação (JWKS). Claims `sub`, `tenant_id` e `active_scope`. Substitui a definição do kit (HS256, `empresaId`, `perfil`) | |
 | P-05 | **Resolvida pelo F11.** A origem é o ponto de coleta do produto, em cidade e UF, como pediu a Logística (que a usa na cotação do frete). Coerente com F6 (10:58), em que a origem do frete é o endereço do fornecedor. Implementada na ESP-FRN-001 v1.2 | |
@@ -535,7 +536,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-13 | "Pedido de fornecimento entre fornecedor e grupo" corresponde ao `fornecimento_criado` ou é outro fluxo? O kit não tem tópico com esse nome | Professor |
 | P-14 | **Resolvida pelo F8.** O kit inclui Prometheus, Grafana, Loki, Jaeger e Alertmanager, e exige `/health`, `/health/ready`, `/metrics` e logs JSON (RNF-11, RNF-22) | |
 | P-15 | **Resolvida.** O preço é em reais (BRL), com 2 casas decimais (RD-04). O JSON leva só o número, sem símbolo nem código de moeda. Resposta à pergunta 8, informada pelo grupo em 16/11/2026 | |
-| P-16 | Como o serviço avisa o grupo de Pedidos quando chega um pedido com quantidade maior que a disponível? O kit não tem tópico para falha de reserva | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
+| P-16 | **Resolvida pelo F17, salvo a criação do tópico.** O grupo de Pedidos aceitou o evento `reserva_estoque_recusada` (motivos `ESTOQUE_INSUFICIENTE` e `FORNECIMENTO_INEXISTENTE`) e cancela o pedido ao recebê-lo. O tópico ainda não existe no kit (issue #12). Pergunta original: como o serviço avisa o grupo de Pedidos quando chega um pedido com quantidade maior que a disponível? O kit não tem tópico para falha de reserva | Grupo de Mercado, Negociação/Leilão e Pedidos; Infraestrutura |
 | P-17 | **Resolvida pelo F8.** Os nomes do diagrama são tópicos: um tópico por tipo de evento | |
 | P-18 | **Resolvida pelo F8.** Metas de desempenho do Grupo de Teste no RNF-25 | |
 | P-19 | **Resolvida pelo F8.** Consumidores na seção 9. Resta a Logística (P-27) | |
@@ -596,3 +597,4 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | 0.9 | 12/11/2026 | Respostas do professor (F14): P-03, P-29 e P-30 resolvidas; P-20 aguarda o caso pedido pelo professor. Repositório de Compra e Demanda como fonte F15 |
 | 0.10 | 16/11/2026 | Respostas do professor em aula (F16): P-09 e P-11 resolvidas; P-21 resolvida com ressalva; P-10 e P-07 parcialmente resolvidas. Novas regras RN-12 a RN-16. RF-03, RF-04, RF-05, RF-11 e RD-05 atualizados. Novas pendências P-36 e P-37. P-15 resolvida: moeda real brasileiro (resposta à pergunta 8) |
 | 0.11 | 16/11/2026 | Implementação das respostas do professor (ESPs v2.0): P-36 resolvida; P-37 implementada do nosso lado; lista de categorias definida pelo grupo (P-10); regra de quem altera produto adotada pelo grupo (P-07) |
+| 0.12 | 19/11/2026 | Resposta do grupo de Mercado, Negociação/Leilão e Pedidos (F17): P-02 resolvida, salvo o item (c); P-16 resolvida, salvo a criação do tópico; RF-14, RF-19, RF-20, RNF-14, RN-11 e UC-03 atualizados |

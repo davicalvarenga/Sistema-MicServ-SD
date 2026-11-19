@@ -1,8 +1,8 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 2.3 (proposta para revisão dos grupos que integram com a gente)
-**Data:** 18/11/2026 (versão 1.0: 26/10/2026)
+**Versão:** 2.4 (proposta para revisão dos grupos que integram com a gente)
+**Data:** 19/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
 
@@ -149,15 +149,15 @@ O evento traz o saldo completo, e não só a diferença. Assim, quem consome nã
     "quantidadeMovimentada": 3000,
     "quantidadeDisponivel": 12000,
     "quantidadeReservada": 3000,
-    "pedidoId": "ped-998811",
+    "pedidoId": "4f1c2b3a-9d8e-4c7b-a6f5-1e2d3c4b5a69",
     "atualizadoEm": "2026-10-26T14:10:00.000Z"
   }
 }
 ```
 
-### 2.5 `reserva_estoque_recusada` (proposta)
+### 2.5 `reserva_estoque_recusada`
 
-O kit não tem tópico para avisar Pedidos quando a reserva falha (P-16). A proposta é este evento, com chave `pedidoId`, para que o `pedidos-service` o processe na ordem dos outros eventos do mesmo pedido.
+O kit não tem tópico para avisar Pedidos quando a reserva falha (P-16). O grupo propôs este evento, e o grupo de Pedidos o aceitou em 19/11/2026 (issue #1): ao recebê-lo, o `pedidos-service` cancela o pedido com o motivo recebido. O tópico ainda precisa ser criado no kit (issue #12). O evento usa a chave `pedidoId`, para que o `pedidos-service` o processe na ordem dos outros eventos do mesmo pedido.
 
 | Campo | Tipo | Descrição |
 |---|---|---|
@@ -189,19 +189,24 @@ O schema [`pedido_criado.schema.json`](contratos/schemas/pedido_criado.schema.js
 
 Validamos o exemplo do guia do kit contra este schema, e ele é rejeitado justamente por faltar `fornecimentoId`.
 
+**Resposta do grupo de Pedidos (19/11/2026, issue #1):** o `pedido_criado` da ESP-PED-001 v2.1 leva `fornecimentoId` e nasce com `compradorId` nulo. Um leilão conjunto gera um pedido por oferta. Validamos os exemplos de `pedido_criado` e `pedido_atualizado` publicados por eles (`docs/pedidos/contratos/`, commit `8091833`) contra os nossos schemas, e todos passam.
+
 ### 3.2 `pedido_atualizado` (do `pedidos-service`)
 
 Precisamos de `pedidoId`, `fornecimentoId` e `status`. Schema: [`pedido_atualizado.schema.json`](contratos/schemas/pedido_atualizado.schema.json)
 
 | `status` | O que o `fornecimentos-service` faz |
 |---|---|
-| `CANCELADO` (proposta, a confirmar com o grupo de Pedidos) | Devolve a quantidade reservada para a disponível e publica `estoque_atualizado` com `LIBERACAO`. Se ainda não houver reserva, registra o cancelamento para que um `pedido_criado` posterior não reserve |
-| `VENDA_CONCLUIDA` (proposta, a confirmar com o grupo de Pedidos) | Retira a quantidade reservada do estoque e publica `estoque_atualizado` com `BAIXA` |
+| `CANCELADO` | Devolve a quantidade reservada para a disponível e publica `estoque_atualizado` com `LIBERACAO`. Se ainda não houver reserva, registra o cancelamento para que um `pedido_criado` posterior não reserve |
+| `VENDA_CONCLUIDA` | Retira a quantidade reservada do estoque e publica `estoque_atualizado` com `BAIXA` |
 | Qualquer outro | Registra no log e ignora |
 
-Os valores `CANCELADO` e `VENDA_CONCLUIDA` são a proposta do grupo, usada na ESP-FRN-001. Se o grupo de Pedidos definir outros, o contrato e a ESP mudam de versão.
+Os valores `CANCELADO` e `VENDA_CONCLUIDA` foram confirmados pelo grupo de Pedidos em 19/11/2026 (issue #1). Segundo eles, a venda é concluída no fechamento da negociação, e não na entrega, e cada pedido recebe `VENDA_CONCLUIDA` uma única vez. Os outros status que eles publicam (por exemplo, `ENTREGUE`) caem na linha "Qualquer outro".
 
-A Logística também usa `CANCELADO` e sugeriu ao grupo de Pedidos publicar `VENDA_CONCLUIDA` quando receber o evento `entrega_concluida` da Logística, se a venda for concluída na entrega. Isso fecha o momento da baixa de estoque, que ainda depende do grupo de Pedidos.
+**Repetições e ordem de chegada:**
+- Evento republicado com o mesmo `eventId` é ignorado (`processed_events`).
+- A baixa e a liberação só acontecem com a reserva na situação `RESERVADA`, que muda para `BAIXADA` ou `LIBERADA`. Um segundo `VENDA_CONCLUIDA` ou `CANCELADO` do mesmo pedido e fornecimento, mesmo com outro `eventId`, não altera o estoque (ESP-FRN-001, RN-16).
+- `pedido_criado` e `pedido_atualizado` estão em tópicos diferentes, então um `CANCELADO` pode chegar antes do `pedido_criado`. Nesse caso, o cancelamento fica registrado, e o `pedido_criado` que chegar depois não reserva.
 
 ### 3.3 `produto_cadastrado` (do nosso `produtos-service`)
 
@@ -264,7 +269,7 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 
 | Grupo | Pedido |
 |---|---|
-| Mercado, Negociação/Leilão e Pedidos | Incluir `fornecimentoId` em `pedido_criado` e `pedido_atualizado`. Informar os valores de `status` de cancelamento e de venda concluída. Avaliar a proposta de `reserva_estoque_recusada`. Para a Logística: copiar `tipoTransporte` do produto e `origem` do fornecimento para o `pedido_criado`, e calcular `pesoKg` (`quantidade` em `KG`; `quantidade × 1000` em `TON`; `quantidade × pesoUnitarioKg` nas demais unidades, quando o peso unitário estiver informado) |
+| Mercado, Negociação/Leilão e Pedidos | Respondido em 19/11/2026 (issue #1, ESP-PED-001 v2.1): `fornecimentoId` em `pedido_criado` e `pedido_atualizado`, status `CANCELADO` e `VENDA_CONCLUIDA`, aceite de `reserva_estoque_recusada`, e cópia de `tipoTransporte`, `pesoUnitarioKg` e `origem` com cálculo do `pesoKg` para a Logística |
 | Infraestrutura | Criar, com 3 partições, os tópicos `produto_atualizado`, `produto_excluido`, `fornecimento_atualizado` e `reserva_estoque_recusada`, ou combinar alternativa. Incluir o `fornecimentos-service` como consumidor de `pedido_criado`, `pedido_atualizado`, `produto_atualizado` e `produto_excluido`, e o `produtos-service` como consumidor de `fornecimento_criado`, no `CONTRACTS.md` |
 | Autenticação | Respondido em 09/11 e 10/11/2026 (issue #2) e em 18/11/2026 (issues #28, #29 e #31): conteúdo de `empresa_cadastrada`, no envelope do kit desde o commit `b0dfaa7` (seção 3.4). Em aberto: escopos de cadastro de produto, que são `SUPPLIER` e `BUYER` (issue #27); padrão único dos campos de erro (P-34) e administrador da plataforma (P-07) |
 | Compra e Demanda, Mercado | Revisar os campos de `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`. A categoria passou a ser lista fixa |
@@ -284,3 +289,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 2.1 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) corrigido para o formato que o grupo de Autenticação publica: corpo em `snake_case` sem envelope, metadados nos cabeçalhos do Kafka, campos `event_id` e `created_at`. Não muda nenhum evento nosso (issue #28) |
 | 2.2 | 18/11/2026 | Campo opcional `grupoId` no `fornecimento_criado`, pedido na análise do grupo de Autenticação (issue #35). Mudança compatível |
 | 2.3 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) atualizado para o formato publicado pelo grupo de Autenticação a partir do commit `b0dfaa7`: envelope do kit, `payload` em `camelCase` com cópia em `snake_case` e cópia dos campos na raiz. Não muda nenhum evento nosso (issue #28) |
+| 2.4 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): `CANCELADO`, `VENDA_CONCLUIDA` e `reserva_estoque_recusada` deixam de ser proposta; regras de repetição e de ordem de chegada do `pedido_atualizado` explicitadas; `pedidoId` dos exemplos em UUID, como o `pedidos-service` gera, e `compradorId` nulo no exemplo de `pedido_criado`. Nenhum schema muda |
