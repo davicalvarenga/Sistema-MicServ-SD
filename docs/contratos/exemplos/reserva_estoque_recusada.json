@@ -5,9 +5,9 @@
   "timestamp": "2026-10-26T14:12:00.000Z",
   "source": "fornecimentos-service",
   "correlationId": "4d3c2b1a-0f9e-4d8c-b7a6-5f4e3d2c1b0a",
-  "aggregateId": "ped-998812",
+  "aggregateId": "7a6b5c4d-3e2f-4a1b-9c8d-0e1f2a3b4c5d",
   "payload": {
-    "pedidoId": "ped-998812",
+    "pedidoId": "7a6b5c4d-3e2f-4a1b-9c8d-0e1f2a3b4c5d",
     "fornecimentoId": "forn-55",
     "quantidadeSolicitada": 20000,
     "quantidadeDisponivel": 12000,
