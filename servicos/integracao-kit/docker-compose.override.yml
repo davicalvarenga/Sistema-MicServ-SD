@@ -1,6 +1,6 @@
 # ==============================================================================
 # Encaixe dos serviços do grupo de Fornecimento e Produtos no kit de infraestrutura
-# (Printf-PedroCardoso/portal-b2b-kit-infra, commit 630515c)
+# (Printf-PedroCardoso/portal-b2b-kit-infra, commit b23af3b; testado também no 630515c)
 #
 # Uso, a partir da pasta do kit (instruções completas em README.md, nesta pasta):
 #   docker compose -f docker-compose.yml \
