@@ -1,8 +1,8 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 2.4 (proposta para revisão dos grupos que integram com a gente)
-**Data:** 19/11/2026 (versão 1.0: 26/10/2026)
+**Versão:** 2.5 (proposta para revisão dos grupos que integram com a gente)
+**Data:** 23/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
 
@@ -33,7 +33,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 
 ### 2.1 `produto_cadastrado`
 
-- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores (kit):** `fornecimentos-service`, `demanda-service`, `mercado-service`. O grupo de Logística/Transporte não consome este evento: recebe o tipo de transporte pelo `pedido_criado`, que o grupo de Pedidos preenche a partir do produto. Se o grupo de Pedidos não puder incluir o campo, o plano B da Logística é consumir `produto_cadastrado` e `produto_atualizado` e guardar uma cópia local (resposta da Logística, 10/11/2026).
+- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores (kit):** `fornecimentos-service`, `demanda-service`, `mercado-service`. Também consome: `pedidos-service` (issue #1). O grupo de Logística/Transporte não consome este evento: recebe o tipo de transporte pelo `pedido_criado`, que o grupo de Pedidos preenche a partir do produto. Se o grupo de Pedidos não puder incluir o campo, o plano B da Logística é consumir `produto_cadastrado` e `produto_atualizado` e guardar uma cópia local (resposta da Logística, 10/11/2026).
 - **Quando:** depois que o produto é gravado com sucesso (RF-06).
 - **Schema:** [`produto_cadastrado.schema.json`](contratos/schemas/produto_cadastrado.schema.json)
 
@@ -72,7 +72,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 
 ### 2.2 `produto_atualizado` e `produto_excluido`
 
-- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores:** `fornecimentos-service` (cópia local); `demanda-service` e `mercado-service`, se quiserem manter cópias.
+- **Produtor:** `produtos-service`. **Chave:** `produtoId`. **Consumidores:** `fornecimentos-service` (cópia local) consome os dois. `mercado-service` (ESP-MRC-001, INT-MRC-05) e `pedidos-service` (issue #1) consomem só o `produto_atualizado`; o Mercado declarou que não consome o `produto_excluido`. `demanda-service`, se quiser manter cópia.
 - **Quando:** a empresa que cadastrou o produto o altera ou exclui. Só é permitido enquanto o produto não tem movimentação, isto é, nenhum fornecimento (resposta do professor). Mudança de especificação de produto com movimentação é um produto novo.
 - **Tópicos:** o kit ainda não tem esses tópicos (P-26). O Redpanda do kit, em modo `dev-container`, os cria na primeira publicação com 1 partição; a criação com 3 partições foi pedida à Infraestrutura.
 
@@ -84,7 +84,7 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 
 ### 2.3 `fornecimento_criado`
 
-- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor (kit):** `mercado-service`.
+- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor (kit):** `mercado-service`. Também consomem: `pedidos-service` (issue #1) e o nosso `produtos-service` (seção 3.3.1). A Negociação/Leilão não consome os nossos eventos: recebe os dados da oferta pelos eventos do Mercado (decisão D39 da ESP-NEG-001).
 - **Quando:** depois que o fornecedor cria uma oferta (RF-12).
 - **Schema:** [`fornecimento_criado.schema.json`](contratos/schemas/fornecimento_criado.schema.json)
 
@@ -99,7 +99,7 @@ Como cada tópico só garante ordem dentro dele mesmo, quem consome deve compara
 | `origem` | objeto | Ponto de coleta: `cidade` (texto) e `uf` (sigla de uma das 27 unidades da federação). Formato pedido pela Logística, igual ao campo `origem` que ela propôs para o `pedido_criado` (P-05) |
 | `criadoPor` | objeto | `empresaId` e `usuarioId` de quem criou |
 | `criadoEm` | data e hora | Momento da criação |
-| `grupoId` | texto ou nulo | Grupo econômico do fornecedor, do claim `group_id` do token. Nulo quando o token não traz o grupo. Para Mercado e Negociação/Leilão aplicarem a trava de auto-negociação (issue #35). Opcional: consumidores antigos podem ignorar |
+| `grupoId` | texto ou nulo | Grupo econômico do fornecedor, do claim `group_id` do token. Nulo quando o token não traz o grupo. Pedido na análise do grupo de Autenticação para uma trava de auto-negociação por grupo econômico (issue #35). Na v1, nenhum consumidor usa o campo: o Mercado o aceita e ignora (DG-54 da ESP-MRC-001), e a Negociação/Leilão não consome este evento. Fica disponível para uso futuro. Opcional: consumidores antigos podem ignorar |
 
 Exemplo: [`exemplos/fornecimento_criado.json`](contratos/exemplos/fornecimento_criado.json)
 
@@ -109,14 +109,14 @@ Na versão 1.0 deste contrato, `origem` era texto livre. A mudança para objeto 
 
 ### 2.3.1 `fornecimento_atualizado`
 
-- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor proposto:** `mercado-service`.
+- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor:** `mercado-service` (ESP-MRC-001, INT-MRC-05).
 - **Quando:** o fornecedor muda o preço, repõe quantidade ou encerra a oferta (`PATCH /api/v1/fornecimentos/{id}`). O novo preço vale para todo o estoque da oferta, como explicou o professor.
 - **Conteúdo:** os mesmos campos do `fornecimento_criado`, com o estado depois da alteração, trocando `criadoPor`/`criadoEm` por `atualizadoPor`/`atualizadoEm`. Schema: [`fornecimento_atualizado.schema.json`](contratos/schemas/fornecimento_atualizado.schema.json); exemplo: [`exemplos/fornecimento_atualizado.json`](contratos/exemplos/fornecimento_atualizado.json).
 - **Tópico:** não existe no kit (P-37). Pedido à Infraestrutura.
 
 ### 2.4 `estoque_atualizado`
 
-- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidor (kit):** `mercado-service`.
+- **Produtor:** `fornecimentos-service`. **Chave:** `fornecimentoId`. **Consumidores:** `mercado-service` (kit) e `pedidos-service` (confirma a reserva pelo `RESERVA` com o `pedidoId`; issue #1).
 - **Quando:** sempre que o estoque de um fornecimento muda (RF-15).
 - **Schema:** [`estoque_atualizado.schema.json`](contratos/schemas/estoque_atualizado.schema.json)
 
@@ -290,3 +290,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 2.2 | 18/11/2026 | Campo opcional `grupoId` no `fornecimento_criado`, pedido na análise do grupo de Autenticação (issue #35). Mudança compatível |
 | 2.3 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) atualizado para o formato publicado pelo grupo de Autenticação a partir do commit `b0dfaa7`: envelope do kit, `payload` em `camelCase` com cópia em `snake_case` e cópia dos campos na raiz. Não muda nenhum evento nosso (issue #28) |
 | 2.4 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): `CANCELADO`, `VENDA_CONCLUIDA` e `reserva_estoque_recusada` deixam de ser proposta; regras de repetição e de ordem de chegada do `pedido_atualizado` explicitadas; `pedidoId` dos exemplos em UUID, como o `pedidos-service` gera, e `compradorId` nulo no exemplo de `pedido_criado`. Nenhum schema muda |
+| 2.5 | 23/11/2026 | Consumidores atualizados a partir das especificações do grupo de Mercado, Negociação/Leilão e Pedidos: `pedidos-service` consome `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `estoque_atualizado` e `reserva_estoque_recusada`; `mercado-service` confirmado em `fornecimento_atualizado` e `produto_atualizado`; a Negociação/Leilão não consome os nossos eventos. Uso do `grupoId` na v1: nenhum (DG-54 do Mercado). Nenhum schema muda |

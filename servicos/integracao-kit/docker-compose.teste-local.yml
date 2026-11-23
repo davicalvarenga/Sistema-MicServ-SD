@@ -1,11 +1,12 @@
 # ==============================================================================
 # Contorno OPCIONAL, só para teste local, enquanto o kit não for corrigido.
 #
-# No kit (commit 630515c), o pg-primary sobe com synchronous_commit=on e
-# synchronous_standby_names='pg_replica'. Durante a inicialização do banco, o
-# PostgreSQL só aceita conexões pelo socket local, a réplica não consegue se
-# conectar e o CREATE DATABASE fica esperando por ela para sempre: o banco
-# portal_b2b nunca é criado. Este arquivo sobe o primário sem esperar réplica.
+# No kit, o pg-primary sobe exigindo réplica síncrona (commit 630515c:
+# synchronous_standby_names='pg_replica'; commit b23af3b: 'FIRST 1 (walreceiver)').
+# Durante a inicialização do banco, o PostgreSQL só aceita conexões pelo
+# socket local, a réplica não consegue se conectar e o CREATE DATABASE fica
+# esperando por ela para sempre: o banco portal_b2b nunca é criado. Este
+# arquivo sobe o primário sem esperar réplica.
 # Detalhes em README.md (nesta pasta). Não usar como solução definitiva.
 # ==============================================================================
 
