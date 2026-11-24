@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 2.1 |
+| Versão | 2.2 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -1112,7 +1112,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-18 | Decisão | Preço e quantidade zero (P-21; o trecho sobre preço zero com estoque está truncado na transcrição). | Zero é aceito no cadastro e na alteração (RN-02). A vitrine esconde só a oferta com disponível zero (RN-18); a oferta com preço zero e estoque aparece. Revisar se o professor decidir diferente. |
 | Q-19 | Decisão | Tópico da alteração de oferta (P-37). | `fornecimento_atualizado`, ainda não criado no kit. O Redpanda do kit em modo `dev-container` cria o tópico na primeira publicação, com 1 partição; a criação com 3 partições foi pedida à Infraestrutura. |
 | Q-20 | Decisão | Token de visão de grupo econômico (`MACRO_GROUP`, issue #33). | Aceito nas consultas; recusado com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4). Regra aprovada pelo grupo de Autenticação em 2026-11-18. |
-| Q-21 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`, ainda sem tópico no kit. |
+| Q-21 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`. Os tópicos existem no kit desde o commit `90085b3` (23/11/2026); o consumo depende de decisão do grupo. |
 | Q-22 | Decisão | Grupo econômico no `fornecimento_criado` (issue #35), para Mercado e Negociação/Leilão aplicarem a trava de auto-negociação. | Campo opcional `grupoId`, do claim `group_id`. Não é guardado no fornecimento, porque nenhuma operação do serviço o lê. Mudança compatível no contrato (versão 2.2). |
 
 ### 13.1 Casos de borda obrigatórios
@@ -1155,3 +1155,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-14 confirmada pelo professor (pedido criado na abertura do leilão ou da negociação; `compradorId` pode vir vazio). Só texto, sem mudança de comportamento nem de critérios. |
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Preço e quantidade zero aceitos (RN-02, CA-51; CA-03 ajustado). Vitrine sem ofertas zeradas para compradores (RN-18, CA-52). Alteração e encerramento de oferta (API-07, RF-10, RN-17, RN-19, CA-53 a CA-57) com `fornecimento_atualizado` e as operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`. Consumo de `produto_atualizado` e `produto_excluido` (RN-20, CA-58). Novo código `FORNECIMENTO_DE_OUTRA_EMPRESA` (403). Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudanças incompatíveis com a 1.x:** zero passa a ser aceito no cadastro, e a listagem do comprador deixa de mostrar ofertas zeradas. |
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro e alteração; na vitrine, o fornecedor vê as ofertas zeradas das empresas do grupo (§7.1, item 4; RN-18; CA-59, CA-60; Q-20). Campo `grupoId` no `fornecimento_criado` (CA-61, Q-22; CA-12 ajustado). Revogação do token registrada como premissa (Q-21). Motivo: análise do serviço de Autenticação (issues #33, #34 e #35). Mudança compatível. |
+| 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-21: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |

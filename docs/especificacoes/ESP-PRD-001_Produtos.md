@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 2.1 |
+| Versão | 2.2 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -843,7 +843,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-13 | Decisão | Conteúdo da lista fixa de categorias (P-10: o professor disse que é lista fixa; o trecho sobre quem define está truncado na transcrição). | Lista definida pelo grupo a partir dos produtos do protótipo do UX e da turma (RN-09). Ampliar a lista é nova versão desta ESP e dos schemas. |
 | Q-14 | Premissa | Fornecimento criado no mesmo instante em que o produto é excluído (os dois serviços são separados). | Janela de cerca de 1 segundo (tempo de entrega do evento). O `fornecimentos-service` desativa a cópia local ao receber `produto_excluido`, e o `fornecimento_criado` atrasado de um produto já excluído é ignorado aqui (CA-37). O fornecimento criado nessa janela fica sem produto no catálogo; o caso é registrado como limitação no Relatório Técnico. |
 | Q-15 | Decisão | Token de visão de grupo econômico (`MACRO_GROUP`, issue #33). | Aceito nas consultas; recusado com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4). Regra aprovada pelo grupo de Autenticação em 2026-11-18. |
-| Q-16 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`, ainda sem tópico no kit. |
+| Q-16 | Premissa | Revogação do token (issue #34). O serviço valida o token sem consultar o serviço de Autenticação, que só aplica logout e bloqueio na própria lista de revogação. | Aceito: depois de logout, suspensão do usuário ou bloqueio da empresa, o token continua aceito até o `exp`, no máximo 15 minutos. O grupo de Autenticação confirmou que esse é o comportamento esperado e indicou, para casos críticos, o consumo de `tenant_bloqueado` e `usuario_bloqueado`. Os tópicos existem no kit desde o commit `90085b3` (23/11/2026); o consumo depende de decisão do grupo. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -885,3 +885,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 1.5 | 2026-11-12 | Grupo de Fornecimento e Produtos | Q-03 confirmada pelo professor (comprador cadastra produto). Só texto, sem mudança de comportamento nem de critérios. |
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Categoria passa a lista fixa (RN-09, CA-32). Alteração (API-07, RF-08) e exclusão (API-08, RF-09) de produto pela empresa dona, só sem movimentação (RN-10, RN-11). Consumo de `fornecimento_criado` para marcar a movimentação (RF-10) e `produtos.dlt`. Novos atributos `atualizado_em` e `com_movimentacao`; novos códigos `PRODUTO_DE_OUTRA_EMPRESA` (403) e `PRODUTO_COM_MOVIMENTACAO` (409). CA-01 e CA-23 ajustados; CA-32 a CA-38 novos. Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudança incompatível com a 1.x:** categoria em texto livre passa a ser recusada. |
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4; CA-39, CA-40; Q-15). Revogação do token registrada como premissa (Q-16). Motivo: análise do serviço de Autenticação (issues #33 e #34). Mudança compatível: antes esse token recebia 403 `CONTEXTO_NAO_SELECIONADO` em todas as rotas. |
+| 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-16: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
