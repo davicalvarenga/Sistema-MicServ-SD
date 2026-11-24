@@ -1,6 +1,6 @@
 # Integração com o kit de infraestrutura
 
-Como rodar o `produtos-service` e o `fornecimentos-service` dentro do kit de infraestrutura da turma ([`Printf-PedroCardoso/portal-b2b-kit-infra`](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra), commit `b23af3b`), com duas instâncias de cada serviço, o PostgreSQL e o Redpanda do kit.
+Como rodar o `produtos-service` e o `fornecimentos-service` dentro do kit de infraestrutura da turma ([`Printf-PedroCardoso/portal-b2b-kit-infra`](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra), commit `90085b3`; o passo a passo foi executado no `b23af3b`), com duas instâncias de cada serviço, o PostgreSQL e o Redpanda do kit.
 
 | Arquivo | Para que serve |
 |---|---|
@@ -33,7 +33,7 @@ cat >> .env <<'EOF'
 # Grupo de Fornecimento e Produtos
 SVC_PRODUTOS_DB_PASSWORD='SvcProdutosPass2026!#'
 SVC_FORNECIMENTOS_DB_PASSWORD='SvcFornecimentosPass2026!#'
-# Enquanto o gateway não tiver a rota /.well-known/jwks.json, use o servidor de teste do passo 4
+# Enquanto o serviço de Autenticação não estiver no lugar do usuarios-service do kit, use o servidor de teste do passo 4
 AUTH_JWKS_URL=http://jwks-teste:8000/.well-known/jwks.json
 EOF
 ```
@@ -55,9 +55,9 @@ for t in reserva_estoque_recusada produto_atualizado produto_excluido fornecimen
 docker exec portal-b2b-rp-0 rpk topic list --brokers rp-0:9092
 ```
 
-Resultado esperado: 28 tópicos (19 de negócio e 9 DLTs), os de negócio com 3 partições e 3 réplicas. Se ainda faltar algum, rode o `init_topics.sh` de novo; ele ignora os tópicos que já existem.
+Resultado esperado no commit `90085b3`: 31 tópicos (22 de negócio, contando os 3 do serviço de Autenticação, e 9 DLTs); no `b23af3b`, eram 28, os de negócio com 3 partições e 3 réplicas. Se ainda faltar algum, rode o `init_topics.sh` de novo; ele ignora os tópicos que já existem.
 
-**4. Servidor de chaves de teste.** Enquanto o serviço de Autenticação não estiver no gateway, um servidor JWKS de teste faz esse papel. As chaves ficam na pasta `teste-chaves`, dentro do kit. A pasta não deve ir para nenhum repositório.
+**4. Servidor de chaves de teste.** O gateway do kit tem a rota `/.well-known/jwks.json` desde o commit `90085b3`, mas ela leva ao `usuarios-service` do kit, que ainda é o modelo da Infraestrutura e não publica chaves. Enquanto o serviço de Autenticação não ocupar esse lugar, um servidor JWKS de teste faz esse papel. As chaves ficam na pasta `teste-chaves`, dentro do kit. A pasta não deve ir para nenhum repositório.
 
 ```bash
 docker compose $F build app1-produtos app2-produtos app1-fornecimentos app2-fornecimentos
@@ -126,7 +126,7 @@ Encontrados ao rodar o kit em 11/11/2026, além dos pontos K1 a K11 da seção 3
 | # | Problema | Efeito | Correção sugerida à Infraestrutura |
 |---|---|---|---|
 | K12 | O `pg-primary` sobe com `synchronous_commit=on` e `synchronous_standby_names='pg_replica'`. Durante a inicialização, o PostgreSQL só escuta o socket local, a réplica não consegue se conectar e o `CREATE DATABASE "portal_b2b"` fica esperando por ela para sempre (`wait_event` `SyncRep`) | O banco `portal_b2b` nunca é criado, e nenhum serviço do kit consegue usar o banco. **Continua no commit `b23af3b` (22/11/2026):** o valor passou a `FIRST 1 (walreceiver)` e a réplica agora espera o primário com `pg_isready`, mas o primário segue exigindo réplica síncrona durante a inicialização; em 22/11/2026, o `CREATE DATABASE` ficou em `SyncRep` e a réplica em "no response" | Tirar `synchronous_standby_names` do comando do primário, ou configurá-lo só depois da inicialização. Vale conferir também se a réplica se identifica como `pg_replica`, porque o primário espera esse nome. Não verificamos a réplica: no nosso teste, ela não conseguiu resolver o nome `pg-primary` enquanto o primário ainda estava iniciando |
-| K13 | O gateway não tem a rota `/.well-known/jwks.json` | Nenhum serviço consegue validar os tokens RS256 do serviço de Autenticação | Rota pedida pela Autenticação à Infraestrutura (issue #2 deste repositório) |
+| K13 | O gateway não tem a rota `/.well-known/jwks.json` | Nenhum serviço consegue validar os tokens RS256 do serviço de Autenticação | **Resolvido no commit `90085b3` (23/11/2026)**, pela issue #2 do repositório do kit. A rota leva ao `usuarios-service` do kit, que ainda não publica chaves; falta o serviço de Autenticação ocupar esse lugar |
 | K14 | Os tópicos `reserva_estoque_recusada` e, desde a versão 2.0 do contrato, `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado` não estão no `scripts/init_topics.sh` | O Redpanda do kit roda em modo `dev-container`, que cria o tópico sozinho na primeira publicação, mas com 1 partição (`default_topic_partitions`), fora do padrão de 3 partições e replicação 3 do kit | Incluir os tópicos no script (pedido na issue #12). Até lá, criar à mão, como no passo 3 |
 | K15 | O `scripts/init_topics.sh` usa `|| true` em cada `rpk topic create` e imprime "criados com sucesso" mesmo quando a criação falha. Rodado logo depois de subir o Redpanda, com menos de três brokers no ar, a criação com 3 réplicas falha nos primeiros tópicos da lista (em 16/11/2026, `empresa_cadastrada` e `produto_cadastrado`) | O tópico fica faltando, ou é criado sozinho na primeira publicação com 1 partição e 1 réplica. Em 23/11/2026, aconteceu mesmo depois de o `rp-2` aparecer no `rpk cluster info`. Um consumidor que já estava inscrito demora até 5 minutos para enxergá-lo | Esperar os três brokers antes de criar os tópicos (por exemplo, `rpk cluster info -b`) e terminar com erro quando um `rpk topic create` falhar por outro motivo que não "já existe" |
 
@@ -142,6 +142,7 @@ Em 11/11/2026, com Docker 29 e as imagens do kit (`postgres:16.3-alpine` e `redp
 - Os logs dos dois serviços saem em JSON, inclusive os da biblioteca do Kafka. A exceção é o log de acesso do uvicorn.
 - Em 16/11/2026, com a versão 2.0 dos serviços e do contrato, o teste de fumaça passou nas 17 verificações em duas rodadas seguidas, seguindo este passo a passo do zero numa pasta nova. A primeira tentativa, ainda com `sleep 20` no passo 3, falhou na chegada ao Fornecimentos pelo K15.
 - Em 19/11/2026, com a versão 2.1, o teste passou nas 18 verificações em duas rodadas seguidas, seguindo este passo a passo do zero numa pasta nova.
+- Em 24/11/2026, o commit `90085b3` foi conferido só pela leitura das mudanças (rotas do serviço de Autenticação e do JWKS no gateway, Redis e três tópicos novos); o passo a passo não foi executado de novo. O K12, o K14 e o K15 não foram tocados por esse commit.
 - Em 22 e 23/11/2026, com o kit no commit `b23af3b`:
   - sem o contorno de teste local, o banco continua sem subir (K12);
   - com o contorno, as novas permissões do kit (`SELECT`, `INSERT`, `UPDATE` e `DELETE` nas tabelas, e privilégios padrão para tabelas criadas pelo `portal_ddl`) deram ao `svc_produtos` e ao `svc_fornecimentos` exatamente essas quatro permissões em todas as tabelas da nossa DDL, como na nossa proposta;

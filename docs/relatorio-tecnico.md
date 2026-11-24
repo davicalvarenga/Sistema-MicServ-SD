@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.12 (esboço)
+**Versão:** 0.13 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -132,7 +132,7 @@ O grupo analisou o kit antes de usá-lo como base. A tabela registra o que foi e
 | K10 | Os boilerplates respondem `/health/ready` sem testar banco e Redpanda, e `/metrics` devolve um número fixo | Análise estática | Contraria o RNF-22 | Implementar as verificações e as métricas reais |
 | K11 | O guia, o `CONTRACTS.md`, o script de tópicos e o código divergem em nomes de tópico, chaves, campo de versão do envelope e nome do claim da empresa | Comparação dos arquivos | Risco de cada grupo seguir um arquivo diferente | Seguir o que está implementado e pedir a unificação (P-33) |
 | K12 | O `pg-primary` sobe com `synchronous_commit=on` e `synchronous_standby_names='pg_replica'`. Na inicialização, o PostgreSQL só escuta o socket local, a réplica não se conecta e o `CREATE DATABASE "portal_b2b"` espera por ela para sempre | Execução do kit com Docker (11/11/2026), `wait_event` `SyncRep` | O banco `portal_b2b` nunca é criado; nenhum serviço do kit consegue usar o banco | Contorno opcional para teste local em `servicos/integracao-kit/`; correção pedida à Infraestrutura |
-| K13 | O gateway não tem a rota `/.well-known/jwks.json` | Execução do kit com Docker | Os serviços não conseguem validar os tokens RS256 da Autenticação | Rota pedida pela Autenticação à Infraestrutura; nos testes, servidor JWKS de teste |
+| K13 | O gateway não tem a rota `/.well-known/jwks.json` | Execução do kit com Docker | Os serviços não conseguem validar os tokens RS256 da Autenticação | **Rota criada no commit `90085b3` do kit (23/11/2026)**, com as rotas `/api/v1/auth/`, `/api/v1/tenants` e `/api/v1/users/`. Ela aponta para o `usuarios-service` do kit, que ainda é o modelo da Infraestrutura e não publica as chaves; vale quando o serviço de Autenticação ocupar esse lugar. Até lá, nos testes, servidor JWKS de teste |
 | K14 | Os tópicos `reserva_estoque_recusada`, `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado` não estão no script de tópicos, e o Redpanda em modo `dev-container` cria tópicos sozinhos com 1 partição | Execução do kit com Docker (`auto_create_topics_enabled` = `true`, `default_topic_partitions` = `1`) | O tópico sairia fora do padrão de 3 partições e replicação 3 | Criar à mão até o script ser atualizado (issue #12) |
 | K15 | O script de tópicos ignora as falhas de criação (`|| true`) e informa sucesso. Rodado antes de os três brokers estarem no ar, deixa de criar os primeiros tópicos da lista | Execução do kit com Docker em 16/11/2026 (`empresa_cadastrada` e `produto_cadastrado` não foram criados) | O tópico falta ou é criado sozinho com 1 partição, e um consumidor já inscrito demora até 5 minutos para enxergá-lo. Causa provável da falha da issue #24 | Esperar os três brokers antes de criar os tópicos, como no passo 3 do README da integração |
 
@@ -633,7 +633,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | Limpeza da tabela `outbox` | Não implementada: os eventos publicados ficam na tabela | A tabela cresce com o uso. Uma limpeza periódica dos eventos publicados há mais de 7 dias (retenção dos tópicos no kit) fica para depois |
 | Teste no kit fora do CI | Exige Docker com o kit completo; o CI do GitHub roda só os testes com PostgreSQL | O teste de fumaça e o de queda do Redpanda precisam ser repetidos à mão (`servicos/integracao-kit/`) a cada mudança relevante |
 | Kit ainda com defeitos (K12 a K15) | Correções dependem da Infraestrutura | Sem o contorno de teste local, o banco do kit não sobe |
-| Revogação do token só na expiração | A validação é local (ADR-012) e o kit não tem os tópicos `tenant_bloqueado` e `usuario_bloqueado` | Depois de logout ou bloqueio da empresa, o token continua aceito por até 15 minutos. Risco aceito em 18/11/2026 (issue #34); consumir os eventos de bloqueio fica para quando os tópicos existirem |
+| Revogação do token só na expiração | A validação é local (ADR-012) e os serviços não consomem `tenant_bloqueado` e `usuario_bloqueado` | Depois de logout ou bloqueio da empresa, o token continua aceito por até 15 minutos. Risco aceito em 18/11/2026 (issue #34). Os tópicos existem no kit desde o commit `90085b3` (23/11/2026); consumir os eventos de bloqueio depende de decisão do grupo |
 | Log de acesso do uvicorn em texto | Formato padrão do uvicorn | As linhas de acesso HTTP não saem em JSON; os registros do serviço e dos adaptadores saem |
 | Oferta criada durante a exclusão do produto | Os dois serviços são separados; a exclusão e o fornecimento podem acontecer no mesmo segundo | Em uma janela de cerca de 1 segundo, a oferta pode ficar sem produto no catálogo. O caso é raro, porque a exclusão só vale para produto cadastrado errado e sem movimentação |
 | Oferta encerrada com reserva | O encerramento zera só o disponível; um pedido cancelado depois devolve a quantidade | A oferta volta a aparecer na vitrine com a quantidade devolvida; o fornecedor pode encerrar de novo (Q-17 da ESP-FRN-001) |
@@ -691,6 +691,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.10 | 16/11/2026 | Respostas do professor em aula: ADR-013, ADR-014 e ADR-022 aceitos (alteração e exclusão de produto só sem movimentação, alteração e encerramento de oferta). Seções 5, 6 e 13 atualizadas. Versão 2.0 executada no kit (seção 10) e novo ponto K15 na seção 3.4 |
 | 0.11 | 18/11/2026 | ADR-012 revisado após a análise do serviço de Autenticação: token de visão de grupo econômico aceito só nas consultas, risco da revogação aceito, expiração sem folga mantida. Grupo econômico (`grupoId`) no `fornecimento_criado` (issue #35). Seção 13 atualizada |
 | 0.12 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): ADR-005 aceito; contrato de `pedido_criado` e `pedido_atualizado` confirmado na seção 6; aviso de pedido acima do disponível definido na seção 9 |
+| 0.13 | 24/11/2026 | Kit no commit `90085b3`: rota do JWKS no gateway (K13, seção 3.4) e tópicos `tenant_bloqueado` e `usuario_bloqueado` criados (seção 13) |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |

@@ -2,7 +2,7 @@
 
 **Grupo:** Fornecimento e Produtos
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Situação em:** 19/11/2026
+**Situação em:** 24/11/2026
 **Repositório:** [`davicalvarenga/Sistema-MicServ-SD`](https://github.com/davicalvarenga/Sistema-MicServ-SD)
 
 ---
@@ -22,10 +22,10 @@
 | Entrega | Versão | Onde está |
 |---|---|---|
 | Documento de Requisitos | 0.12 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
-| Relatório Técnico (arquitetura e decisões) | 0.12 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
-| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.4 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
-| Especificação do `produtos-service` | 2.1 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
-| Especificação do `fornecimentos-service` | 2.1 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
+| Relatório Técnico (arquitetura e decisões) | 0.13 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
+| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.5 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
+| Especificação do `produtos-service` | 2.2 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
+| Especificação do `fornecimentos-service` | 2.2 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
 | `produtos-service` e `fornecimentos-service` | 2.1 | [`servicos/`](../../servicos/) |
 | Integração com o kit (duas instâncias de cada serviço) | | [`servicos/integracao-kit/`](../../servicos/integracao-kit/README.md) |
@@ -59,7 +59,7 @@
 | # | Ação | Responsável |
 |---|---|---|
 | 1 | Avisar Mercado e Negociação/Leilão do campo `grupoId` no `fornecimento_criado` (issue #35) | Grupo |
-| 2 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`), usando as chaves publicadas por eles enquanto a rota do JWKS não existe no kit | Grupo |
+| 2 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`), usando as chaves publicadas por eles. A rota do JWKS já existe no gateway do kit (commit `90085b3`), mas só funciona quando o serviço de Autenticação ocupar o lugar do `usuarios-service` do kit | Grupo e grupo de Autenticação |
 | 3 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
 | 4 | Testar a reserva, a liberação e a baixa com o `pedidos-service` real no kit | Grupo e grupo de Pedidos |
 
@@ -69,7 +69,7 @@
 
 | Grupo | O que falta | Efeito para nós | Issue |
 |---|---|---|---|
-| Infraestrutura | Corrigir o banco do kit, que não sobe (K12); rota do JWKS no gateway (K13); criar 4 tópicos que faltam (K14); script de tópicos (K15) | Hoje rodamos o kit com contornos documentados | #12 |
+| Infraestrutura | Corrigir o banco do kit, que não sobe (K12); criar 4 tópicos que faltam (K14); script de tópicos (K15). A rota do JWKS (K13) foi criada em 23/11 | Hoje rodamos o kit com contornos documentados | #12 |
 | Mercado, Negociação/Leilão e Pedidos | Respondido em 19/11. Falta o teste conjunto no kit | Contrato validado só com os exemplos; o comportamento real aparece no teste | #1 |
 | Compra e Demanda | Revisar os eventos de catálogo e estoque da versão 2.0 | Possível divergência na integração | #21 |
 | UX/UI | O protótipo usa valores fora do contrato (tipo de transporte, origem em texto, categoria "Grãos") | As telas não vão funcionar com a nossa API sem ajuste | #22 |
