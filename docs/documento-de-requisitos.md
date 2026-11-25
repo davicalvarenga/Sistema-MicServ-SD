@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.12 (rascunho para revisão interna)
+**Versão:** 0.13 (rascunho para revisão interna)
 **Data:** 26/10/2026
 
 > Itens com status **Pendente** ou **Proposto** ainda podem mudar. O Grupo de Teste (QA) deve testar apenas itens com status **Confirmado** até a versão 1.0 deste documento.
@@ -67,6 +67,7 @@ Os itens abaixo pertencem a outros grupos. Este documento descreve apenas a inte
 | F16 | Transcrição automática de uma aula em que o professor respondeu às perguntas 4, 5, 6, 7 e 9 da mensagem do grupo (enviada pelo grupo em 16/11/2026). Alguns trechos estão truncados pela transcrição; quando a regra depende deles, o texto deste documento indica que é interpretação |
 | F13 | Protótipo navegável do grupo de UX/UI (repositório `HugoParzival007/portal-b2b-UI-UX`, commit `8a99d24`, 27/10/2026), com dados fictícios e sem chamadas às APIs |
 | F17 | Resposta do grupo de Mercado, Negociação/Leilão e Pedidos na issue #1, em 19/11/2026, e o repositório `brunnoalexcson/portal-b2b-mercado-negociacao-pedidos` (commit `8091833`, ESP-PED-001 v2.1): `fornecimentoId` em `pedido_criado` e em todo `pedido_atualizado`; status `CANCELADO` (libera a reserva) e `VENDA_CONCLUIDA` (dá baixa), com `VENDA_CONCLUIDA` uma única vez por pedido, no fechamento da negociação; `compradorId` nulo na criação do pedido; aceite do evento `reserva_estoque_recusada` |
+| F18 | Issue #44, aberta pelo grupo de Mercado (Brunno Alexcson) em 25/11/2026, e a ESP-MRC-001 do repositório `brunnoalexcson/portal-b2b-mercado-negociacao-pedidos` (commit `2b3fdcf`, §7.3 e decisão DG-47): o `mercado-service` consome `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`, e não consome `produto_excluido` |
 
 Quando F8 divergir de uma orientação do professor (F2, F3, F6, F7), vale a do professor, e a divergência é registrada como pendência para alinhamento com o grupo de Infraestrutura. Quando os próprios arquivos de F8 divergirem entre si, vale o que está implementado (script de tópicos, script do banco e código), e a divergência também é registrada.
 
@@ -128,7 +129,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | Autenticação (`identity-service`, chamado de `usuarios-service` no kit) | Cadastro de empresas e escopos (F7, 19:09). Token JWT RS256 com `sub`, `tenant_id` (empresa ativa), `group_id`, `active_scope` (`SUPPLIER`, `BUYER`, `CARRIER` ou `TENANT_ADMIN`), `roles`, `permissions` e `exp`; chaves públicas em `/.well-known/jwks.json` (F10). O token também traz `iss` (`identity-service`), `aud` (`b2b-platform`), `platform_role` e `view_mode`; o token do login, antes da escolha de empresa e escopo, não tem empresa (F12). Access token de 15 minutos (F8). Evento `empresa_cadastrada` com chave `tenant_id` (F10) | Confirmado (alinhamento com o kit: P-34) |
 | Gateway (grupo de Infraestrutura) | Gateway Nginx na porta 8080: rotas `/api/v1/produtos` e `/api/v1/fornecimentos`, limite de 100 requisições por segundo por IP e repasse do cabeçalho `X-Correlation-Id` (F8). A validação do token é feita em cada serviço, não no gateway (F8, `services/common/auth.py`) | Confirmado |
 | Mercado, Negociação/Leilão e Pedidos (`pedidos-service`) | Eventos `pedido_criado` e `pedido_atualizado` com identificação do fornecimento, quantidade e situação (criado, cancelado, venda concluída). O pedido é criado na abertura do leilão ou da negociação, antes do fechamento, e é ele que reserva o estoque; no leilão, o solicitante é o Mercado, e o comprador só é definido quando o leilão fecha (F14). Por isso o `compradorId` pode vir vazio no `pedido_criado` | Confirmado o momento (F14) e o contrato do evento (F17) |
-| Mercado (`mercado-service`) | Consome `produto_cadastrado`, `fornecimento_criado` e `estoque_atualizado` (F8, `CONTRACTS.md`) | Confirmado |
+| Mercado (`mercado-service`) | Consome `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado` (F8, `CONTRACTS.md`; F18; contrato de eventos v2.5). Não consome `produto_excluido`: as demandas de produto excluído são canceladas pelo grupo de Compra e Demanda (F18, DG-47) | Confirmado |
 | Compra e Demanda (`demanda-service`) | Consome `produto_cadastrado` (F8, `CONTRACTS.md`) | Confirmado |
 | Logística/Transporte (`logistica-service`) | Precisa do tipo de transporte do produto para escolher as transportadoras (F6, 10:33; F7, 24:56). Recebe o tipo de transporte, o peso da carga (`pesoKg`) e a origem pelo `pedido_criado`, que o grupo de Pedidos preenche a partir do produto e do fornecimento; não consome `produto_cadastrado`. Plano B, se Pedidos não incluir os campos: consumir `produto_cadastrado` e `produto_atualizado` e guardar cópia local (F11) | Confirmado (depende do grupo de Pedidos aceitar os campos) |
 | Banco de Dados | Banco único PostgreSQL 16 `portal_b2b` com um schema por serviço (`produtos` e `fornecimentos`). DDL feito pelo grupo de Banco de Dados com o usuário `portal_ddl`. Os serviços usam os usuários `svc_produtos` e `svc_fornecimentos`, só com DML no próprio schema (F8) | Confirmado (ajuste no DDL: P-28; permissões: P-32) |
@@ -157,8 +158,8 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RF-04 | O sistema deve permitir excluir um produto, desde que ele não tenha movimentação (RN-12, RN-13) | F5, F16 | Confirmado |
 | RF-05 | O sistema deve aceitar só categorias de uma lista fixa | F1, F2, F16 | Confirmado (conteúdo da lista: P-10) |
 | RF-06 | Ao cadastrar um produto, o serviço deve publicar o evento `produto_cadastrado`, com chave `produtoId` | F2, F5, F8 | Confirmado |
-| RF-07 | Ao alterar um produto, o serviço deve publicar um evento de alteração de produto | F5 | Confirmado (o kit não tem tópico para esse evento: P-26) |
-| RF-08 | Ao excluir um produto, o serviço deve publicar um evento de exclusão de produto | F5 | Confirmado (o kit não tem tópico para esse evento: P-26) |
+| RF-07 | Ao alterar um produto, o serviço deve publicar um evento de alteração de produto | F5 | Confirmado (evento `produto_atualizado`, P-26; tópico a criar no kit, K14) |
+| RF-08 | Ao excluir um produto, o serviço deve publicar um evento de exclusão de produto | F5 | Confirmado (evento `produto_excluido`, P-26; tópico a criar no kit, K14) |
 
 ### 3.2 Serviço de Fornecimentos
 
@@ -171,7 +172,7 @@ Uma mesma empresa pode ter os perfis de fornecedor, comprador e transportadora a
 | RF-13 | O serviço deve manter, para cada fornecimento, a quantidade disponível e a quantidade reservada | F1, F2, F6 | Confirmado (granularidade por fornecimento: F14; ajuste no DDL do kit: P-28) |
 | RF-14 | Ao consumir o evento de criação de pedido, o serviço deve reservar a quantidade do pedido: subtrair da quantidade disponível e somar à quantidade reservada | F2, F5, F6 | Confirmado (momento: o pedido é criado na abertura do leilão ou da negociação, F14; contrato do evento: F17) |
 | RF-15 | Sempre que o estoque mudar, o serviço deve publicar o evento `estoque_atualizado`, com chave `fornecimentoId` | F2, F5, F8 | Confirmado |
-| RF-16 | O serviço de Fornecimentos deve consumir os eventos de produto para manter uma referência local dos produtos válidos | F5, F8, F4 | Confirmado para `produto_cadastrado` (F8). Alteração e exclusão: P-26 |
+| RF-16 | O serviço de Fornecimentos deve consumir os eventos de produto para manter uma referência local dos produtos válidos | F5, F8, F4 | Confirmado para `produto_cadastrado` (F8). Alteração e exclusão: `produto_atualizado` e `produto_excluido` (P-26) |
 | RF-17 | O serviço de Fornecimentos deve consumir o evento `empresa_cadastrada` para reconhecer as empresas com perfil de fornecedor | F2, F8 | Confirmado (conteúdo do evento: P-12) |
 | RF-18 | O sistema deve publicar e consumir eventos de pedido de fornecimento entre fornecedor e grupo | F5 | Pendente (P-13) |
 | RF-19 | Ao consumir o evento de cancelamento de pedido, o serviço deve devolver a quantidade reservada à quantidade disponível | F6, F17 | Confirmado (status `CANCELADO`, F17) |
@@ -461,14 +462,18 @@ O Grupo de Teste já prevê dois testes que cobrem estes critérios (F8, seção
 
 Os tópicos, as chaves e os consumidores abaixo seguem o catálogo do kit de infraestrutura (F8, `CONTRACTS.md` e `scripts/init_topics.sh`). Cada evento tem o seu próprio tópico, com o mesmo nome do evento, 3 partições, fator de replicação 3 e retenção de 7 dias.
 
-| Tópico | Serviço | Papel | Chave (`aggregateId`) | Outros consumidores (F8) | Status |
+| Tópico | Serviço | Papel | Chave (`aggregateId`) | Outros consumidores (F8, F17, F18) | Status |
 |---|---|---|---|---|---|
-| `produto_cadastrado` | Produtos | Publica | `produtoId` | Fornecimentos, Demanda, Mercado | Confirmado |
-| Alteração de produto | Produtos | Publica | `produtoId` | | Pendente: o kit não tem tópico (P-26) |
-| Exclusão de produto | Produtos | Publica | `produtoId` | | Pendente: o kit não tem tópico (P-26) |
+| `produto_cadastrado` | Produtos | Publica | `produtoId` | Fornecimentos, Demanda, Mercado, Pedidos | Confirmado |
+| `produto_atualizado` | Produtos | Publica | `produtoId` | Fornecimentos, Mercado, Pedidos | Confirmado no contrato v2.5; tópico a criar no kit (K14) |
+| `produto_excluido` | Produtos | Publica | `produtoId` | Fornecimentos (o Mercado não consome: F18, DG-47) | Confirmado no contrato v2.5; tópico a criar no kit (K14) |
+| `fornecimento_criado` | Produtos | Consome (marca o produto como movimentado) | `fornecimentoId` | | Confirmado |
 | `produto_cadastrado` | Fornecimentos | Consome | `produtoId` | | Confirmado |
-| `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Mercado | Confirmado |
-| `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Mercado | Confirmado |
+| `produto_atualizado` e `produto_excluido` | Fornecimentos | Consome (cópia local dos produtos) | `produtoId` | | Confirmado |
+| `fornecimento_criado` | Fornecimentos | Publica | `fornecimentoId` | Mercado, Pedidos | Confirmado |
+| `fornecimento_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Mercado | Confirmado no contrato v2.5; tópico a criar no kit (K14) |
+| `estoque_atualizado` | Fornecimentos | Publica | `fornecimentoId` | Mercado, Pedidos | Confirmado |
+| `reserva_estoque_recusada` | Fornecimentos | Publica | `pedidoId` | Pedidos | Confirmado (F17); tópico a criar no kit (K14) |
 | `empresa_cadastrada` | Fornecimentos | Consome | `empresaId` | | Confirmado (conteúdo: P-12) |
 | `pedido_criado` | Fornecimentos | Consome (reserva) | `pedidoId` | | Confirmado (F14, F17) |
 | `pedido_atualizado` | Fornecimentos | Consome (cancelamento devolve, venda dá baixa) | `pedidoId` | | Confirmado (F17) |
@@ -546,7 +551,7 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | P-23 | **Resolvida pelo F9.** Pedidos é do grupo de Mercado, Negociação/Leilão e Pedidos | |
 | P-24 | **Resolvida pelo F8.** O grupo de Banco de Dados faz a modelagem, o DDL, as roles, a auditoria e as migrações | |
 | P-25 | A transcrição F7 termina no meio de uma frase sobre empresas que têm dois perfis (29:45). Existe continuação? | Grupo (verificar gravação) |
-| P-26 | O kit só tem o tópico `produto_cadastrado`. Onde publicar a alteração e a exclusão de produto, exigidas pelo F5? Opções: criar os tópicos `produto_atualizado` e `produto_excluido`, ou publicar os três tipos em um tópico único de produto, o que garante a ordem por `produtoId` | Infraestrutura |
+| P-26 | **Resolvida pelo grupo.** Foram criados os eventos `produto_atualizado` e `produto_excluido`, cada um no seu tópico, com a chave `produtoId` (contrato de eventos 2.0). Falta a Infraestrutura criar os tópicos no kit (K14 do Relatório Técnico, issue #12). Pergunta original: o kit só tem o tópico `produto_cadastrado`; onde publicar a alteração e a exclusão de produto, exigidas pelo F5? | Infraestrutura (criar os tópicos) |
 | P-27 | **Resolvida pelo F11, do nosso lado.** A Logística propôs ao grupo de Pedidos que o `pedido_criado` leve `tipoTransporte` (copiado do produto), `pesoKg`, `origem` e `destino`. Do nosso lado, `produto_cadastrado` já leva o tipo de transporte e passou a levar o peso unitário, e `fornecimento_criado` passou a levar a origem em cidade e UF. Falta o grupo de Pedidos aceitar a proposta | Mercado, Negociação/Leilão e Pedidos |
 | P-28 | A tabela `fornecimentos.fornecimento` do kit só tem `quantidade_disponivel`. A reserva exige `quantidade_reservada` e um registro de reservas por pedido (para liberar ou dar baixa na quantidade certa). O DDL é do grupo de Banco de Dados. Proposta testada em [`banco/`](banco/README.md) | Grupo de Banco de Dados |
 | P-29 | **Resolvida pelo F14.** O pedido é criado na abertura do leilão ou da negociação, e é ele que reserva o estoque. No leilão, o solicitante é o Mercado (ou o sistema), e o comprador só é definido quando o leilão fecha, com o último lance válido. A compra e venda acontece depois do fechamento. O professor pediu que a Infraestrutura mude o kit, que hoje cria o pedido a partir de `negociacao_fechada`. Para o nosso serviço, nada muda: a reserva já acontece no `pedido_criado` | Infraestrutura; Mercado, Negociação/Leilão e Pedidos (aplicar no kit e no `pedidos-service`) |
@@ -598,3 +603,4 @@ Pendências resolvidas continuam na tabela, marcadas, para manter o histórico. 
 | 0.10 | 16/11/2026 | Respostas do professor em aula (F16): P-09 e P-11 resolvidas; P-21 resolvida com ressalva; P-10 e P-07 parcialmente resolvidas. Novas regras RN-12 a RN-16. RF-03, RF-04, RF-05, RF-11 e RD-05 atualizados. Novas pendências P-36 e P-37. P-15 resolvida: moeda real brasileiro (resposta à pergunta 8) |
 | 0.11 | 16/11/2026 | Implementação das respostas do professor (ESPs v2.0): P-36 resolvida; P-37 implementada do nosso lado; lista de categorias definida pelo grupo (P-10); regra de quem altera produto adotada pelo grupo (P-07) |
 | 0.12 | 19/11/2026 | Resposta do grupo de Mercado, Negociação/Leilão e Pedidos (F17): P-02 resolvida, salvo o item (c); P-16 resolvida, salvo a criação do tópico; RF-14, RF-19, RF-20, RNF-14, RN-11 e UC-03 atualizados |
+| 0.13 | 25/11/2026 | Pedido do grupo de Mercado (F18, issue #44): consumidores do Mercado atualizados no módulo e na tabela de tópicos, que passa a ter `produto_atualizado`, `produto_excluido`, `fornecimento_atualizado` e `reserva_estoque_recusada` e o consumo de eventos entre os nossos dois serviços. P-26 resolvida, salvo a criação dos tópicos; RF-07, RF-08 e RF-16 atualizados |

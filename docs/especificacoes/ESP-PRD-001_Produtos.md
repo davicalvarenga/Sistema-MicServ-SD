@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 2.2 |
+| Versão | 2.3 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -27,12 +27,14 @@
 Manter o catálogo de produtos do portal: empresas fornecedoras e compradoras cadastram produtos, e os demais serviços são avisados por evento de cada produto novo, alterado ou excluído. Um produto só pode ser alterado ou excluído enquanto não tiver movimentação, isto é, nenhum fornecimento.
 
 ### 2.2 Posição na arquitetura
-O front-end chama este serviço pelo gateway Nginx (REST, prefixo `/api/v1/produtos`). Cada produto cadastrado gera o evento `produto_cadastrado`, consumido por Fornecimentos (para validar ofertas), Demanda e Mercado. O serviço participa do passo 1 do fluxo principal ("Fornecedor publica fornecimento"), porque a oferta referencia um produto do catálogo. O serviço consome `fornecimento_criado` para saber quais produtos já têm movimentação.
+O front-end chama este serviço pelo gateway Nginx (REST, prefixo `/api/v1/produtos`). Cada produto cadastrado gera o evento `produto_cadastrado`, consumido por Fornecimentos (para validar ofertas), Demanda, Mercado e Pedidos. A alteração gera `produto_atualizado`, consumido por Fornecimentos, Mercado e Pedidos. A exclusão gera `produto_excluido`, consumido só por Fornecimentos; o Mercado não o consome, porque as demandas de produto excluído são canceladas pelo grupo de Compra e Demanda (DG-47 da ESP-MRC-001). O serviço participa do passo 1 do fluxo principal ("Fornecedor publica fornecimento"), porque a oferta referencia um produto do catálogo. O serviço consome `fornecimento_criado` para saber quais produtos já têm movimentação.
 
 ```text
 Front-end ─► Gateway ─REST─► produtos-service ──[produto_cadastrado | produto_atualizado | produto_excluido]──► fornecimentos-service
-                                     ▲                                                                ├─► demanda-service
-                                     └──────────────[fornecimento_criado]── fornecimentos-service     └─► mercado-service
+                                  │   ▲
+                                  │   └──────[fornecimento_criado]── fornecimentos-service
+                                  ├──[produto_cadastrado | produto_atualizado]──► mercado-service, pedidos-service
+                                  └──[produto_cadastrado]──► demanda-service
 ```
 
 ## 3. Escopo
@@ -886,3 +888,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Categoria passa a lista fixa (RN-09, CA-32). Alteração (API-07, RF-08) e exclusão (API-08, RF-09) de produto pela empresa dona, só sem movimentação (RN-10, RN-11). Consumo de `fornecimento_criado` para marcar a movimentação (RF-10) e `produtos.dlt`. Novos atributos `atualizado_em` e `com_movimentacao`; novos códigos `PRODUTO_DE_OUTRA_EMPRESA` (403) e `PRODUTO_COM_MOVIMENTACAO` (409). CA-01 e CA-23 ajustados; CA-32 a CA-38 novos. Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudança incompatível com a 1.x:** categoria em texto livre passa a ser recusada. |
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4; CA-39, CA-40; Q-15). Revogação do token registrada como premissa (Q-16). Motivo: análise do serviço de Autenticação (issues #33 e #34). Mudança compatível: antes esse token recebia 403 `CONTEXTO_NAO_SELECIONADO` em todas as rotas. |
 | 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-16: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
+| 2.3 | 2026-11-25 | Grupo de Fornecimento e Produtos | Consumidores de cada evento na seção 2.2 e no diagrama: o Mercado consome `produto_cadastrado` e `produto_atualizado`, e não o `produto_excluido` (issue #44, ESP-MRC-001 DG-47). Sem mudança de regra, API ou evento. |

@@ -2,7 +2,7 @@
 
 **Grupo:** Fornecimento e Produtos
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Situação em:** 24/11/2026
+**Situação em:** 25/11/2026
 **Repositório:** [`davicalvarenga/Sistema-MicServ-SD`](https://github.com/davicalvarenga/Sistema-MicServ-SD)
 
 ---
@@ -21,10 +21,10 @@
 
 | Entrega | Versão | Onde está |
 |---|---|---|
-| Documento de Requisitos | 0.12 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
+| Documento de Requisitos | 0.13 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
 | Relatório Técnico (arquitetura e decisões) | 0.13 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
 | Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.5 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
-| Especificação do `produtos-service` | 2.2 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
+| Especificação do `produtos-service` | 2.3 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
 | Especificação do `fornecimentos-service` | 2.2 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
 | `produtos-service` e `fornecimentos-service` | 2.1 | [`servicos/`](../../servicos/) |
