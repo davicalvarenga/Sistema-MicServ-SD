@@ -86,6 +86,17 @@ def instante(momento: datetime) -> str:
     return momento.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def instante_evento(momento: datetime) -> str:
+    """Instante dos eventos: ISO-8601 em UTC com milissegundos e sufixo Z (contrato de eventos, seção 1).
+
+    Os consumidores comparam os instantes para descartar eventos antigos; sem a fração, duas mudanças
+    no mesmo segundo empatam e a segunda é descartada."""
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=timezone.utc)
+    momento = momento.astimezone(timezone.utc)
+    return momento.strftime("%Y-%m-%dT%H:%M:%S.") + f"{momento.microsecond // 1000:03d}Z"
+
+
 def correlation_id(request: Request) -> str:
     return request.state.correlation_id
 
@@ -279,7 +290,7 @@ def envelope(evento: str, origem: str, chave: str, correlacao: str, clock: Clock
         "eventId": str(uuid.uuid4()),
         "eventType": evento,
         "eventVersion": "1.0",
-        "timestamp": instante(agora_utc(clock)),
+        "timestamp": instante_evento(agora_utc(clock)),
         "source": origem,
         "correlationId": correlacao,
         "aggregateId": chave,

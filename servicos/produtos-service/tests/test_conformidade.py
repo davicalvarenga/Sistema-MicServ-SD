@@ -148,12 +148,12 @@ def test_CA12(amb):
     m = pub["message"]
     assert eh_uuid4(m["eventId"])
     assert {k: m[k] for k in ("eventType", "eventVersion", "timestamp", "source", "correlationId", "aggregateId")} == {
-        "eventType": "produto_cadastrado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00Z",
+        "eventType": "produto_cadastrado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00.000Z",
         "source": "produtos-service", "correlationId": "corr-001", "aggregateId": pid}
     assert m["payload"] == {"produtoId": pid, "nome": "Leite integral", "categoria": "LATICINIOS", "unidade": "L",
                             "tipoTransporte": "REFRIGERADO", "pesoUnitarioKg": None,
                             "cadastradoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
-                            "cadastradoEm": "2026-10-26T14:00:00Z"}
+                            "cadastradoEm": "2026-10-26T14:00:00.000Z"}
 
 
 def test_CA13(amb):
@@ -402,7 +402,7 @@ def test_CA33(amb):
     assert evento["key"] == pid and evento["message"]["correlationId"] == "corr-alt"
     assert evento["message"]["payload"] == {
         "produtoId": pid, "nome": "Leite desnatado", "categoria": "LATICINIOS", "unidade": "CX", "tipoTransporte": "REFRIGERADO",
-        "pesoUnitarioKg": 12, "atualizadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "atualizadoEm": "2026-10-26T14:10:00Z"}
+        "pesoUnitarioKg": 12, "atualizadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "atualizadoEm": "2026-10-26T14:10:00.000Z"}
 
 
 def test_CA34(amb):
@@ -413,7 +413,7 @@ def test_CA34(amb):
     [evento] = _publicadas(amb, "produto_excluido")
     assert evento["key"] == pid
     assert evento["message"]["payload"] == {"produtoId": pid, "excluidoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
-                                            "excluidoEm": "2026-10-26T14:00:00Z"}
+                                            "excluidoEm": "2026-10-26T14:00:00.000Z"}
 
 
 def test_CA35(amb):

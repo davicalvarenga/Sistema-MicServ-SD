@@ -27,6 +27,7 @@ from .http_comum import (
     exigir_escopo,
     filtro_texto,
     instante,
+    instante_evento,
     paginacao,
     preenchido,
 )
@@ -154,7 +155,8 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         produto = repositorio.obter_produto_referencia(produto_id)
         if produto is None or not produto["ativo"]:
             raise ErroApi(422, "PRODUTO_INEXISTENTE", f"Produto {produto_id} não é conhecido ou foi excluído.")
-        momento = instante(agora_utc(clock))
+        agora = agora_utc(clock)
+        momento = instante(agora)
         fornecimento = {
             "fornecimento_id": str(uuid.uuid4()),
             "fornecedor_id": claims["tenant_id"],
@@ -183,7 +185,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "quantidadeDisponivel": numero_json(quantidade),
             "origem": dict(origem),
             "criadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
-            "criadoEm": momento,
+            "criadoEm": instante_evento(agora),
             # Grupo econômico do fornecedor (claim group_id), para Mercado e Negociação aplicarem a trava de auto-negociação
             "grupoId": claims["group_id"] if preenchido(claims.get("group_id")) else None,
         }
@@ -277,7 +279,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
                 "quantidadeDisponivel": numero_json(alterado["quantidade_disponivel"]),
                 "origem": dict(alterado["origem"]),
                 "atualizadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
-                "atualizadoEm": instante(momento),
+                "atualizadoEm": instante_evento(momento),
             })
         return JSONResponse(projecao(alterado))
 
@@ -359,7 +361,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
                 versao = versao.replace(tzinfo=timezone.utc)
             repositorio.salvar_produto_referencia({
                 "produto_id": payload["produtoId"], "nome": payload["nome"], "unidade": payload["unidade"],
-                "tipo_transporte": payload["tipoTransporte"], "ativo": True, "versao_evento": instante(versao),
+                "tipo_transporte": payload["tipoTransporte"], "ativo": True, "versao_evento": instante_evento(versao),
             })
         return []
 
@@ -369,7 +371,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         versao = datetime.fromisoformat(mensagem["timestamp"].replace("Z", "+00:00"))
         if versao.tzinfo is None:
             versao = versao.replace(tzinfo=timezone.utc)
-        return instante(versao)
+        return instante_evento(versao)
 
     def processar_produto_atualizado(mensagem: dict, payload: dict, correlacao: str):
         atual = repositorio.obter_produto_referencia(payload["produtoId"])
@@ -415,7 +417,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "quantidadeDisponivel": numero_json(fornecimento["quantidade_disponivel"]),
             "quantidadeReservada": numero_json(fornecimento["quantidade_reservada"]),
             "pedidoId": pedido_id,
-            "atualizadoEm": instante(agora_utc(clock)),
+            "atualizadoEm": instante_evento(agora_utc(clock)),
         })
 
     def processar_pedido_criado(mensagem: dict, payload: dict, correlacao: str):
@@ -439,7 +441,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
             "quantidadeSolicitada": numero_json(quantidade),
             "quantidadeDisponivel": None if atual is None else numero_json(atual["quantidade_disponivel"]),
             "motivo": "FORNECIMENTO_INEXISTENTE" if atual is None else "ESTOQUE_INSUFICIENTE",
-            "recusadoEm": instante(momento),
+            "recusadoEm": instante_evento(momento),
         }
         return [("reserva_estoque_recusada", pedido_id, recusa)]
 

@@ -2,7 +2,7 @@
 
 **Grupo:** Fornecimento e Produtos
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Situação em:** 25/11/2026
+**Situação em:** 26/11/2026
 **Repositório:** [`davicalvarenga/Sistema-MicServ-SD`](https://github.com/davicalvarenga/Sistema-MicServ-SD)
 
 ---
@@ -23,9 +23,9 @@
 |---|---|---|
 | Documento de Requisitos | 0.13 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
 | Relatório Técnico (arquitetura e decisões) | 0.13 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
-| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.5 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
-| Especificação do `produtos-service` | 2.3 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
-| Especificação do `fornecimentos-service` | 2.2 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
+| Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.6 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
+| Especificação do `produtos-service` | 2.4 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
+| Especificação do `fornecimentos-service` | 2.3 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
 | `produtos-service` e `fornecimentos-service` | 2.1 | [`servicos/`](../../servicos/) |
 | Integração com o kit (duas instâncias de cada serviço) | | [`servicos/integracao-kit/`](../../servicos/integracao-kit/README.md) |
@@ -51,6 +51,7 @@
    - Expiração do token sem folga de relógio, como já era (issue #32).
    - Logout ou bloqueio só valem nos nossos serviços quando o token expira, em até 15 minutos; risco aceito e registrado no Relatório Técnico (issue #34).
 6. **Contrato com o grupo de Pedidos fechado (issue #1, 19/11).** O grupo de Mercado, Negociação/Leilão e Pedidos respondeu: `fornecimentoId` nos eventos de pedido, status `CANCELADO` (libera a reserva) e `VENDA_CONCLUIDA` (dá baixa, no fechamento da negociação) e aceite do `reserva_estoque_recusada`. Validamos os eventos publicados por eles contra os nossos schemas, e os nossos contra os schemas de consumidor deles: todos os que trocamos passam. Contrato de eventos na versão 2.4, sem mudança de schema.
+7. **Teste no kit com o `mercado-service` (26/11).** O Mercado consumiu os nossos eventos e mostrou a oferta na API dele. O teste achou um defeito nosso: os instantes dos eventos não tinham fração de segundo, e mudanças da mesma oferta no mesmo segundo eram descartadas pelo Mercado, que ficava com o estoque antigo. Corrigido com instantes em milissegundos (contrato de eventos 2.6) e conferido no kit.
 
 ---
 

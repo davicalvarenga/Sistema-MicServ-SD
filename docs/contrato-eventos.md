@@ -1,8 +1,8 @@
 # Contrato de Eventos
 
 **Grupo:** Fornecimento e Produtos (`produtos-service` e `fornecimentos-service`)
-**Versão:** 2.5 (proposta para revisão dos grupos que integram com a gente)
-**Data:** 23/11/2026 (versão 1.0: 26/10/2026)
+**Versão:** 2.6 (proposta para revisão dos grupos que integram com a gente)
+**Data:** 26/11/2026 (versão 1.0: 26/10/2026)
 
 Este documento define o conteúdo dos eventos que o grupo publica e o que o grupo precisa receber dos eventos que consome. Ele complementa o catálogo do kit de infraestrutura (`CONTRACTS.md`, commit `630515c`), que define tópicos, chaves e envelope, mas não o `payload`.
 
@@ -18,7 +18,7 @@ Cada evento tem um JSON Schema em [`contratos/schemas/`](contratos/schemas/) e u
 | Chave da mensagem | É sempre o `aggregateId` | Kit, CT-E02 |
 | Nomes de campos | `camelCase` no `payload`, como no envelope e no exemplo de `pedido_criado` do kit | Grupo |
 | Quantidades e preços | Números JSON com até 2 casas decimais (`NUMERIC(12,2)` no banco). Quem recebe deve converter para decimal antes de fazer contas | Kit, banco |
-| Datas | ISO-8601 em UTC (ex.: `2026-10-26T14:00:00Z`) | Kit |
+| Datas | ISO-8601 em UTC com milissegundos (ex.: `2026-10-26T14:00:00.123Z`), no `timestamp` do envelope e nos campos de instante do `payload`. Os consumidores comparam esses instantes para descartar eventos antigos: sem a fração, duas mudanças no mesmo segundo empatam e a segunda se perde. Os schemas aceitam o instante com ou sem fração | Kit; teste com o `mercado-service` (26/11/2026) |
 | `correlationId` | Texto não vazio, **não necessariamente UUID**: o gateway do kit repassa o `X-Correlation-Id` do cliente e, se ele não vier, usa o `$request_id` do Nginx (32 caracteres hexadecimais) | Kit, `gateway/nginx.conf` |
 | Identificação de quem agiu | Objeto com `empresaId` e `usuarioId`. **Nenhum evento leva token de acesso** | RNF-09 |
 | Campos desconhecidos | Os nossos consumidores ignoram campos que não conhecem. Os nossos eventos só aceitam os campos definidos no schema | Grupo |
@@ -291,3 +291,4 @@ Depois de 3 tentativas com espera de 1, 2 e 4 segundos, a mensagem vai para `pro
 | 2.3 | 18/11/2026 | `empresa_cadastrada` (seção 3.4) atualizado para o formato publicado pelo grupo de Autenticação a partir do commit `b0dfaa7`: envelope do kit, `payload` em `camelCase` com cópia em `snake_case` e cópia dos campos na raiz. Não muda nenhum evento nosso (issue #28) |
 | 2.4 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): `CANCELADO`, `VENDA_CONCLUIDA` e `reserva_estoque_recusada` deixam de ser proposta; regras de repetição e de ordem de chegada do `pedido_atualizado` explicitadas; `pedidoId` dos exemplos em UUID, como o `pedidos-service` gera, e `compradorId` nulo no exemplo de `pedido_criado`. Nenhum schema muda |
 | 2.5 | 23/11/2026 | Consumidores atualizados a partir das especificações do grupo de Mercado, Negociação/Leilão e Pedidos: `pedidos-service` consome `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `estoque_atualizado` e `reserva_estoque_recusada`; `mercado-service` confirmado em `fornecimento_atualizado` e `produto_atualizado`; a Negociação/Leilão não consome os nossos eventos. Uso do `grupoId` na v1: nenhum (DG-54 do Mercado). Nenhum schema muda |
+| 2.6 | 26/11/2026 | Instantes dos eventos com milissegundos (seção 1). No teste no kit com o `mercado-service`, a liberação de uma reserva, a reposição e a mudança de preço publicadas no mesmo segundo chegaram com o mesmo instante, e o Mercado, que só aplica instante maior que o último, ficou com o estoque antigo (100 em vez de 120). Corrigido nos dois serviços (ESP-PRD-001 2.4, ESP-FRN-001 2.3). Nenhum schema muda |
