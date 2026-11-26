@@ -22,6 +22,12 @@ def _instante(momento: datetime) -> str:
     return momento.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _instante_evento(momento: datetime) -> str:
+    """Versão do último evento de produto aplicado, com milissegundos, como o instante dos eventos."""
+    momento = momento.astimezone(timezone.utc)
+    return momento.strftime("%Y-%m-%dT%H:%M:%S.") + f"{momento.microsecond // 1000:03d}Z"
+
+
 def _fornecimento(linha) -> dict:
     return {
         "fornecimento_id": linha[0], "fornecedor_id": linha[1], "produto_id": linha[2], "unidade": linha[3],
@@ -100,7 +106,7 @@ class RepositorioFornecimentosPostgres:
         if linha is None:
             return None
         return {"produto_id": linha[0], "nome": linha[1], "unidade": linha[2], "tipo_transporte": linha[3], "ativo": linha[4],
-                "versao_evento": _instante(linha[5])}
+                "versao_evento": _instante_evento(linha[5])}
 
     def inserir_fornecimento(self, fornecimento: dict) -> None:
         self._executar(

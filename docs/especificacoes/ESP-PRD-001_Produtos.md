@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 2.3 |
+| Versão | 2.4 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -74,6 +74,7 @@ Front-end ─► Gateway ─REST─► produtos-service ──[produto_cadastrad
 | Escopo ativo | Valor do claim `active_scope` do token: o perfil em que o usuário está atuando. Um de: `SUPPLIER` (fornecedor), `BUYER` (comprador), `CARRIER` (transportadora), `TENANT_ADMIN` (administrador da empresa). Comparação exata, em maiúsculas. Uma empresa pode ter vários escopos; o usuário escolhe o ativo no serviço de Autenticação. |
 | Token | JWT assinado com RS256 pelo serviço de Autenticação, enviado no cabeçalho `Authorization: Bearer <token>`. A chave pública de cada `kid` vem da porta `ChavesPublicas` (§5.1). |
 | Instante | Data/hora em UTC no formato ISO-8601 com sufixo `Z` e sem frações de segundo (ex.: `"2026-10-26T14:00:00Z"`). |
+| Instante de evento | Instante com milissegundos (ex.: `"2026-10-26T14:00:00.123Z"`). Vale para o `timestamp` do envelope e para os campos de instante do `payload` dos eventos publicados (`...Em`). Sem a fração, duas mudanças no mesmo segundo empatam, e os consumidores que comparam instantes (Mercado, RN-01 da ESP-MRC-001; RN-20 deste serviço) descartam a segunda. A API continua sem frações. |
 | Agora | Valor retornado por `clock.now()` (porta Clock). O serviço nunca usa o relógio do sistema. |
 | Texto preenchido | String que, depois de remover espaços das pontas (`strip()`), tem pelo menos 1 caractere. |
 | Correlation id | Valor do cabeçalho `X-Correlation-Id` da requisição, ou um UUID4 novo se o cabeçalho estiver ausente ou não for texto preenchido. |
@@ -290,7 +291,7 @@ Envelope comum (padrão do kit de infraestrutura, `CONTRACTS.md`):
 | eventId | UUID4 novo, único por mensagem publicada |
 | eventType | igual ao nome do tópico |
 | eventVersion | `"1.0"` (string) |
-| timestamp | instante = `clock.now()` |
+| timestamp | instante de evento = `clock.now()` |
 | source | `"produtos-service"` |
 | correlationId | correlation id da requisição que originou o evento |
 | aggregateId | igual à chave de partição |
@@ -311,7 +312,7 @@ Exemplo (`event_bus.publish("produto_cadastrado", "6f1d2c3b-4a59-4e6f-8a7b-9c0d1
   "eventId": "3f0c2a8e-6a1b-4f4e-9a7d-1c2b3d4e5f60",
   "eventType": "produto_cadastrado",
   "eventVersion": "1.0",
-  "timestamp": "2026-10-26T14:00:00Z",
+  "timestamp": "2026-10-26T14:00:00.000Z",
   "source": "produtos-service",
   "correlationId": "d3b07384-d113-4f9e-8c65-27a36c8d76e4",
   "aggregateId": "6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b",
@@ -323,7 +324,7 @@ Exemplo (`event_bus.publish("produto_cadastrado", "6f1d2c3b-4a59-4e6f-8a7b-9c0d1
     "tipoTransporte": "REFRIGERADO",
     "pesoUnitarioKg": null,
     "cadastradoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"},
-    "cadastradoEm": "2026-10-26T14:00:00Z"
+    "cadastradoEm": "2026-10-26T14:00:00.000Z"
   }
 }
 ```
@@ -482,8 +483,8 @@ Cenário: Evento publicado com envelope e chave
   Dado um token de "SUPPLIER" e o cabeçalho X-Correlation-Id "corr-001"
   Quando o CA-01 é executado
   Então exatamente 1 mensagem é publicada, no tópico "produto_cadastrado", com key igual ao produto_id da resposta
-  E a mensagem tem eventId UUID4, eventType "produto_cadastrado", eventVersion "1.0", timestamp "2026-10-26T14:00:00Z", source "produtos-service", correlationId "corr-001" e aggregateId igual ao produto_id
-  E o payload tem produtoId, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipoTransporte "REFRIGERADO", pesoUnitarioKg null, cadastradoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e cadastradoEm "2026-10-26T14:00:00Z"
+  E a mensagem tem eventId UUID4, eventType "produto_cadastrado", eventVersion "1.0", timestamp "2026-10-26T14:00:00.000Z", source "produtos-service", correlationId "corr-001" e aggregateId igual ao produto_id
+  E o payload tem produtoId, nome "Leite integral", categoria "LATICINIOS", unidade "L", tipoTransporte "REFRIGERADO", pesoUnitarioKg null, cadastradoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e cadastradoEm "2026-10-26T14:00:00.000Z"
 
 # CA-13
 Cenário: Requisição recusada não publica
@@ -631,7 +632,7 @@ Cenário: Empresa dona altera produto sem movimentação
   Quando um token de "SUPPLIER" envia PUT /api/v1/produtos/{produto_id} com nome "Leite desnatado", categoria "LATICINIOS", unidade "CX", tipo_transporte "REFRIGERADO", peso_unitario_kg 12 e X-Correlation-Id "corr-alt"
   Então a resposta é 200 com nome "Leite desnatado", unidade "CX", peso_unitario_kg 12, cadastrado_em "2026-10-26T14:00:00Z" e atualizado_em "2026-10-26T14:10:00Z"
   E GET /api/v1/produtos/{produto_id} retorna o mesmo corpo
-  E exatamente 1 mensagem é publicada em "produto_atualizado", com key igual ao produto_id, correlationId "corr-alt" e payload produtoId, nome "Leite desnatado", categoria "LATICINIOS", unidade "CX", tipoTransporte "REFRIGERADO", pesoUnitarioKg 12, atualizadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e atualizadoEm "2026-10-26T14:10:00Z"
+  E exatamente 1 mensagem é publicada em "produto_atualizado", com key igual ao produto_id, correlationId "corr-alt" e payload produtoId, nome "Leite desnatado", categoria "LATICINIOS", unidade "CX", tipoTransporte "REFRIGERADO", pesoUnitarioKg 12, atualizadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e atualizadoEm "2026-10-26T14:10:00.000Z"
 
 # CA-36
 Cenário: Permissões, inexistência e dados inválidos na alteração e na exclusão
@@ -668,7 +669,7 @@ Cenário: Empresa dona exclui produto sem movimentação
   Quando um token de "SUPPLIER" envia DELETE /api/v1/produtos/{produto_id}
   Então a resposta é 204 sem corpo
   E GET /api/v1/produtos/{produto_id} retorna 404
-  E exatamente 1 mensagem é publicada em "produto_excluido", com key igual ao produto_id e payload produtoId, excluidoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e excluidoEm "2026-10-26T14:00:00Z"
+  E exatamente 1 mensagem é publicada em "produto_excluido", com key igual ao produto_id e payload produtoId, excluidoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"} e excluidoEm "2026-10-26T14:00:00.000Z"
 ```
 
 ### RF-10 — Registrar a movimentação do produto
@@ -889,3 +890,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4; CA-39, CA-40; Q-15). Revogação do token registrada como premissa (Q-16). Motivo: análise do serviço de Autenticação (issues #33 e #34). Mudança compatível: antes esse token recebia 403 `CONTEXTO_NAO_SELECIONADO` em todas as rotas. |
 | 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-16: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
 | 2.3 | 2026-11-25 | Grupo de Fornecimento e Produtos | Consumidores de cada evento na seção 2.2 e no diagrama: o Mercado consome `produto_cadastrado` e `produto_atualizado`, e não o `produto_excluido` (issue #44, ESP-MRC-001 DG-47). Sem mudança de regra, API ou evento. |
+| 2.4 | 2026-11-26 | Grupo de Fornecimento e Produtos | Instante de evento com milissegundos (glossário, §7.4; CA-12, CA-33, CA-34 e exemplo ajustados). Motivo: o Mercado e o Fornecimentos descartam um evento de produto com o mesmo instante do anterior, o que acontecia com duas mudanças no mesmo segundo (teste no kit com o `mercado-service`, 26/11/2026). Mudança compatível: o schema já aceitava frações. |

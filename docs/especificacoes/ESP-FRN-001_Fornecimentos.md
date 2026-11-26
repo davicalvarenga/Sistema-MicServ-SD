@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 2.2 |
+| Versão | 2.3 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -73,6 +73,7 @@ Front-end ─► Gateway ─REST────────────────
 | Origem | Local de coleta do produto: objeto JSON `{"cidade": ..., "uf": ...}`. `cidade` é texto com 1 a 255 caracteres depois de `strip()`; `uf` é, depois de `strip()`, uma das 27 siglas de unidade da federação do IBGE, em maiúsculas: `AC`, `AL`, `AP`, `AM`, `BA`, `CE`, `DF`, `ES`, `GO`, `MA`, `MT`, `MS`, `MG`, `PA`, `PB`, `PR`, `PE`, `PI`, `RJ`, `RN`, `RS`, `RO`, `RR`, `SC`, `SP`, `SE`, `TO`. Campos extras dentro do objeto são ignorados e não são gravados. |
 | Valor decimal | Número com no máximo 2 casas decimais, entre 0 e 9999999999.99. Em JSON é **número** (não string). Internamente, toda aritmética e comparação usa `decimal.Decimal`, obtido com `Decimal(str(valor))`; proibido calcular com `float`. Na saída, o `Decimal` é convertido com `float()` e serializado como número JSON. |
 | Instante | Data/hora em UTC no formato ISO-8601 com sufixo `Z` e sem frações de segundo (ex.: `"2026-10-26T14:00:00Z"`). |
+| Instante de evento | Instante com milissegundos (ex.: `"2026-10-26T14:00:00.123Z"`). Vale para o `timestamp` do envelope e para os campos de instante do `payload` dos eventos publicados (`...Em`). Sem a fração, duas mudanças no mesmo segundo empatam, e os consumidores que comparam instantes (Mercado, RN-01 da ESP-MRC-001; RN-20 deste serviço) descartam a segunda. A API continua sem frações. |
 | Agora | Valor retornado por `clock.now()` (porta Clock). O serviço nunca usa o relógio do sistema. |
 | Texto preenchido | String que, depois de `strip()`, tem pelo menos 1 caractere. |
 | Escopo ativo | Valor do claim `active_scope` do token: o perfil em que o usuário está atuando. Um de: `SUPPLIER` (fornecedor), `BUYER` (comprador), `CARRIER` (transportadora), `TENANT_ADMIN` (administrador da empresa). Comparação exata, em maiúsculas. Uma empresa pode ter vários escopos; o usuário escolhe o ativo no serviço de Autenticação. |
@@ -176,7 +177,7 @@ Comportamento das portas:
 | unidade | string | Sim | `payload.unidade`. |
 | tipo_transporte | string | Sim | `payload.tipoTransporte`. |
 | ativo | booleano | Sim | `True` na criação; `False` quando chega `produto_excluido` (RN-20). Produto inativo é tratado como inexistente no cadastro de fornecimento. |
-| versao_evento | instante | Sim | `timestamp` do envelope do evento aplicado. |
+| versao_evento | instante de evento | Sim | `timestamp` do envelope do evento aplicado, com milissegundos. |
 
 #### Reserva
 | Atributo | Tipo | Obrigatório | Restrições / origem |
@@ -343,7 +344,7 @@ Envelope comum:
 | eventId | UUID4 novo, único por mensagem publicada |
 | eventType | igual ao nome do tópico |
 | eventVersion | `"1.0"` (string) |
-| timestamp | instante = `clock.now()` |
+| timestamp | instante de evento = `clock.now()` |
 | source | `"fornecimentos-service"` |
 | correlationId | correlation id (glossário) da requisição ou da mensagem consumida que originou a publicação |
 | aggregateId | igual à chave de partição |
@@ -365,7 +366,7 @@ Exemplo de `estoque_atualizado` (`event_bus.publish("estoque_atualizado", "FORN-
   "eventId": "c2b1a098-7f6e-4d5c-8b4a-39281706f5e4",
   "eventType": "estoque_atualizado",
   "eventVersion": "1.0",
-  "timestamp": "2026-10-26T14:10:00Z",
+  "timestamp": "2026-10-26T14:10:00.000Z",
   "source": "fornecimentos-service",
   "correlationId": "b7c6d5e4-f3a2-4b1c-9d0e-8f7a6b5c4d3e",
   "aggregateId": "FORN-1",
@@ -378,7 +379,7 @@ Exemplo de `estoque_atualizado` (`event_bus.publish("estoque_atualizado", "FORN-
     "quantidadeDisponivel": 70.0,
     "quantidadeReservada": 30.0,
     "pedidoId": "PED-1",
-    "atualizadoEm": "2026-10-26T14:10:00Z"
+    "atualizadoEm": "2026-10-26T14:10:00.000Z"
   }
 }
 ```
@@ -389,7 +390,7 @@ Exemplo de `reserva_estoque_recusada` (chave `"PED-2"`):
   "eventId": "e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b",
   "eventType": "reserva_estoque_recusada",
   "eventVersion": "1.0",
-  "timestamp": "2026-10-26T14:12:00Z",
+  "timestamp": "2026-10-26T14:12:00.000Z",
   "source": "fornecimentos-service",
   "correlationId": "4d3c2b1a-0f9e-4d8c-b7a6-5f4e3d2c1b0a",
   "aggregateId": "PED-2",
@@ -399,7 +400,7 @@ Exemplo de `reserva_estoque_recusada` (chave `"PED-2"`):
     "quantidadeSolicitada": 80.0,
     "quantidadeDisponivel": 70.0,
     "motivo": "ESTOQUE_INSUFICIENTE",
-    "recusadoEm": "2026-10-26T14:12:00Z"
+    "recusadoEm": "2026-10-26T14:12:00.000Z"
   }
 }
 ```
@@ -559,8 +560,8 @@ Cenário: Evento publicado com envelope, chave e payload
   Dado o cabeçalho X-Correlation-Id "corr-001"
   Quando o CA-01 é executado
   Então exatamente 1 mensagem é publicada, no tópico "fornecimento_criado", com key igual ao fornecimento_id da resposta
-  E a mensagem tem eventId UUID4, eventType "fornecimento_criado", eventVersion "1.0", timestamp "2026-10-26T14:00:00Z", source "fornecimentos-service", correlationId "corr-001" e aggregateId igual ao fornecimento_id
-  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem {"cidade": "Goiânia", "uf": "GO"}, criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"}, criadoEm "2026-10-26T14:00:00Z" e grupoId null (o token não traz group_id)
+  E a mensagem tem eventId UUID4, eventType "fornecimento_criado", eventVersion "1.0", timestamp "2026-10-26T14:00:00.000Z", source "fornecimentos-service", correlationId "corr-001" e aggregateId igual ao fornecimento_id
+  E o payload é fornecimentoId igual ao fornecimento_id, fornecedorId "EMP-34", produtoId "PROD-1", unidade "L", preco 5.5, quantidadeDisponivel 15000, origem {"cidade": "Goiânia", "uf": "GO"}, criadoPor {"empresaId": "EMP-34", "usuarioId": "USR-7"}, criadoEm "2026-10-26T14:00:00.000Z" e grupoId null (o token não traz group_id)
 
 # CA-13
 Cenário: Requisição recusada não publica
@@ -573,6 +574,16 @@ Cenário: Grupo econômico do fornecedor no evento
   Então o payload do fornecimento_criado tem grupoId "GRP-3"
   Quando é enviada com group_id "" ou 5
   Então o payload tem grupoId null
+
+# CA-62
+Cenário: Eventos de produto no mesmo segundo e instante com milissegundos
+  Dado produto_atualizado de PROD-1 com unidade "KG" e timestamp 2026-10-26T13:59:30.100Z
+  E produto_atualizado de PROD-1 com unidade "L" e timestamp 2026-10-26T13:59:30.400Z
+  E produto_atualizado de PROD-1 com unidade "CX" e timestamp 2026-10-26T13:59:30.200Z (mais antigo)
+  Então a referência local de PROD-1 tem unidade "L"
+  Quando o relógio marca 2026-10-26T14:00:00.123Z e a requisição do CA-01 é enviada
+  Então a resposta tem criado_em "2026-10-26T14:00:00Z"
+  E o fornecimento_criado tem timestamp e criadoEm "2026-10-26T14:00:00.123Z"
 ```
 
 ### RF-05 — Manter a referência local de produtos
@@ -633,7 +644,7 @@ Cenário: Reserva com saldo suficiente
   Dado o fornecimento FORN-1 com 100/0 e o relógio em 2026-10-26T14:10:00Z
   Quando o handler recebe pedido_criado válido com pedidoId "PED-1", fornecimentoId "FORN-1", quantidade 30 e correlationId "corr-ped"
   Então GET /api/v1/fornecimentos/FORN-1 retorna quantidade_disponivel 70, quantidade_reservada 30 e atualizado_em "2026-10-26T14:10:00Z"
-  E é publicada exatamente 1 mensagem, em "estoque_atualizado", com key "FORN-1", correlationId "corr-ped" e payload fornecimentoId "FORN-1", produtoId "PROD-1", fornecedorId "EMP-34", operacao "RESERVA", quantidadeMovimentada 30, quantidadeDisponivel 70, quantidadeReservada 30, pedidoId "PED-1" e atualizadoEm "2026-10-26T14:10:00Z"
+  E é publicada exatamente 1 mensagem, em "estoque_atualizado", com key "FORN-1", correlationId "corr-ped" e payload fornecimentoId "FORN-1", produtoId "PROD-1", fornecedorId "EMP-34", operacao "RESERVA", quantidadeMovimentada 30, quantidadeDisponivel 70, quantidadeReservada 30, pedidoId "PED-1" e atualizadoEm "2026-10-26T14:10:00.000Z"
 
 # CA-18
 Cenário: Mesmo evento entregue de novo (idempotência por eventId)
@@ -1077,7 +1088,7 @@ Cenário: Token não vaza
 | RF-02 | RN-05, RN-06 | API-05 | CA-07 a CA-09 |
 | RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52, CA-60 |
 | RF-04 | RN-04, RN-12 | `fornecimento_criado` | CA-12, CA-13, CA-61 |
-| RF-05 | RN-07, RN-08, RN-09, RN-20 | `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimentos.dlt` | CA-14 a CA-16, CA-58 |
+| RF-05 | RN-07, RN-08, RN-09, RN-20 | `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimentos.dlt` | CA-14 a CA-16, CA-58, CA-62 |
 | RF-06 | RN-08, RN-09, RN-11, RN-13, RN-14 | `pedido_criado`, `estoque_atualizado`, `reserva_estoque_recusada`, `fornecimentos.dlt` | CA-17 a CA-26 |
 | RF-07 | RN-08, RN-09, RN-11, RN-15, RN-16 | `pedido_atualizado`, `estoque_atualizado`, `fornecimentos.dlt` | CA-27 a CA-30 |
 | RF-08 | RN-01, RN-04, RN-05 | API-04 a API-07 | CA-31 a CA-34, CA-48 a CA-50, CA-59, CA-60 |
@@ -1156,3 +1167,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 2.0 | 2026-11-16 | Grupo de Fornecimento e Produtos | Preço e quantidade zero aceitos (RN-02, CA-51; CA-03 ajustado). Vitrine sem ofertas zeradas para compradores (RN-18, CA-52). Alteração e encerramento de oferta (API-07, RF-10, RN-17, RN-19, CA-53 a CA-57) com `fornecimento_atualizado` e as operações `REPOSICAO` e `ENCERRAMENTO` no `estoque_atualizado`. Consumo de `produto_atualizado` e `produto_excluido` (RN-20, CA-58). Novo código `FORNECIMENTO_DE_OUTRA_EMPRESA` (403). Motivo: respostas do professor em aula (F16 do Documento de Requisitos). **Mudanças incompatíveis com a 1.x:** zero passa a ser aceito no cadastro, e a listagem do comprador deixa de mostrar ofertas zeradas. |
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro e alteração; na vitrine, o fornecedor vê as ofertas zeradas das empresas do grupo (§7.1, item 4; RN-18; CA-59, CA-60; Q-20). Campo `grupoId` no `fornecimento_criado` (CA-61, Q-22; CA-12 ajustado). Revogação do token registrada como premissa (Q-21). Motivo: análise do serviço de Autenticação (issues #33, #34 e #35). Mudança compatível. |
 | 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-21: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
+| 2.3 | 2026-11-26 | Grupo de Fornecimento e Produtos | Instante de evento com milissegundos (glossário, §7.4, `versao_evento`; CA-12, CA-17, CA-20 e exemplos ajustados; CA-62 novo). Motivo: no teste no kit com o `mercado-service` (26/11/2026), a reposição e a alteração de preço feitas no mesmo segundo da liberação de uma reserva foram descartadas pelo Mercado, que só aplica instante maior que o último. O mesmo acontecia com o `produto_atualizado` neste serviço (RN-20). Mudança compatível: o schema já aceitava frações. |

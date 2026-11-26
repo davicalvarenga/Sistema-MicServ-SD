@@ -164,11 +164,11 @@ def test_CA12(amb):
     m = pub["message"]
     assert eh_uuid4(m["eventId"])
     assert {k: m[k] for k in ("eventType", "eventVersion", "timestamp", "source", "correlationId", "aggregateId")} == {
-        "eventType": "fornecimento_criado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00Z",
+        "eventType": "fornecimento_criado", "eventVersion": "1.0", "timestamp": "2026-10-26T14:00:00.000Z",
         "source": "fornecimentos-service", "correlationId": "corr-001", "aggregateId": fid}
     assert m["payload"] == {"fornecimentoId": fid, "fornecedorId": "EMP-34", "produtoId": "PROD-1", "unidade": "L", "preco": 5.5,
                             "quantidadeDisponivel": 15000, "origem": {"cidade": "Goiânia", "uf": "GO"},
-                            "criadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "criadoEm": "2026-10-26T14:00:00Z",
+                            "criadoPor": {"empresaId": "EMP-34", "usuarioId": "USR-7"}, "criadoEm": "2026-10-26T14:00:00.000Z",
                             "grupoId": None}
 
 
@@ -229,7 +229,7 @@ def test_CA17(amb):
     assert pub["message"]["payload"] == {
         "fornecimentoId": "FORN-1", "produtoId": "PROD-1", "fornecedorId": "EMP-34", "operacao": "RESERVA",
         "quantidadeMovimentada": 30, "quantidadeDisponivel": 70, "quantidadeReservada": 30, "pedidoId": "PED-1",
-        "atualizadoEm": "2026-10-26T14:10:00Z"}
+        "atualizadoEm": "2026-10-26T14:10:00.000Z"}
 
 
 def test_CA18(amb):
@@ -255,7 +255,7 @@ def test_CA20(amb):
     assert pub["topic"] == "reserva_estoque_recusada" and pub["key"] == "PED-2"
     assert pub["message"]["payload"] == {"pedidoId": "PED-2", "fornecimentoId": "FORN-1", "quantidadeSolicitada": 80,
                                          "quantidadeDisponivel": 70, "motivo": "ESTOQUE_INSUFICIENTE",
-                                         "recusadoEm": "2026-10-26T14:00:00Z"}
+                                         "recusadoEm": "2026-10-26T14:00:00.000Z"}
 
 
 def test_CA21(amb):
@@ -755,3 +755,16 @@ def test_CA61(amb):
     for sem_grupo in ("", 5):
         amb.cliente.post(URL, json=FORNECIMENTO_VALIDO, headers=auth(group_id=sem_grupo))
         assert amb.bus.publicadas[-1]["message"]["payload"]["grupoId"] is None
+
+
+def test_CA62(amb):
+    """Instantes dos eventos com milissegundos: eventos no mesmo segundo ficam em ordem (teste no kit com o Mercado, 26/11/2026)."""
+    for unidade, momento in (("KG", "13:59:30.100"), ("L", "13:59:30.400"), ("CX", "13:59:30.200")):
+        entregar(amb, "produto_atualizado", evento("produto_atualizado", {"produtoId": "PROD-1", "nome": "Leite", "unidade": unidade,
+                                                                           "tipoTransporte": "REFRIGERADO"}, timestamp=f"2026-10-26T{momento}Z"))
+    assert amb.repo.obter_produto_referencia("PROD-1")["unidade"] == "L"  # o de .400 vale; o de .200 é mais antigo
+    amb.clock.agora = T0 + timedelta(milliseconds=123)
+    r = cadastrar(amb)
+    assert r.status_code == 201 and r.json()["criado_em"] == "2026-10-26T14:00:00Z"  # a API continua sem frações
+    m = amb.bus.publicadas[-1]["message"]
+    assert m["timestamp"] == m["payload"]["criadoEm"] == "2026-10-26T14:00:00.123Z"

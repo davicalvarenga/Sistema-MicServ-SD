@@ -24,6 +24,7 @@ from .http_comum import (
     exigir_escopo,
     filtro_texto,
     instante,
+    instante_evento,
     paginacao,
     preenchido,
 )
@@ -115,7 +116,7 @@ def _projecao(produto: dict) -> dict:
     return resposta
 
 
-def _payload_evento(produto: dict) -> dict:
+def _payload_evento(produto: dict, cadastrado_em: str) -> dict:
     """Mapeamento do §7.4: atributos em snake_case para o payload em camelCase."""
     return {
         "produtoId": produto["produto_id"],
@@ -125,7 +126,7 @@ def _payload_evento(produto: dict) -> dict:
         "tipoTransporte": produto["tipo_transporte"],
         "pesoUnitarioKg": _numero_json(produto["peso_unitario_kg"]),
         "cadastradoPor": {"empresaId": produto["cadastrado_por_empresa_id"], "usuarioId": produto["cadastrado_por_usuario_id"]},
-        "cadastradoEm": produto["cadastrado_em"],
+        "cadastradoEm": cadastrado_em,
     }
 
 
@@ -147,7 +148,8 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
         claims = autenticar(request, chaves_publicas, clock, emissor, audiencia)
         exigir_escopo(claims, ESCOPOS_CADASTRO)
         dados = _dados_do_corpo(await corpo_json(request))
-        momento = instante(agora_utc(clock))
+        agora = agora_utc(clock)
+        momento = instante(agora)
         produto = {
             "produto_id": str(uuid.uuid4()),
             **dados,
@@ -162,7 +164,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
         except Exception:
             logger.exception("falha ao gravar produto", extra={"correlationId": correlation_id(request)})
             raise ErroApi(500, "ERRO_INTERNO", "Não foi possível gravar o produto.")
-        publicar("produto_cadastrado", produto["produto_id"], correlation_id(request), _payload_evento(produto))
+        publicar("produto_cadastrado", produto["produto_id"], correlation_id(request), _payload_evento(produto, instante_evento(agora)))
         logger.info(f"produto cadastrado {produto['produto_id']}", extra={"correlationId": correlation_id(request)})
         return JSONResponse(_projecao(produto), status_code=201)
 
@@ -199,7 +201,8 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
         exigir_escopo(claims, ESCOPOS_CADASTRO)
         dados = _dados_do_corpo(await corpo_json(request))
         atual = produto_alteravel(produto_id, claims)
-        momento = instante(agora_utc(clock))
+        agora = agora_utc(clock)
+        momento = instante(agora)
         novo = {**atual, **dados, "atualizado_em": momento}
         try:
             alterado = repositorio.atualizar_se_sem_movimentacao(dict(novo))
@@ -217,7 +220,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
             "tipoTransporte": novo["tipo_transporte"],
             "pesoUnitarioKg": _numero_json(novo["peso_unitario_kg"]),
             "atualizadoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
-            "atualizadoEm": momento,
+            "atualizadoEm": instante_evento(agora),
         })
         return JSONResponse(_projecao(novo))
 
@@ -236,7 +239,7 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
         publicar("produto_excluido", produto_id, correlation_id(request), {
             "produtoId": produto_id,
             "excluidoPor": {"empresaId": claims["tenant_id"], "usuarioId": claims["sub"]},
-            "excluidoEm": instante(agora_utc(clock)),
+            "excluidoEm": instante_evento(agora_utc(clock)),
         })
         return Response(status_code=204)
 
