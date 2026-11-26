@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PRD-001 |
-| Versão | 2.4 |
+| Versão | 2.5 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 2, Produtos (`produtos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -66,7 +66,7 @@ Front-end ─► Gateway ─REST─► produtos-service ──[produto_cadastrad
 | Produto | Item do catálogo identificado por `produto_id`, com `nome`, `categoria`, `unidade`, `tipo_transporte` e, opcionalmente, `peso_unitario_kg`. |
 | Categoria | Um valor de uma lista fixa: `GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS`, `OUTROS`. Comparação exata, em maiúsculas e sem acento, depois de `strip()`. |
 | Movimentação | O produto tem movimentação a partir do primeiro fornecimento criado para ele (evento `fornecimento_criado`). Pedidos só existem sobre fornecimentos, então um produto com pedido também tem movimentação. A marcação nunca é desfeita. |
-| Empresa dona | A empresa que cadastrou o produto (`cadastrado_por_empresa_id`). Só ela altera ou exclui o produto. |
+| Empresa dona | A empresa que cadastrou o produto (`cadastrado_por_empresa_id`). Fica registrada como autora; desde a versão 2.5, qualquer empresa pode alterar ou excluir o produto sem movimentação (RN-10). |
 | Unidade | Unidade de medida em que o produto é negociado. Um de: `KG`, `TON`, `UN`, `CX`, `L`. |
 | Tipo de transporte | Como o produto precisa ser transportado. Um de: `GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`. |
 | Peso unitário | Peso de uma unidade do produto, em quilogramas. Opcional. Usado pela Logística/Transporte para calcular o peso da carga quando a unidade é `UN`, `CX` ou `L`. |
@@ -157,7 +157,7 @@ class ProdutoRepositorio(Protocol):
 
 | Estado | Como chega | O que permite |
 |---|---|---|
-| Sem movimentação (`com_movimentacao = False`) | Cadastro (API-04) | Consulta, alteração (API-07) e exclusão (API-08) pela empresa dona |
+| Sem movimentação (`com_movimentacao = False`) | Cadastro (API-04) | Consulta, alteração (API-07) e exclusão (API-08) por qualquer empresa (RN-10) |
 | Com movimentação (`com_movimentacao = True`) | Primeiro `fornecimento_criado` do produto | Só consulta. Alteração e exclusão → 409 `PRODUTO_COM_MOVIMENTACAO`. Uma especificação diferente (outro modelo, outra cor) é outro produto |
 | Excluído | API-08 sem movimentação | O produto deixa de existir (exclusão física): consultas → 404 |
 
@@ -185,11 +185,11 @@ Toda resposta, de sucesso ou de erro, inclui o cabeçalho `X-Correlation-Id` com
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
+| API-04 | POST | `/api/v1/produtos` | `SUPPLIER`, `BUYER`, `TENANT_ADMIN` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 500 `ERRO_INTERNO` |
 | API-05 | GET | `/api/v1/produtos/{produto_id}` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 404 `PRODUTO_NAO_ENCONTRADO` |
 | API-06 | GET | `/api/v1/produtos` | todos | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 422 `PAGINACAO_INVALIDA` |
-| API-07 | PUT | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
-| API-08 | DELETE | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER` | 204 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `PRODUTO_NAO_ENCONTRADO` → 403 `PRODUTO_DE_OUTRA_EMPRESA` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
+| API-07 | PUT | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `PRODUTO_NAO_ENCONTRADO` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
+| API-08 | DELETE | `/api/v1/produtos/{produto_id}` | `SUPPLIER`, `BUYER`, `TENANT_ADMIN` | 204 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `PRODUTO_NAO_ENCONTRADO` → 409 `PRODUTO_COM_MOVIMENTACAO` → 500 `ERRO_INTERNO` |
 
 #### API-01 — Saúde
 Resposta 200:
@@ -356,9 +356,9 @@ Cenário: Comprador também cadastra produto
 
 # CA-03
 Cenário: Perfis sem permissão de cadastro
-  Dado um token de "CARRIER" e, separadamente, um token de "TENANT_ADMIN"
-  Quando cada um envia POST /api/v1/produtos com um corpo válido
-  Então as duas respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
+  Dado um token de "CARRIER"
+  Quando envia POST /api/v1/produtos com um corpo válido
+  Então a resposta é 403 com codigo "PERFIL_NAO_PERMITIDO"
   E nenhum produto é gravado e nenhuma mensagem é publicada
 
 # CA-04
@@ -620,7 +620,7 @@ Cenário: Métricas por código de status
 
 ### RF-08 — Alterar produto
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando a empresa dona de um produto sem movimentação enviar um corpo válido para a API-07, o serviço deve gravar os novos atributos e publicar `produto_atualizado`.
+- **Enunciado (EARS):** Quando uma empresa enviar um corpo válido para a API-07 sobre um produto sem movimentação, o serviço deve gravar os novos atributos e publicar `produto_atualizado`.
 - **Regras aplicáveis:** RN-02, RN-09, RN-10, RN-11
 - **Interface:** API-07, tópico `produto_atualizado`
 
@@ -637,9 +637,7 @@ Cenário: Empresa dona altera produto sem movimentação
 # CA-36
 Cenário: Permissões, inexistência e dados inválidos na alteração e na exclusão
   Dado o produto do CA-01 cadastrado pela empresa "EMP-34"
-  Quando PUT e DELETE /api/v1/produtos/{produto_id} são enviados com token de "SUPPLIER" da empresa "EMP-99"
-  Então as respostas são 403 com codigo "PRODUTO_DE_OUTRA_EMPRESA"
-  Quando são enviados com token de "CARRIER"
+  Quando PUT e DELETE /api/v1/produtos/{produto_id} são enviados com token de "CARRIER"
   Então as respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
   Quando são enviados com token de "SUPPLIER" para /api/v1/produtos/PROD-X
   Então as respostas são 404 com codigo "PRODUTO_NAO_ENCONTRADO"
@@ -653,11 +651,21 @@ Cenário: Fornecimento criado entre a leitura e a gravação
   Quando PUT ou DELETE /api/v1/produtos/{produto_id} é processado
   Então a resposta é 409 com codigo "PRODUTO_COM_MOVIMENTACAO"
   E o produto continua gravado sem alteração e nenhuma mensagem é publicada
+
+# CA-41
+Cenário: Catálogo compartilhado e administrador da empresa
+  Dado o produto do CA-01 cadastrado pela empresa "EMP-34", sem movimentação
+  Quando um token de "SUPPLIER" da empresa "EMP-99" envia PUT /api/v1/produtos/{produto_id} com nome "Leite desnatado"
+  Então a resposta é 200 e o produto_atualizado tem atualizadoPor {"empresaId": "EMP-99", "usuarioId": "USR-7"}
+  Quando um token de "TENANT_ADMIN" da empresa "EMP-77" envia DELETE /api/v1/produtos/{produto_id}
+  Então a resposta é 204 e um produto_excluido é publicado
+  Quando um token de "TENANT_ADMIN" envia POST /api/v1/produtos com um corpo válido
+  Então a resposta é 201 e um produto_cadastrado é publicado
 ```
 
 ### RF-09 — Excluir produto
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando a empresa dona de um produto sem movimentação enviar a API-08, o serviço deve apagar o produto e publicar `produto_excluido`.
+- **Enunciado (EARS):** Quando uma empresa enviar a API-08 sobre um produto sem movimentação, o serviço deve apagar o produto e publicar `produto_excluido`.
 - **Regras aplicáveis:** RN-10, RN-11
 - **Interface:** API-08, tópico `produto_excluido`
 
@@ -700,7 +708,7 @@ Cenário: Mensagens inválidas e produto desconhecido
 
 | ID | Regra | Exemplo concreto |
 |---|---|---|
-| RN-01 | Apenas os perfis `SUPPLIER` e `BUYER` cadastram produtos. `CARRIER` e `TENANT_ADMIN` → 403 `PERFIL_NAO_PERMITIDO`. Todos os perfis consultam e listam. | `CARRIER` em POST → 403; `CARRIER` em GET → 200. |
+| RN-01 | Os perfis `SUPPLIER`, `BUYER` e `TENANT_ADMIN` cadastram, alteram e excluem produtos. O `TENANT_ADMIN` administra a própria empresa e pode tudo o que ela pode (professor, 26/11/2026). `CARRIER` → 403 `PERFIL_NAO_PERMITIDO`. Todos os perfis consultam e listam. | `CARRIER` em POST → 403; `CARRIER` em GET → 200; `TENANT_ADMIN` em POST → 201. |
 | RN-02 | Corpo do cadastro: precisa ser objeto JSON; `nome` string com 2 a 255 caracteres depois de `strip()`; `categoria`, depois de `strip()`, ∈ {`GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS`, `OUTROS`} (RN-09); `unidade` ∈ {`KG`, `TON`, `UN`, `CX`, `L`}; `tipo_transporte` ∈ {`GRANEL`, `REFRIGERADO`, `CARGA_SECA`, `PERIGOSO`}. Qualquer violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. | `"unidade": "litro"` → 422; `"nome": "  Leite  "` → gravado como `"Leite"`. |
 | RN-03 | `produto_id` (UUID4), `cadastrado_por_empresa_id` (claim `tenant_id`), `cadastrado_por_usuario_id` (claim `sub`) e `cadastrado_em` (`clock.now()`) são definidos pelo serviço. Valores enviados no corpo para esses campos são ignorados. | Corpo com `cadastrado_por_empresa_id` "EMP-99" e token de "EMP-34" → gravado "EMP-34". |
 | RN-04 | Requisição recusada (qualquer 4xx ou 5xx) não grava nada e não publica evento. | 422 → nenhuma mensagem. |
@@ -709,7 +717,7 @@ Cenário: Mensagens inválidas e produto desconhecido
 | RN-07 | Nenhum evento, resposta ou log contém o token de acesso. Eventos identificam quem agiu só por `empresaId` e `usuarioId`. | Payload sem campo de token. |
 | RN-08 | `peso_unitario_kg` é opcional para todas as unidades. Ausente ou `null` → gravado como `null`. Se informado, precisa ser valor de peso (glossário); caso contrário → 422 `DADOS_INVALIDOS`. O serviço não confere o peso com a unidade: para `KG` e `TON` a Logística converte a quantidade diretamente. | `"peso_unitario_kg": 12.35` → aceito; `"peso_unitario_kg": 0` → 422. |
 | RN-09 | Categoria é uma lista fixa: `GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS`, `OUTROS`. Outro valor, inclusive em minúsculas ou com acento → 422 `DADOS_INVALIDOS`. | `"Laticínios"` → 422; `" GRAOS "` → gravado `"GRAOS"`. |
-| RN-10 | Só a empresa dona (`cadastrado_por_empresa_id` igual ao claim `tenant_id`) altera ou exclui o produto, com escopo `SUPPLIER` ou `BUYER`. Outra empresa → 403 `PRODUTO_DE_OUTRA_EMPRESA`. | `EMP-99` em PUT de produto de `EMP-34` → 403. |
+| RN-10 | Qualquer empresa altera ou exclui o produto, com escopo `SUPPLIER`, `BUYER` ou `TENANT_ADMIN`: o catálogo é compartilhado (professor, 26/11/2026). A proteção das outras empresas é o RN-11: produto que já tem fornecimento, de qualquer empresa, não muda. `atualizadoPor` e `excluidoPor` registram a empresa que agiu. | `EMP-99` em PUT de produto de `EMP-34` sem movimentação → 200. |
 | RN-11 | Produto com movimentação não pode ser alterado nem excluído → 409 `PRODUTO_COM_MOVIMENTACAO`. A checagem e a gravação são uma só operação no repositório; se o `fornecimento_criado` chegar entre a leitura e a gravação, a resposta também é 409. Produto sem movimentação é apagado na exclusão. | Produto com `fornecimento_criado` recebido → PUT 409. |
 
 ## 10. Catálogo de erros
@@ -737,7 +745,6 @@ Formato único de erro (RFC 7807, exigido pelo kit de infraestrutura; a RFC 9457
 | CONTEXTO_NAO_SELECIONADO | 403 | Contexto Não Selecionado | §7.1, item 5. |
 | CONTEXTO_DE_GRUPO_NAO_PERMITIDO | 403 | Contexto de Grupo Não Permitido | §7.1, item 4. |
 | PERFIL_NAO_PERMITIDO | 403 | Acesso Negado | RN-01. |
-| PRODUTO_DE_OUTRA_EMPRESA | 403 | Produto de Outra Empresa | RN-10. |
 | PRODUTO_NAO_ENCONTRADO | 404 | Produto Não Encontrado | RN-05. |
 | ROTA_NAO_ENCONTRADA | 404 | Rota Não Encontrada | Rota inexistente. |
 | PRODUTO_COM_MOVIMENTACAO | 409 | Produto com Movimentação | RN-11. |
@@ -758,9 +765,8 @@ Respostas fora do catálogo: nenhuma. Rota inexistente e método não permitido 
 6. PERFIL_NAO_PERMITIDO
 7. DADOS_INVALIDOS / PAGINACAO_INVALIDA
 8. PRODUTO_NAO_ENCONTRADO
-9. PRODUTO_DE_OUTRA_EMPRESA
-10. PRODUTO_COM_MOVIMENTACAO
-11. ERRO_INTERNO
+9. PRODUTO_COM_MOVIMENTACAO
+10. ERRO_INTERNO
 
 ## 11. Requisitos não funcionais
 
@@ -820,8 +826,8 @@ Cenário: Token não vaza
 | RF-05 | RN-01, RN-04 | API-04 a API-08 | CA-14 a CA-17, CA-29 a CA-31, CA-39, CA-40 |
 | RF-06 | RN-07 | todas | CA-18, CA-19 |
 | RF-07 | — | API-01 a API-03 | CA-20 a CA-22 |
-| RF-08 | RN-02, RN-09, RN-10, RN-11 | API-07, `produto_atualizado` | CA-33, CA-36, CA-38 |
-| RF-09 | RN-10, RN-11 | API-08, `produto_excluido` | CA-34, CA-36, CA-38 |
+| RF-08 | RN-02, RN-09, RN-10, RN-11 | API-07, `produto_atualizado` | CA-33, CA-36, CA-38, CA-41 |
+| RF-09 | RN-10, RN-11 | API-08, `produto_excluido` | CA-34, CA-36, CA-38, CA-41 |
 | RF-10 | RN-11 | `fornecimento_criado`, `produtos.dlt` | CA-35, CA-37 |
 | RNF-01 a RNF-05 | — | todas | CA-23 a CA-27 |
 
@@ -834,7 +840,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-01 | Decisão | Validação do token e nomes dos claims (P-04, P-33). | No serviço, com RS256 e a chave pública do `kid` obtida pela porta `ChavesPublicas` (JWKS do serviço de Autenticação). Claims `sub`, `tenant_id` e `active_scope`, como definido pelo grupo de Autenticação na issue #2 (2026-11-09). Substitui o HS256 com chave compartilhada do kit, que permitia a qualquer serviço emitir tokens. Versão 1.4: `iss` (`identity-service`) e `aud` (`b2b-platform`) conferidos, token sem contexto → 403 `CONTEXTO_NAO_SELECIONADO` e serviço de chaves indisponível → 503, alinhado ao grupo de Logística, que leu o código do Identity-Service (F12 do Documento de Requisitos). |
 | Q-02 | Decisão | Nomes dos campos de erro: o grupo de Autenticação usa `code` e `correlation_id` (RFC 9457); o kit usa `correlationId`; esta ESP usa `codigo` e `correlationId`. | Mantidos `codigo` e `correlationId` até a turma definir um padrão único (pergunta feita na issue #2). Se mudar, esta ESP muda de versão. |
 | Q-03 | Decisão | O comprador pode cadastrar produto? O professor disse que sim (aula 2, 1:17 a 1:49); o guia do kit restringe o comprador (P-30). | `BUYER` cadastra (RN-01). Confirmado pelo professor em 2026-11-12: fornecedor e comprador cadastram produto. |
-| Q-04 | Decisão | Permissões do `TENANT_ADMIN` (P-07). | `TENANT_ADMIN` consulta e lista, mas não cadastra, não altera e não exclui. |
+| Q-04 | Decisão | Permissões do `TENANT_ADMIN` (P-07). | **Respondida pelo professor em 26/11/2026:** o `TENANT_ADMIN` administra a própria empresa e pode tudo o que ela pode (RN-01). |
 | Q-05 | Decisão | Listas de unidade e de tipo de transporte (P-06). | As sugeridas pelo boilerplate do kit, confirmadas pelo grupo de Logística/Transporte em 2026-11-10 (são as que ele usa na cotação e no cadastro de veículos). |
 | Q-06 | Decisão | Alteração e exclusão de produto (P-07, P-09, P-26). | Respondido pelo professor (F16 do Documento de Requisitos): só sem movimentação; com movimentação, uma especificação diferente é outro produto; o produto cadastrado errado pode ser apagado. Implementado na versão 2.0 (RF-08 a RF-10). |
 | Q-07 | Decisão | Formato de erro: o exemplo do Grupo de Teste usa `{"erro": {...}}`, e o kit exige RFC 7807. | RFC 7807 com o membro de extensão `codigo` (§10), que permite comparação literal nos testes. |
@@ -842,7 +848,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-09 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (Relatório Técnico, ADR-010). |
 | Q-10 | Premissa | O gateway encaminha as requisições `/api/v1/produtos` ao serviço sem alterar o cabeçalho `Authorization`. | Confirmado pela configuração do gateway do kit. |
 | Q-11 | Decisão | Peso da carga quando a unidade não é de massa. A Logística pediu um campo opcional de peso unitário (2026-11-10). | Campo opcional `peso_unitario_kg` (RN-08), com até 3 casas decimais (precisão de 1 grama). O cálculo do peso da carga (`pesoKg` do `pedido_criado`) é do grupo de Pedidos. |
-| Q-12 | Decisão | Quem altera e exclui o produto (P-07 sem resposta do professor). | Só a empresa dona (RN-10). Revisar se o professor decidir diferente. |
+| Q-12 | Decisão | Quem altera e exclui o produto (P-07). | **Respondida pelo professor em 26/11/2026:** qualquer empresa pode, com cuidado para não prejudicar as outras; a regra da movimentação (RN-11) faz esse cuidado (RN-10). |
 | Q-13 | Decisão | Conteúdo da lista fixa de categorias (P-10: o professor disse que é lista fixa; o trecho sobre quem define está truncado na transcrição). | Lista definida pelo grupo a partir dos produtos do protótipo do UX e da turma (RN-09). Ampliar a lista é nova versão desta ESP e dos schemas. |
 | Q-14 | Premissa | Fornecimento criado no mesmo instante em que o produto é excluído (os dois serviços são separados). | Janela de cerca de 1 segundo (tempo de entrega do evento). O `fornecimentos-service` desativa a cópia local ao receber `produto_excluido`, e o `fornecimento_criado` atrasado de um produto já excluído é ignorado aqui (CA-37). O fornecimento criado nessa janela fica sem produto no catálogo; o caso é registrado como limitação no Relatório Técnico. |
 | Q-15 | Decisão | Token de visão de grupo econômico (`MACRO_GROUP`, issue #33). | Aceito nas consultas; recusado com 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro, alteração e exclusão (§7.1, item 4). Regra aprovada pelo grupo de Autenticação em 2026-11-18. |
@@ -891,3 +897,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-16: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
 | 2.3 | 2026-11-25 | Grupo de Fornecimento e Produtos | Consumidores de cada evento na seção 2.2 e no diagrama: o Mercado consome `produto_cadastrado` e `produto_atualizado`, e não o `produto_excluido` (issue #44, ESP-MRC-001 DG-47). Sem mudança de regra, API ou evento. |
 | 2.4 | 2026-11-26 | Grupo de Fornecimento e Produtos | Instante de evento com milissegundos (glossário, §7.4; CA-12, CA-33, CA-34 e exemplo ajustados). Motivo: o Mercado e o Fornecimentos descartam um evento de produto com o mesmo instante do anterior, o que acontecia com duas mudanças no mesmo segundo (teste no kit com o `mercado-service`, 26/11/2026). Mudança compatível: o schema já aceitava frações. |
+| 2.5 | 2026-11-26 | Grupo de Fornecimento e Produtos | Respostas do professor (26/11/2026): qualquer empresa altera ou exclui produto sem movimentação (RN-10; código `PRODUTO_DE_OUTRA_EMPRESA` removido; CA-36 ajustado); `TENANT_ADMIN` cadastra, altera e exclui (RN-01, API-04, API-07, API-08; CA-03 ajustado); CA-41 novo; Q-04 e Q-12 respondidas. **Mudança de comportamento:** respostas que eram 403 passam a 200, 201 ou 204. |

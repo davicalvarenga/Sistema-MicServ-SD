@@ -336,6 +336,9 @@ def test_alteracao_encerramento_e_vitrine(repo):
         assert repo.aplicar_movimento(fid, Decimal("-30"), Decimal("30"), agora) is not None
         alterado = repo.alterar_preco(fid, Decimal("0"), agora)
     assert alterado["preco"] == Decimal("0.00")
+    # Preço zero com disponível 40: fora da vitrine dos outros, visível para o dono (RN-18, professor em 26/11/2026)
+    assert repo.listar_fornecimentos(pid, 0, 10, ()) == ([], 0)
+    assert repo.listar_fornecimentos(pid, 0, 10, ("EMP-34",))[1] == 1
     with repo.transacao():
         encerrado, havia = repo.zerar_disponivel(fid, agora)
     assert havia == Decimal("40.00") and encerrado["quantidade_disponivel"] == Decimal("0.00")

@@ -46,7 +46,7 @@ def test_CA02(amb):
 
 
 def test_CA03(amb):
-    for escopo in ("CARRIER", "TENANT_ADMIN"):
+    for escopo in ("CARRIER",):
         r = cadastrar(amb, escopo=escopo)
         assert r.status_code == 403 and r.json()["codigo"] == "PERFIL_NAO_PERMITIDO"
     assert amb.repo.produtos == {} and amb.bus.publicadas == []
@@ -157,7 +157,7 @@ def test_CA12(amb):
 
 
 def test_CA13(amb):
-    for escopo in ("CARRIER", "TENANT_ADMIN"):
+    for escopo in ("CARRIER",):
         cadastrar(amb, escopo=escopo)
     cadastrar(amb, {**PRODUTO_VALIDO, "unidade": "litro"})
     amb.cliente.post(URL, json=PRODUTO_VALIDO)
@@ -433,8 +433,6 @@ def test_CA36(amb):
     pid = cadastrar(amb).json()["produto_id"]
     for metodo in ("put", "delete"):
         kwargs = {"json": PRODUTO_VALIDO} if metodo == "put" else {}
-        r = getattr(amb.cliente, metodo)(f"{URL}/{pid}", headers=auth(tenant="EMP-99"), **kwargs)
-        assert r.status_code == 403 and r.json()["codigo"] == "PRODUTO_DE_OUTRA_EMPRESA"
         r = getattr(amb.cliente, metodo)(f"{URL}/{pid}", headers=auth("CARRIER"), **kwargs)
         assert r.status_code == 403 and r.json()["codigo"] == "PERFIL_NAO_PERMITIDO"
         r = getattr(amb.cliente, metodo)(f"{URL}/PROD-X", headers=auth(), **kwargs)
@@ -496,3 +494,15 @@ def test_CA40(amb):
     assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
     r = amb.cliente.get(URL, headers=auth(None, **GRUPO))
     assert r.status_code == 403 and r.json()["codigo"] == "CONTEXTO_NAO_SELECIONADO"
+
+
+def test_CA41(amb):
+    """Catálogo compartilhado: outra empresa e o administrador da empresa alteram e excluem produto sem movimentação."""
+    pid = cadastrar(amb).json()["produto_id"]
+    r = amb.cliente.put(f"{URL}/{pid}", json={**PRODUTO_VALIDO, "nome": "Leite desnatado"}, headers=auth(tenant="EMP-99"))
+    assert r.status_code == 200 and r.json()["nome"] == "Leite desnatado"
+    assert amb.bus.publicadas[-1]["message"]["payload"]["atualizadoPor"] == {"empresaId": "EMP-99", "usuarioId": "USR-7"}
+    r = amb.cliente.delete(f"{URL}/{pid}", headers=auth("TENANT_ADMIN", tenant="EMP-77"))
+    assert r.status_code == 204 and amb.bus.publicadas[-1]["topic"] == "produto_excluido"
+    r = cadastrar(amb, escopo="TENANT_ADMIN")
+    assert r.status_code == 201 and amb.bus.publicadas[-1]["topic"] == "produto_cadastrado"

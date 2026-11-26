@@ -105,7 +105,7 @@ class FakeRepoFornecimentos:
 
     def listar_fornecimentos(self, produto_id, offset, limite, incluir_zeradas_de=()):
         itens = [f for f in self.estado["fornecimentos"].values() if (produto_id is None or f["produto_id"] == produto_id)
-                 and (f["quantidade_disponivel"] > 0 or f["fornecedor_id"] in incluir_zeradas_de)]
+                 and ((f["quantidade_disponivel"] > 0 and f["preco"] > 0) or f["fornecedor_id"] in incluir_zeradas_de)]
         itens.sort(key=lambda f: (f["criado_em"], f["fornecimento_id"]))
         return copy.deepcopy(itens[offset:offset + limite]), len(itens)
 
