@@ -35,7 +35,7 @@ UNIDADES = ("KG", "TON", "UN", "CX", "L")
 TIPOS_TRANSPORTE = ("GRANEL", "REFRIGERADO", "CARGA_SECA", "PERIGOSO")
 # RN-09: lista fixa de categorias (professor, F16 do Documento de Requisitos); conteúdo definido pelo grupo
 CATEGORIAS = ("GRAOS", "INSUMOS", "SUBPRODUTOS", "LATICINIOS", "CARNES", "HORTIFRUTI", "BEBIDAS", "OUTROS")
-ESCOPOS_CADASTRO = ("SUPPLIER", "BUYER")  # RN-01
+ESCOPOS_CADASTRO = ("SUPPLIER", "BUYER", "TENANT_ADMIN")  # RN-01; TENANT_ADMIN administra a empresa (professor, 26/11/2026)
 PESO_MAXIMO = Decimal("999999999.999")  # RN-08
 
 
@@ -184,12 +184,13 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: ProdutoRepositori
         return JSONResponse({"itens": [_projecao(p) for p in itens], "page": page, "size": size, "total": total})
 
     def produto_alteravel(produto_id: str, claims: dict) -> dict:
-        """RN-10 e RN-11: só a empresa que cadastrou altera ou exclui, e só enquanto não houver movimentação."""
+        """RN-10 e RN-11: qualquer empresa altera ou exclui, mas só enquanto não houver movimentação.
+
+        O catálogo é compartilhado (professor, 26/11/2026); a regra da movimentação impede que a mudança
+        prejudique outra empresa que já tem fornecimento do produto."""
         produto = repositorio.obter(produto_id)
         if produto is None:
             raise ErroApi(404, "PRODUTO_NAO_ENCONTRADO", f"Produto {produto_id} não cadastrado.")
-        if produto["cadastrado_por_empresa_id"] != claims["tenant_id"]:
-            raise ErroApi(403, "PRODUTO_DE_OUTRA_EMPRESA", "Só a empresa que cadastrou o produto pode alterá-lo ou excluí-lo.")
         if produto.get("com_movimentacao"):
             raise ErroApi(409, "PRODUTO_COM_MOVIMENTACAO", "O produto já tem fornecimento e não pode ser alterado nem excluído. "
                                                           "Uma especificação diferente é outro produto: cadastre um novo.")

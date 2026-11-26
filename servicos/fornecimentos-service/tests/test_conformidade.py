@@ -62,7 +62,7 @@ def test_CA01(amb):
 
 
 def test_CA02(amb):
-    for escopo in ("BUYER", "CARRIER", "TENANT_ADMIN"):
+    for escopo in ("BUYER", "CARRIER"):
         r = cadastrar(amb, escopo=escopo)
         assert r.status_code == 403 and r.json()["codigo"] == "PERFIL_NAO_PERMITIDO"
     assert amb.repo.estado["fornecimentos"] == {} and amb.bus.publicadas == []
@@ -173,7 +173,7 @@ def test_CA12(amb):
 
 
 def test_CA13(amb):
-    for escopo in ("BUYER", "CARRIER", "TENANT_ADMIN"):
+    for escopo in ("BUYER", "CARRIER"):
         cadastrar(amb, escopo=escopo)
     cadastrar(amb, {**FORNECIMENTO_VALIDO, "preco": -1})
     cadastrar(amb, {**FORNECIMENTO_VALIDO, "produto_id": "PROD-X"})
@@ -768,3 +768,18 @@ def test_CA62(amb):
     assert r.status_code == 201 and r.json()["criado_em"] == "2026-10-26T14:00:00Z"  # a API continua sem frações
     m = amb.bus.publicadas[-1]["message"]
     assert m["timestamp"] == m["payload"]["criadoEm"] == "2026-10-26T14:00:00.123Z"
+
+
+def test_CA63(amb):
+    """Administrador da empresa cadastra e altera ofertas dela; oferta com preço zero fica fora da vitrine dos outros."""
+    r = cadastrar(amb, escopo="TENANT_ADMIN")
+    assert r.status_code == 201 and r.json()["fornecedor_id"] == "EMP-34"
+    fid = r.json()["fornecimento_id"]
+    r = amb.cliente.patch(f"{URL}/{fid}", json={"preco": 0}, headers=auth("TENANT_ADMIN"))
+    assert r.status_code == 200 and r.json()["preco"] == 0
+    r = amb.cliente.patch(f"{URL}/{fid}", json={"repor": 1}, headers=auth("TENANT_ADMIN", tenant="EMP-99"))
+    assert r.status_code == 403 and r.json()["codigo"] == "FORNECIMENTO_DE_OUTRA_EMPRESA"
+    vitrine = lambda escopo, tenant="EMP-34": [f["fornecimento_id"] for f in amb.cliente.get(URL, headers=auth(escopo, tenant=tenant)).json()["itens"]]
+    assert fid not in vitrine("BUYER", "EMP-50")
+    assert fid not in vitrine("SUPPLIER", "EMP-99")
+    assert fid in vitrine("SUPPLIER") and fid in vitrine("TENANT_ADMIN")

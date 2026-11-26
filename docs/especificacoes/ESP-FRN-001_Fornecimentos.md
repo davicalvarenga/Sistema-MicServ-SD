@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-FRN-001 |
-| Versão | 2.3 |
+| Versão | 2.4 |
 | Status | Rascunho |
 | Serviço / Bounded context | Microsserviço 3, Fornecimentos (`fornecimentos-service`, Portal B2B Distribuído) |
 | Autores (PO / Dev / QA) | Grupo de Fornecimento e Produtos: Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto. QA: Grupo de Teste |
@@ -64,7 +64,7 @@ Front-end ─► Gateway ─REST────────────────
 | Termo | Definição precisa |
 |---|---|
 | Fornecimento | Oferta de um produto por um fornecedor, identificada por `fornecimento_id`, com preço, quantidades e origem. |
-| Oferta zerada | Fornecimento com `quantidade_disponivel` igual a 0, por encerramento, por reservas ou desde o cadastro. Não aparece na listagem para compradores (RN-18), mas continua guardada e pode ser consultada pelo identificador. |
+| Oferta zerada | Fornecimento com `quantidade_disponivel` igual a 0, por encerramento, por reservas ou desde o cadastro, ou com `preco` igual a 0 (professor, 26/11/2026). Não aparece na listagem para compradores (RN-18), mas continua guardada e pode ser consultada pelo identificador. |
 | Fornecedor dono | A empresa do fornecimento (`fornecedor_id`). Só ela altera a oferta. |
 | Quantidade disponível | Parte do estoque que pode ser reservada. Nunca negativa. |
 | Quantidade reservada | Parte do estoque bloqueada por pedidos em andamento. Nunca negativa. |
@@ -230,10 +230,10 @@ Toda resposta inclui o cabeçalho `X-Correlation-Id` com o correlation id da req
 | API-01 | GET | `/health` | público | 200 | — |
 | API-02 | GET | `/health/ready` | público | 200 | 503 `DEPENDENCIA_INDISPONIVEL` |
 | API-03 | GET | `/metrics` | público | 200 | — |
-| API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
+| API-04 | POST | `/api/v1/fornecimentos` | `SUPPLIER`, `TENANT_ADMIN` | 201 | 401 `TOKEN_AUSENTE` → 401 `TOKEN_INVALIDO` ou 503 `DEPENDENCIA_INDISPONIVEL` → 401 `TOKEN_EXPIRADO` → 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 422 `PRODUTO_INEXISTENTE` → 500 `ERRO_INTERNO` |
 | API-05 | GET | `/api/v1/fornecimentos/{fornecimento_id}` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 404 `FORNECIMENTO_NAO_ENCONTRADO` |
 | API-06 | GET | `/api/v1/fornecimentos` | `BUYER`, `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `PAGINACAO_INVALIDA` |
-| API-07 | PATCH | `/api/v1/fornecimentos/{fornecimento_id}` | `SUPPLIER` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `FORNECIMENTO_NAO_ENCONTRADO` → 403 `FORNECIMENTO_DE_OUTRA_EMPRESA` → 422 `DADOS_INVALIDOS` (reposição acima do máximo) → 500 `ERRO_INTERNO` |
+| API-07 | PATCH | `/api/v1/fornecimentos/{fornecimento_id}` | `SUPPLIER`, `TENANT_ADMIN` | 200 | 401, 503 e 403 `CONTEXTO_NAO_SELECIONADO` ou `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` (como API-04) → 403 `PERFIL_NAO_PERMITIDO` → 422 `DADOS_INVALIDOS` → 404 `FORNECIMENTO_NAO_ENCONTRADO` → 403 `FORNECIMENTO_DE_OUTRA_EMPRESA` → 422 `DADOS_INVALIDOS` (reposição acima do máximo) → 500 `ERRO_INTERNO` |
 
 #### API-01 — Saúde
 Resposta 200: `{"status": "UP", "service": "fornecimentos-service", "timestamp": "2026-10-26T14:00:00Z"}`
@@ -278,7 +278,7 @@ Resposta 200: o fornecimento completo, no formato da resposta 201 da API-04.
 #### API-06 — Listar fornecimentos
 Parâmetros: `page` (inteiro ≥ 1, padrão 1), `size` (inteiro de 1 a 100, padrão 10), `produto_id` (opcional; se ausente ou não for texto preenchido, sem filtro).
 
-Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04. A oferta zerada só aparece quando o token tem escopo `SUPPLIER` e o `fornecedor_id` dela é a empresa do token (`tenant_id`) ou, no token de visão de grupo econômico, uma das empresas de `allowed_tenants` (RN-18).
+Resposta 200: `{"itens": [<fornecimento>, ...], "page": 1, "size": 10, "total": 1}`, com cada item no formato da resposta 201 da API-04. A oferta zerada só aparece quando o token tem escopo `SUPPLIER` ou `TENANT_ADMIN` e o `fornecedor_id` dela é a empresa do token (`tenant_id`) ou, no token de visão de grupo econômico, uma das empresas de `allowed_tenants` (RN-18).
 
 #### API-07 — Alterar ou encerrar fornecimento
 Corpo: objeto com pelo menos um destes campos: `preco` (valor decimal ≥ 0, novo preço de todo o estoque da oferta), `repor` (valor decimal > 0, somado ao disponível) ou `encerrar` (só `true`, zera o disponível). `encerrar` não pode vir com `preco` nem com `repor`. Resposta 200: o fornecimento completo depois da alteração. Exemplo: `{"preco": 12, "repor": 5}`.
@@ -427,8 +427,8 @@ Cenário: Fornecedor cadastra oferta
 # CA-02
 Cenário: Perfis sem permissão de cadastro
   Dado o produto PROD-1 conhecido
-  Quando tokens de "BUYER", "CARRIER" e "TENANT_ADMIN" enviam POST /api/v1/fornecimentos com um corpo válido
-  Então as três respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
+  Quando tokens de "BUYER" e "CARRIER" enviam POST /api/v1/fornecimentos com um corpo válido
+  Então as duas respostas são 403 com codigo "PERFIL_NAO_PERMITIDO"
   E nenhum fornecimento é gravado e nenhuma mensagem é publicada
 
 # CA-03
@@ -584,6 +584,20 @@ Cenário: Eventos de produto no mesmo segundo e instante com milissegundos
   Quando o relógio marca 2026-10-26T14:00:00.123Z e a requisição do CA-01 é enviada
   Então a resposta tem criado_em "2026-10-26T14:00:00Z"
   E o fornecimento_criado tem timestamp e criadoEm "2026-10-26T14:00:00.123Z"
+
+# CA-63
+Cenário: Administrador da empresa e oferta com preço zero
+  Dado o produto PROD-1 conhecido
+  Quando um token de "TENANT_ADMIN" da empresa "EMP-34" envia POST /api/v1/fornecimentos com o corpo do CA-01
+  Então a resposta é 201 com fornecedor_id "EMP-34"
+  Quando o mesmo token envia PATCH com preco 0
+  Então a resposta é 200 com preco 0 e quantidade_disponivel 15000
+  Quando um token de "TENANT_ADMIN" da empresa "EMP-99" envia PATCH com repor 1
+  Então a resposta é 403 com codigo "FORNECIMENTO_DE_OUTRA_EMPRESA"
+  Quando tokens de "BUYER" (EMP-50) e de "SUPPLIER" (EMP-99) consultam GET /api/v1/fornecimentos
+  Então a oferta não aparece
+  Quando tokens de "SUPPLIER" e de "TENANT_ADMIN" da empresa "EMP-34" consultam a mesma rota
+  Então a oferta aparece
 ```
 
 ### RF-05 — Manter a referência local de produtos
@@ -940,7 +954,7 @@ Cenário: Métricas
 
 | ID | Regra | Exemplo concreto |
 |---|---|---|
-| RN-01 | Apenas o perfil `SUPPLIER` cadastra fornecimentos. `BUYER`, `CARRIER` e `TENANT_ADMIN` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403. |
+| RN-01 | Os perfis `SUPPLIER` e `TENANT_ADMIN` cadastram fornecimentos; o `TENANT_ADMIN` administra a própria empresa e pode tudo o que ela pode (professor, 26/11/2026). `BUYER` e `CARRIER` → 403 `PERFIL_NAO_PERMITIDO`. | Token de comprador em POST → 403; `TENANT_ADMIN` em POST → 201. |
 | RN-02 | Corpo do cadastro: objeto JSON; `produto_id` string texto preenchido; `preco` número JSON (não booleano, não string) ≥ 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `quantidade_disponivel` número JSON ≥ 0, ≤ 9999999999.99 e com no máximo 2 casas decimais; `origem` objeto no formato do glossário (Origem). Violação, campo ausente, tipo errado, corpo não-objeto ou JSON malformado → 422 `DADOS_INVALIDOS`. Campos desconhecidos são ignorados. Casas decimais são contadas em `Decimal(str(valor))`. | `"preco": 5.555` → 422; `"preco": 0.07` e `"preco": 0` → aceitos; `"origem": {"cidade": "Goiânia", "uf": "go"}` → 422. |
 | RN-03 | O `produto_id` precisa existir como produto de referência; senão → 422 `PRODUTO_INEXISTENTE`. A `unidade` do fornecimento é copiada do produto de referência. | PROD-X desconhecido → 422. |
 | RN-04 | Requisição recusada (qualquer 4xx ou 5xx) não grava nada e não publica evento. | 403 → nenhuma mensagem. |
@@ -956,8 +970,8 @@ Cenário: Métricas
 | RN-14 | Reserva (§6.2): se já existe reserva para o par (`pedidoId`, `fornecimentoId`), em qualquer situação, nada muda e nada é publicado. Se não existe: com `aplicar_movimento(-q, +q)` bem-sucedido, grava a reserva `RESERVADA` e publica `estoque_atualizado` (`RESERVA`); se o fornecimento não existe ou o saldo é insuficiente, não grava reserva e publica `reserva_estoque_recusada`. | FORN-1 100/0, pedido de 30 → 70/30. |
 | RN-15 | `pedido_atualizado` válido exige `payload.pedidoId`, `payload.fornecimentoId` e `payload.status` como texto preenchido. | Sem `status` → DLT. |
 | RN-16 | Liberação e baixa (§6.2): com reserva `RESERVADA` de quantidade q, `CANCELADO` aplica `(+q, −q)` e muda para `LIBERADA`; `VENDA_CONCLUIDA` aplica `(0, −q)` e muda para `BAIXADA`; as duas publicam `estoque_atualizado`. Sem reserva, `CANCELADO` grava reserva `CANCELADA_SEM_RESERVA` com quantidade 0. Nos demais casos, nada muda e nada é publicado. Em todos os casos válidos, o `eventId` é registrado. | PED-1 RESERVADA 30 + CANCELADO → 100/0. |
-| RN-17 | Alteração da oferta (API-07): só escopo `SUPPLIER` (senão 403 `PERFIL_NAO_PERMITIDO`) e só o fornecedor dono (`fornecedor_id` igual ao claim `tenant_id`; senão 403 `FORNECIMENTO_DE_OUTRA_EMPRESA`). Corpo: ver API-07; violação, nenhum dos três campos, `encerrar` diferente de `true` ou combinado com outro campo → 422 `DADOS_INVALIDOS`. Reposição que levaria o disponível acima de 9999999999.99 → 422. | `{"encerrar": true, "preco": 5}` → 422. |
-| RN-18 | Vitrine: na API-06, a oferta com `quantidade_disponivel` 0 não aparece, salvo para o próprio fornecedor (escopo `SUPPLIER` e `fornecedor_id` igual ao `tenant_id` ou, no token de visão de grupo econômico, contido em `allowed_tenants`). A API-05 mostra qualquer oferta. | Oferta encerrada some da lista do comprador. |
+| RN-17 | Alteração da oferta (API-07): só escopos `SUPPLIER` e `TENANT_ADMIN` (senão 403 `PERFIL_NAO_PERMITIDO`) e só o fornecedor dono (`fornecedor_id` igual ao claim `tenant_id`; senão 403 `FORNECIMENTO_DE_OUTRA_EMPRESA`). Corpo: ver API-07; violação, nenhum dos três campos, `encerrar` diferente de `true` ou combinado com outro campo → 422 `DADOS_INVALIDOS`. Reposição que levaria o disponível acima de 9999999999.99 → 422. | `{"encerrar": true, "preco": 5}` → 422. |
+| RN-18 | Vitrine: na API-06, a oferta com `quantidade_disponivel` 0 ou com `preco` 0 não aparece, salvo para o próprio fornecedor (escopo `SUPPLIER` ou `TENANT_ADMIN` e `fornecedor_id` igual ao `tenant_id` ou, no token de visão de grupo econômico, contido em `allowed_tenants`). A API-05 mostra qualquer oferta. | Oferta encerrada ou com preço 0 some da lista do comprador (o preço 0 pelo professor, 26/11/2026). |
 | RN-19 | Efeitos da API-07, numa única transação: `preco` → `alterar_preco`; `repor` q → `aplicar_movimento(+q, 0)` e `estoque_atualizado` com `REPOSICAO` e `quantidadeMovimentada` q; `encerrar` → `zerar_disponivel` e, se havia disponível maior que zero, `estoque_atualizado` com `ENCERRAMENTO` e `quantidadeMovimentada` igual ao que havia. A reserva existente continua. Se houve mudança de preço ou de quantidade, publica também `fornecimento_atualizado`. Encerrar oferta já zerada responde 200 e não publica nada. Os eventos saem depois da transação, com o correlation id da requisição. | Encerrar com 70 disponíveis e 30 reservados → 0 e 30, `ENCERRAMENTO` 70. |
 | RN-20 | `produto_atualizado` válido exige os mesmos campos do RN-07; atualiza a cópia local só se o `timestamp` for mais novo que o último aplicado (`versao_evento`), mantendo `ativo`. `produto_excluido` válido exige `payload.produtoId` e `timestamp`; põe `ativo = False` se o `timestamp` for igual ou mais novo que o último aplicado. Exclusão de produto desconhecido cria a cópia já inativa, para que um `produto_cadastrado` atrasado não o reative. Produto inativo no cadastro de fornecimento → 422 `PRODUTO_INEXISTENTE`. | `produto_atualizado` mais antigo → ignorado. |
 
@@ -1084,9 +1098,9 @@ Cenário: Token não vaza
 
 | Requisito | Regras | Interfaces | Critérios de aceitação |
 |---|---|---|---|
-| RF-01 | RN-01, RN-02, RN-03, RN-04, RN-10 | API-04, `fornecimento_criado` | CA-01 a CA-06, CA-51 |
+| RF-01 | RN-01, RN-02, RN-03, RN-04, RN-10 | API-04, `fornecimento_criado` | CA-01 a CA-06, CA-51, CA-63 |
 | RF-02 | RN-05, RN-06 | API-05 | CA-07 a CA-09 |
-| RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52, CA-60 |
+| RF-03 | RN-05, RN-06, RN-18 | API-06 | CA-10, CA-11, CA-52, CA-60, CA-63 |
 | RF-04 | RN-04, RN-12 | `fornecimento_criado` | CA-12, CA-13, CA-61 |
 | RF-05 | RN-07, RN-08, RN-09, RN-20 | `produto_cadastrado`, `produto_atualizado`, `produto_excluido`, `fornecimentos.dlt` | CA-14 a CA-16, CA-58, CA-62 |
 | RF-06 | RN-08, RN-09, RN-11, RN-13, RN-14 | `pedido_criado`, `estoque_atualizado`, `reserva_estoque_recusada`, `fornecimentos.dlt` | CA-17 a CA-26 |
@@ -1113,7 +1127,7 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | Q-07 | Decisão | Cancelamento que chega antes da criação do pedido (tópicos diferentes não garantem ordem). | Reserva `CANCELADA_SEM_RESERVA`; a criação posterior é ignorada (§6.2, CA-29). |
 | Q-08 | Decisão | Venda concluída sem reserva. | Ignorada e não registrada como reserva. Na prática não ocorre, porque a venda é concluída muito depois da criação do pedido. |
 | Q-09 | Decisão | Comparar `fornecedorId` e `produtoId` do pedido com os do fornecimento. | Não comparar (§3.2). |
-| Q-10 | Decisão | Quem consulta ofertas (P-07). | `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` não. Só `SUPPLIER` cadastra (o Grupo de Teste testa comprador criando fornecimento → 403, kit seção 10.2). |
+| Q-10 | Decisão | Quem consulta e quem cadastra ofertas (P-07). | Consultam `BUYER`, `SUPPLIER` e `TENANT_ADMIN`; `CARRIER` não. Cadastram e alteram `SUPPLIER` e, desde a versão 2.4, `TENANT_ADMIN` (resposta do professor em 26/11/2026: o administrador controla tudo da própria empresa). |
 | Q-11 | Decisão | Valores monetários em JSON: string (exemplo do Grupo de Teste) ou número (kit e Contrato de Eventos). | Número JSON, convertido para `Decimal` com `Decimal(str(valor))`. Mantém o padrão do kit usado pelos outros grupos e evita erro de arredondamento nas contas (CA-41). |
 | Q-12 | Decisão | Novas tentativas com espera (1, 2 e 4 s) antes da DLT, previstas no kit. | Responsabilidade do adaptador de consumo. O handler envia à DLT na primeira falha (`failedAtAttempt` 1). |
 | Q-13 | Decisão | Falha de `publish`. | Fora do escopo; o adaptador real grava o evento numa tabela de outbox e o publica depois (ADR-010). |
@@ -1168,3 +1182,4 @@ Exceções justificadas à regra de um cenário de erro por RF: nenhuma. Atribut
 | 2.1 | 2026-11-18 | Grupo de Fornecimento e Produtos | Token de visão de grupo econômico (`MACRO_GROUP`): aceito nas consultas, recusado com o novo código 403 `CONTEXTO_DE_GRUPO_NAO_PERMITIDO` em cadastro e alteração; na vitrine, o fornecedor vê as ofertas zeradas das empresas do grupo (§7.1, item 4; RN-18; CA-59, CA-60; Q-20). Campo `grupoId` no `fornecimento_criado` (CA-61, Q-22; CA-12 ajustado). Revogação do token registrada como premissa (Q-21). Motivo: análise do serviço de Autenticação (issues #33, #34 e #35). Mudança compatível. |
 | 2.2 | 2026-11-24 | Grupo de Fornecimento e Produtos | Q-21: os tópicos `tenant_bloqueado` e `usuario_bloqueado` passaram a existir no kit (commit `90085b3`). Sem mudança de regra, API ou evento. |
 | 2.3 | 2026-11-26 | Grupo de Fornecimento e Produtos | Instante de evento com milissegundos (glossário, §7.4, `versao_evento`; CA-12, CA-17, CA-20 e exemplos ajustados; CA-62 novo). Motivo: no teste no kit com o `mercado-service` (26/11/2026), a reposição e a alteração de preço feitas no mesmo segundo da liberação de uma reserva foram descartadas pelo Mercado, que só aplica instante maior que o último. O mesmo acontecia com o `produto_atualizado` neste serviço (RN-20). Mudança compatível: o schema já aceitava frações. |
+| 2.4 | 2026-11-26 | Grupo de Fornecimento e Produtos | Respostas do professor (26/11/2026): oferta com preço 0 fica fora da vitrine dos outros (RN-18, glossário, API-06); `TENANT_ADMIN` cadastra e altera as ofertas da própria empresa (RN-01, RN-17, API-04, API-07, Q-10; CA-02 ajustado); CA-63 novo. **Mudanças de comportamento:** o comprador deixa de ver a oferta com preço 0, e o `TENANT_ADMIN` recebe 201 ou 200 onde recebia 403. |

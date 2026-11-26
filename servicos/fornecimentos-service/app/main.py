@@ -34,9 +34,9 @@ from .http_comum import (
 
 NOME_SERVICO = "fornecimentos-service"
 TOPICO_DLT = "fornecimentos.dlt"
-ESCOPOS_CADASTRO = ("SUPPLIER",)  # RN-01
+ESCOPOS_CADASTRO = ("SUPPLIER", "TENANT_ADMIN")  # RN-01; TENANT_ADMIN administra a empresa (professor, 26/11/2026)
 ESCOPOS_CONSULTA = ("BUYER", "SUPPLIER", "TENANT_ADMIN")  # RN-05
-ESCOPOS_ALTERACAO = ("SUPPLIER",)  # RN-17
+ESCOPOS_ALTERACAO = ("SUPPLIER", "TENANT_ADMIN")  # RN-17
 STATUS_CANCELADO = "CANCELADO"
 STATUS_VENDA_CONCLUIDA = "VENDA_CONCLUIDA"
 MAXIMO = Decimal("9999999999.99")
@@ -207,9 +207,9 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: RepositorioFornec
         claims = autenticar(request, chaves_publicas, clock, emissor, audiencia, exige_empresa=False)
         exigir_escopo(claims, ESCOPOS_CONSULTA)
         page, size = paginacao(request)
-        # RN-18: oferta com disponível zero não aparece, exceto para o próprio fornecedor (histórico).
-        # Na visão de grupo econômico, o fornecedor vê as ofertas zeradas de todas as empresas do grupo.
-        dono = empresas_do_token(claims) if claims["active_scope"] == "SUPPLIER" else ()
+        # RN-18: oferta com disponível zero ou preço zero não aparece, exceto para a própria empresa fornecedora
+        # (histórico). Na visão de grupo econômico, o fornecedor vê as ofertas zeradas de todas as empresas do grupo.
+        dono = empresas_do_token(claims) if claims["active_scope"] in ESCOPOS_CADASTRO else ()
         itens, total = repositorio.listar_fornecimentos(filtro_texto(request, "produto_id"), (page - 1) * size, size, dono)
         return JSONResponse({"itens": [projecao(f) for f in itens], "page": page, "size": size, "total": total})
 

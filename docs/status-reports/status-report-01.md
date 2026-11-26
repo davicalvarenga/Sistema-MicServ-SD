@@ -21,11 +21,11 @@
 
 | Entrega | Versão | Onde está |
 |---|---|---|
-| Documento de Requisitos | 0.13 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
-| Relatório Técnico (arquitetura e decisões) | 0.13 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
+| Documento de Requisitos | 0.14 | [`docs/documento-de-requisitos.md`](../documento-de-requisitos.md) |
+| Relatório Técnico (arquitetura e decisões) | 0.14 | [`docs/relatorio-tecnico.md`](../relatorio-tecnico.md) |
 | Contrato de eventos, com JSON Schema e exemplo de cada evento | 2.6 | [`docs/contrato-eventos.md`](../contrato-eventos.md) e [`docs/contratos/`](../contratos/) |
-| Especificação do `produtos-service` | 2.4 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
-| Especificação do `fornecimentos-service` | 2.3 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
+| Especificação do `produtos-service` | 2.5 | [`docs/especificacoes/ESP-PRD-001_Produtos.md`](../especificacoes/ESP-PRD-001_Produtos.md) |
+| Especificação do `fornecimentos-service` | 2.4 | [`docs/especificacoes/ESP-FRN-001_Fornecimentos.md`](../especificacoes/ESP-FRN-001_Fornecimentos.md) |
 | Proposta de DDL dos nossos schemas no banco do kit | 1.4 | [`docs/banco/`](../banco/README.md) |
 | `produtos-service` e `fornecimentos-service` | 2.1 | [`servicos/`](../../servicos/) |
 | Integração com o kit (duas instâncias de cada serviço) | | [`servicos/integracao-kit/`](../../servicos/integracao-kit/README.md) |
@@ -81,14 +81,14 @@
 
 ## 6. Perguntas ao professor
 
-As respostas da última aula ficaram cortadas na transcrição nestes pontos. O grupo adotou uma decisão provisória em cada um:
+As respostas da última aula ficaram cortadas na transcrição nestes pontos. O professor respondeu às quatro perguntas em 26/11/2026, e as respostas já estão nos serviços (ESP-PRD-001 v2.5 e ESP-FRN-001 v2.4):
 
-| # | Pergunta | Decisão provisória |
-|---|---|---|
-| 1 | Oferta com preço zero e quantidade maior que zero deve aparecer na vitrine? | Aparece |
-| 2 | Só a empresa que cadastrou o produto pode alterá-lo ou excluí-lo? | Sim |
-| 3 | A lista de categorias pode ser definida pelo grupo? | Sim: `GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS`, `OUTROS` |
-| 4 | O que o administrador da plataforma pode fazer nos nossos serviços? | Sem decisão. Hoje o serviço trata qualquer usuário pelo escopo ativo do token; o administrador da empresa (`TENANT_ADMIN`) só consulta |
+| # | Pergunta | Decisão provisória | Resposta do professor (26/11) |
+|---|---|---|---|
+| 1 | Oferta com preço zero e quantidade maior que zero deve aparecer na vitrine? | Aparece | Não aparece. Só a empresa dona continua vendo a oferta |
+| 2 | Só a empresa que cadastrou o produto pode alterá-lo ou excluí-lo? | Sim | Não: qualquer empresa pode, com o cuidado de não prejudicar outra. O produto com fornecimento continua sem poder mudar |
+| 3 | A lista de categorias pode ser definida pelo grupo? | Sim: `GRAOS`, `INSUMOS`, `SUBPRODUTOS`, `LATICINIOS`, `CARNES`, `HORTIFRUTI`, `BEBIDAS`, `OUTROS` | Sim |
+| 4 | O que o administrador da empresa pode fazer nos nossos serviços? | Só consulta | Tudo o que a própria empresa pode: cadastra, altera e exclui produtos e cadastra, altera e encerra as ofertas dela |
 
 ---
 

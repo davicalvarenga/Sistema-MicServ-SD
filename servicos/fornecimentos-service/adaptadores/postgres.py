@@ -122,8 +122,8 @@ class RepositorioFornecimentosPostgres:
 
     def listar_fornecimentos(self, produto_id: str | None, offset: int, limite: int,
                              incluir_zeradas_de: tuple[str, ...] = ()) -> tuple[list[dict], int]:
-        # Oferta com disponível zero só aparece para o próprio fornecedor (RN-18 da ESP-FRN-001)
-        condicoes = ["(quantidade_disponivel > 0 OR fornecedor_id = ANY(%s))"]
+        # Oferta com disponível zero ou preço zero só aparece para o próprio fornecedor (RN-18 da ESP-FRN-001)
+        condicoes = ["((quantidade_disponivel > 0 AND preco > 0) OR fornecedor_id = ANY(%s))"]
         parametros: tuple = (list(incluir_zeradas_de),)
         if produto_id is not None:
             condicoes.append("produto_id = %s")

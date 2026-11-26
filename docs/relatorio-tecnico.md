@@ -3,7 +3,7 @@
 **Grupo:** Fornecimento e Produtos
 **Sistema:** Portal B2B Distribuído (disciplina de Sistemas Distribuídos)
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Versão:** 0.13 (esboço)
+**Versão:** 0.14 (esboço)
 **Data:** 26/10/2026
 
 ---
@@ -200,14 +200,14 @@ Proposta do grupo, seguindo o padrão do kit (ADR-020):
 
 | Método | Caminho | Perfil exigido | Requisito | Status |
 |---|---|---|---|---|
-| POST | `/api/v1/produtos` | Fornecedor ou comprador | RF-01, RN-08 | Proposto (perfil comprador: P-30) |
+| POST | `/api/v1/produtos` | Fornecedor, comprador ou administrador da empresa | RF-01, RN-08 | Proposto (perfil comprador: P-30) |
 | GET | `/api/v1/produtos?page=&size=&categoria=` | Autenticado | RF-02, RNF-21 | Proposto |
 | GET | `/api/v1/produtos/{id}` | Autenticado | RF-02 | Proposto |
-| PUT | `/api/v1/produtos/{id}` | Empresa que cadastrou, sem movimentação | RF-03, RN-12 | Implementado (ESP-PRD-001 v2.0) |
-| DELETE | `/api/v1/produtos/{id}` | Empresa que cadastrou, sem movimentação | RF-04, RN-12, RN-13 | Implementado (ESP-PRD-001 v2.0) |
-| POST | `/api/v1/fornecimentos` | Fornecedor | RF-09, RN-02, RN-10 | Proposto |
+| PUT | `/api/v1/produtos/{id}` | Qualquer empresa (fornecedor, comprador ou administrador), sem movimentação | RF-03, RN-12, RN-17 | Implementado (ESP-PRD-001 v2.5) |
+| DELETE | `/api/v1/produtos/{id}` | Qualquer empresa (fornecedor, comprador ou administrador), sem movimentação | RF-04, RN-12, RN-13, RN-17 | Implementado (ESP-PRD-001 v2.5) |
+| POST | `/api/v1/fornecimentos` | Fornecedor ou administrador da empresa | RF-09, RN-02, RN-10 | Proposto |
 | GET | `/api/v1/fornecimentos?page=&size=&produto_id=` | Comprador ou fornecedor | RF-10, RNF-21 | Proposto |
-| PATCH | `/api/v1/fornecimentos/{id}` | Fornecedor dono da oferta | RF-11, RN-14, RN-15 | Implementado (ESP-FRN-001 v2.0) |
+| PATCH | `/api/v1/fornecimentos/{id}` | Fornecedor ou administrador da empresa dona da oferta | RF-11, RN-14, RN-15, RN-18 | Implementado (ESP-FRN-001 v2.4) |
 | GET | `/api/v1/fornecimentos/{id}` | Comprador ou fornecedor | RF-10 | Proposto |
 | GET | `/health`, `/health/ready`, `/metrics`, `/docs`, `/openapi.json` | Sem autenticação | RNF-22 | Aceita (F8) |
 
@@ -298,7 +298,7 @@ Referências: ADR-012, ADR-018 e ADR-020. Requisitos: RNF-01, RNF-02, RNF-03, RN
 
 O token é um JWT assinado com RS256 pelo serviço de Autenticação e validado em cada serviço com a chave pública obtida do endpoint `/.well-known/jwks.json` (ADR-012). Ele substitui o HS256 com chave compartilhada do kit. O access token vale 15 minutos. O serviço lê do token o usuário (`sub`), a empresa e o `perfil`.
 
-A verificação está em `app/http_comum.py` (`autenticar` e `exigir_escopo`). Perfis por rota: cadastro de produto, `SUPPLIER` e `BUYER`; consulta e listagem de produtos, todos os escopos; cadastro de fornecimento, `SUPPLIER`; consulta e listagem de fornecimentos, `BUYER`, `SUPPLIER` e `TENANT_ADMIN`.
+A verificação está em `app/http_comum.py` (`autenticar` e `exigir_escopo`). Perfis por rota: cadastro, alteração e exclusão de produto, `SUPPLIER`, `BUYER` e `TENANT_ADMIN`, de qualquer empresa; consulta e listagem de produtos, todos os escopos; cadastro e alteração de fornecimento, `SUPPLIER` e `TENANT_ADMIN`, só da própria empresa na alteração; consulta e listagem de fornecimentos, `BUYER`, `SUPPLIER` e `TENANT_ADMIN`. O `TENANT_ADMIN` pode tudo o que a própria empresa pode (resposta do professor em 26/11/2026).
 
 ---
 
@@ -692,6 +692,7 @@ Formato de cada decisão, baseado em Michael Nygard, *Documenting Architecture D
 | 0.11 | 18/11/2026 | ADR-012 revisado após a análise do serviço de Autenticação: token de visão de grupo econômico aceito só nas consultas, risco da revogação aceito, expiração sem folga mantida. Grupo econômico (`grupoId`) no `fornecimento_criado` (issue #35). Seção 13 atualizada |
 | 0.12 | 19/11/2026 | Resposta do grupo de Pedidos (issue #1): ADR-005 aceito; contrato de `pedido_criado` e `pedido_atualizado` confirmado na seção 6; aviso de pedido acima do disponível definido na seção 9 |
 | 0.13 | 24/11/2026 | Kit no commit `90085b3`: rota do JWKS no gateway (K13, seção 3.4) e tópicos `tenant_bloqueado` e `usuario_bloqueado` criados (seção 13) |
+| 0.14 | 26/11/2026 | Respostas do professor (F19 do Documento de Requisitos): perfis por rota na seção 6 e na verificação do token; qualquer empresa altera ou exclui produto sem movimentação; o `TENANT_ADMIN` age pela própria empresa; oferta com preço zero fora da vitrine dos compradores |
 | 0.4 | 10/11/2026 | ADR-012 passa a RS256 com JWKS, conforme o grupo de Autenticação (issues #2 e #13). Seção 7 atualizada |
 | 0.3 | 26/10/2026 | Ligação com o Contrato de Eventos e com a proposta de DDL testada. Verificação do ADR-006 por teste de concorrência |
 | 0.2 | 26/10/2026 | Incorporação do kit de infraestrutura: stack, portas, schemas, tópicos, chaves, envelope, padrão de API e segurança. Nova seção 3.4 com a análise do kit (11 pontos, um verificado por teste). ADR-002, 003, 007, 008, 009, 011, 012, 015, 017 e 019 passam a Aceita. Novos ADR-020, 021 e 022 |
