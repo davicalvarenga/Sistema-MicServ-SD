@@ -2,7 +2,7 @@
 
 **Grupo:** Fornecimento e Produtos
 **Integrantes:** Daniel Carvalho Coutinho, Davi Coelho de Alvarenga, Gabriel Vicentte dos Santos Ferreira, Rafael de Castro Noleto
-**Situação em:** 26/11/2026
+**Situação em:** 27/11/2026
 **Repositório:** [`davicalvarenga/Sistema-MicServ-SD`](https://github.com/davicalvarenga/Sistema-MicServ-SD)
 
 ---
@@ -63,6 +63,7 @@
 | 2 | Testar com tokens reais do serviço de Autenticação (login seguido de `switch-context`), usando as chaves publicadas por eles. A rota do JWKS já existe no gateway do kit (commit `90085b3`), mas só funciona quando o serviço de Autenticação ocupar o lugar do `usuarios-service` do kit | Grupo e grupo de Autenticação |
 | 3 | Avisar os outros grupos das mudanças incompatíveis da versão 2.0 (issue #25) | Grupo |
 | 4 | Testar a reserva, a liberação e a baixa com o `pedidos-service` real no kit | Grupo e grupo de Pedidos |
+| 5 | Subir os dois serviços no ambiente de integração da AWS. Os workflows de deploy estão prontos; faltam os Secrets, o nosso DDL no banco e os 4 tópicos, que dependem da Infraestrutura (README da integração com o kit) | Grupo e Infraestrutura |
 
 ---
 

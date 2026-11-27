@@ -119,6 +119,31 @@ docker compose $F down -v
 docker rm -f jwks-teste
 ```
 
+## Deploy no ambiente de integração da AWS
+
+A Infraestrutura publicou o ambiente de integração na AWS em 27/11/2026 (guia `docs/GUIA-DEPLOY-GRUPOS.md` do kit, commit `4720748`). O deploy é feito pelo GitHub Actions deste repositório:
+
+| Workflow | Serviço | Porta | Prefixo no gateway |
+|---|---|---|---|
+| [`deploy-produtos.yml`](../../.github/workflows/deploy-produtos.yml) | `produtos-service` | 8102 | `/api/v1/produtos` |
+| [`deploy-fornecimentos.yml`](../../.github/workflows/deploy-fornecimentos.yml) | `fornecimentos-service` | 8103 | `/api/v1/fornecimentos` |
+
+Os dois seguem o modelo `docs/templates/deploy-microservico.yml` do kit, com duas diferenças: o build usa a pasta de cada serviço (o modelo supõe um serviço por repositório, com o `Dockerfile` na raiz), e o deploy automático só roda quando muda algo na pasta do serviço. Também dá para rodar à mão em **Actions → Deploy ... → Run workflow**.
+
+O workflow constrói a imagem, envia ao Amazon ECR e manda o servidor da AWS (`app1`; o `app2` está parado para economizar créditos) baixar a imagem e recriar o contêiner. O log do passo "Disparar deploy" mostra o estado do contêiner e as últimas 40 linhas do log dele. Os servidores ficam desligados entre 00:00 e 10:00.
+
+**Variáveis.** O `docker-compose.aws.yml` do kit injeta as que os nossos serviços leem: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_MAX`, `KAFKA_BOOTSTRAP_SERVERS`, `PORT` e `SERVICE_NAME`. `JWT_SECRET_KEY` e `JWT_ALGORITHM` (HS256) não são usadas: o token é RS256, validado pelo JWKS. O `AUTH_JWKS_URL` não é injetado, e o padrão (`http://gateway:8080/.well-known/jwks.json`) vale na AWS, porque o gateway também se chama `gateway` no compose de lá.
+
+**O que depende da Infraestrutura antes do primeiro deploy:**
+
+1. Cadastrar os Secrets `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` neste repositório. Para isso, o dono do repositório adiciona `Printf-PedroCardoso` como colaborador.
+2. Aplicar no RDS, com a role `portal_ddl`, a nossa proposta de DDL ([`docs/banco/`](../../docs/banco/README.md)), depois do `01-init.sql` do kit. Os serviços usam só DML (`svc_produtos` e `svc_fornecimentos`) e não criam tabelas; sem o DDL, o `/health/ready` responde 200, mas o cadastro falha.
+3. Criar no Redpanda da AWS os tópicos `reserva_estoque_recusada`, `produto_atualizado`, `produto_excluido` e `fornecimento_atualizado` (K14), com 3 partições.
+
+**Autenticação.** Enquanto o serviço de Autenticação não estiver no ar na AWS, a rota do JWKS não responde, e as rotas autenticadas dos nossos serviços respondem 503 `DEPENDENCIA_INDISPONIVEL`. `/health` e `/health/ready` não exigem token.
+
+**Endereço:** `https://portal-b2b-integracao-alb-869163583.us-east-2.elb.amazonaws.com/api/v1/produtos` e `.../api/v1/fornecimentos`.
+
 ## Problemas encontrados no kit
 
 Encontrados ao rodar o kit em 11/11/2026, além dos pontos K1 a K11 da seção 3.4 do [Relatório Técnico](../../docs/relatorio-tecnico.md):
